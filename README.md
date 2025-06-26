@@ -59,6 +59,12 @@ GPU 6: AVAILABLE
 GPU 7: AVAILABLE
 ```
 
+## Requirements
+
+- Python
+- `redis` Python library
+- Redis db running and listening on localhost
+
 ## TODO
 
 - [ ] Add locking to avoid race conditions during reservation
