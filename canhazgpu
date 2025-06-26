@@ -1,0 +1,148 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import time
+import json
+import click
+import redis
+import subprocess
+import threading
+from datetime import datetime, timedelta
+
+REDIS_KEY_PREFIX = 'canhazgpu:'
+
+
+def get_redis():
+    return redis.Redis(host='localhost', port=6379, db=0)
+
+
+def now_ts():
+    return int(time.time())
+
+
+def get_username():
+    return os.getenv('USER', 'unknown')
+
+
+def format_duration(seconds):
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes}m {seconds}s"
+
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.option('--gpus', required=True, type=int, help='Number of GPUs available on this machine')
+def admin(gpus):
+    r = get_redis()
+    for gpu_id in range(gpus):
+        r.set(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}', json.dumps({}))
+    r.set(f'{REDIS_KEY_PREFIX}gpu_count', gpus)
+    click.echo(f"Initialized {gpus} GPUs (IDs 0 to {gpus - 1})")
+
+
+@cli.command()
+def status():
+    r = get_redis()
+    gpu_count = int(r.get(f'{REDIS_KEY_PREFIX}gpu_count') or 0)
+    now = now_ts()
+    for gpu_id in range(gpu_count):
+        data = r.get(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}')
+        if data:
+            entry = json.loads(data)
+            if entry:
+                user = entry.get('user')
+                start = entry.get('start_time')
+                heartbeat = entry.get('last_heartbeat')
+                age = now - start if start else 0
+                hb_age = now - heartbeat if heartbeat else 0
+                click.echo(f"GPU {gpu_id}: IN USE by {user} for {format_duration(age)} (last heartbeat {format_duration(hb_age)} ago)")
+            else:
+                click.echo(f"GPU {gpu_id}: AVAILABLE")
+        else:
+            click.echo(f"GPU {gpu_id}: AVAILABLE")
+
+
+def allocate_gpus(r, count):
+    gpu_count = int(r.get(f'{REDIS_KEY_PREFIX}gpu_count') or 0)
+    now = now_ts()
+    available = []
+
+    for gpu_id in range(gpu_count):
+        key = f'{REDIS_KEY_PREFIX}gpu:{gpu_id}'
+        data = r.get(key)
+        if not data:
+            available.append(gpu_id)
+        else:
+            entry = json.loads(data)
+            hb = entry.get('last_heartbeat')
+            if not entry or (hb and now - hb > 900):  # 15 minutes
+                available.append(gpu_id)
+
+    if len(available) < count:
+        return None
+    return available[:count]
+
+
+def heartbeat(r, gpu_ids, user):
+    while True:
+        for gpu_id in gpu_ids:
+            key = f'{REDIS_KEY_PREFIX}gpu:{gpu_id}'
+            r.set(key, json.dumps({
+                'user': user,
+                'start_time': now_ts(),
+                'last_heartbeat': now_ts()
+            }))
+        time.sleep(60)
+
+
+@cli.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True))
+@click.option('--gpus', required=True, type=int, help='Number of GPUs to reserve')
+@click.argument('args', nargs=-1, type=click.UNPROCESSED)
+def run(gpus, args):
+    if '--' not in sys.argv:
+        click.echo("Error: must separate command with --", err=True)
+        sys.exit(1)
+
+    cmd_index = sys.argv.index('--') + 1
+    command = sys.argv[cmd_index:]
+    if not command:
+        click.echo("Error: no command to run", err=True)
+        sys.exit(1)
+
+    r = get_redis()
+    user = get_username()
+    gpu_ids = allocate_gpus(r, gpus)
+    if not gpu_ids:
+        click.echo("Error: Not enough GPUs available", err=True)
+        sys.exit(1)
+
+    for gpu_id in gpu_ids:
+        r.set(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}', json.dumps({
+            'user': user,
+            'start_time': now_ts(),
+            'last_heartbeat': now_ts()
+        }))
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, gpu_ids))
+    click.echo(f"Running with GPUs: {os.environ['CUDA_VISIBLE_DEVICES']}")
+
+    hb_thread = threading.Thread(target=heartbeat, args=(r, gpu_ids, user), daemon=True)
+    hb_thread.start()
+
+    try:
+        result = subprocess.run(command)
+        sys.exit(result.returncode)
+    finally:
+        for gpu_id in gpu_ids:
+            r.set(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}', json.dumps({}))
+        click.echo("Released GPUs.")
+
+
+if __name__ == '__main__':
+    cli()
