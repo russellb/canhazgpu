@@ -10,18 +10,25 @@ This guide covers setting up and configuring canhazgpu for production use in sha
 ```bash
 # Ubuntu/Debian
 sudo apt update
-sudo apt install redis-server python3 python3-pip
+sudo apt install redis-server
 
 # CentOS/RHEL/Fedora  
-sudo dnf install redis python3 python3-pip
+sudo dnf install redis
 
 # macOS
-brew install redis python3
+brew install redis
 ```
 
-**Python packages:**
+**Go installation:**
 ```bash
-pip3 install redis click
+# Download and install Go 1.23+ from https://golang.org/dl/
+# Or use package manager:
+
+# Ubuntu (via snap)
+sudo snap install go --classic
+
+# macOS
+brew install go
 ```
 
 **NVIDIA drivers:**
@@ -397,7 +404,7 @@ tail -f /var/log/canhazgpu-stale.log
 
 - [ ] Redis server installed and configured
 - [ ] NVIDIA drivers working (`nvidia-smi` functional)
-- [ ] Python dependencies installed
+- [ ] Go 1.23+ installed
 - [ ] canhazgpu installed system-wide
 - [ ] Bash completion script installed
 - [ ] GPU pool initialized with correct count

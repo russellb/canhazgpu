@@ -47,7 +47,7 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 
 ## Getting Started
 
-1. **[Install dependencies](installation.md)** - Redis server and Python packages
+1. **[Install dependencies](installation.md)** - Redis server and Go
 2. **[Quick start guide](quickstart.md)** - Get up and running in minutes
 3. **[Commands overview](commands.md)** - Learn all available commands
 4. **[Administration setup](admin-setup.md)** - Configure for your environment

@@ -79,7 +79,7 @@ git commit -m "feat: add your feature description"
 **Install documentation dependencies:**
 ```bash
 make docs-deps
-# or manually: pip install -r requirements-docs.txt
+# or manually: pip install -r requirements-docs.txt  # for documentation only
 ```
 
 **Build and preview documentation:**
@@ -97,62 +97,75 @@ make docs-clean
 
 ## Code Style and Standards
 
-### 1. Python Style Guide
+### 1. Go Style Guide
 
-Follow PEP 8 with these specific guidelines:
+Follow standard Go conventions with these specific guidelines:
 
-**Line length:** 88 characters (Black formatter default)
-**Imports:** Group standard library, third-party, and local imports
-**Docstrings:** Use Google-style docstrings
-**Type hints:** Add type hints for new functions
+**Formatting:** Use `gofmt` and `goimports` for automatic formatting
+**Naming:** Use camelCase for unexported functions, PascalCase for exported functions
+**Documentation:** Use Go doc comments starting with the function name
+**Error handling:** Always handle errors explicitly, don't ignore them
 
 **Example:**
-```python
-def reserve_gpus(
-    gpu_count: int, 
-    duration: str, 
-    user: Optional[str] = None
-) -> List[int]:
-    """Reserve GPUs for specified duration.
+```go
+// AllocateGPUs reserves the specified number of GPUs for the given duration.
+// It returns a slice of allocated GPU IDs or an error if allocation fails.
+func AllocateGPUs(ctx context.Context, request *AllocationRequest) ([]int, error) {
+    if request.GPUCount <= 0 {
+        return nil, fmt.Errorf("gpu count must be positive, got %d", request.GPUCount)
+    }
     
-    Args:
-        gpu_count: Number of GPUs to reserve
-        duration: Duration in format '2h', '30m', '1d'
-        user: Username (defaults to current user)
-        
-    Returns:
-        List of allocated GPU IDs
-        
-    Raises:
-        AllocationError: If insufficient GPUs available
-        ValueError: If duration format is invalid
-    """
-    # Implementation
+    // Acquire allocation lock to prevent race conditions
+    if err := engine.client.AcquireAllocationLock(ctx); err != nil {
+        return nil, fmt.Errorf("failed to acquire allocation lock: %w", err)
+    }
+    defer engine.client.ReleaseAllocationLock(ctx)
+    
+    // Implementation...
+    return allocatedGPUs, nil
+}
 ```
 
 ### 2. Code Formatting
 
-Use Black for automatic formatting:
+Use standard Go formatting tools:
 ```bash
-# Format code
-black canhazgpu
+# Format code (automatically fixes formatting)
+gofmt -s -w .
 
-# Check formatting
-black --check canhazgpu
+# Organize imports
+goimports -w .
+
+# Run both together
+make format  # if you add this target to Makefile
 ```
 
 ### 3. Linting
 
-Use flake8 for style checking:
+Use golangci-lint for comprehensive linting:
 ```bash
-flake8 canhazgpu --max-line-length=88 --extend-ignore=E203,W503
+# Install golangci-lint
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Run linter
+golangci-lint run
+
+# Run with specific linters
+golangci-lint run --enable-all --disable wsl,nlreturn
 ```
 
-### 4. Type Checking
+### 4. Go Modules
 
-Use mypy for type checking:
+Keep dependencies clean and up to date:
 ```bash
-mypy canhazgpu --ignore-missing-imports
+# Tidy modules (remove unused dependencies)
+go mod tidy
+
+# Update dependencies
+go get -u ./...
+
+# Verify dependencies
+go mod verify
 ```
 
 ## Testing Guidelines
@@ -161,91 +174,163 @@ mypy canhazgpu --ignore-missing-imports
 
 **Test organization:**
 ```
-tests/
-├── unit/
-│   ├── test_allocation.py
-│   ├── test_validation.py
-│   └── test_state_management.py
-├── integration/
-│   ├── test_redis_integration.py
-│   └── test_nvidia_integration.py
-└── fixtures/
-    ├── redis_mock.py
-    └── nvidia_mock.py
+internal/
+├── gpu/
+│   ├── allocation.go
+│   ├── allocation_test.go
+│   ├── validation.go
+│   └── validation_test.go
+├── redis_client/
+│   ├── client.go
+│   └── client_test.go
+└── types/
+    ├── types.go
+    └── types_test.go
 ```
 
 ### 2. Unit Testing
 
 **Mock external dependencies:**
-```python
-import pytest
-from unittest.mock import patch, MagicMock
+```go
+package gpu
 
-@patch('subprocess.run')
-@patch('redis.Redis')
-def test_detect_gpu_usage(mock_redis, mock_subprocess):
-    """Test GPU usage detection with mocked nvidia-smi."""
-    # Mock nvidia-smi output
-    mock_subprocess.return_value.stdout = "1024\n512\n256\n"
-    mock_subprocess.return_value.returncode = 0
+import (
+    "context"
+    "testing"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/mock"
+)
+
+// MockRedisClient implements the redis client interface for testing
+type MockRedisClient struct {
+    mock.Mock
+}
+
+func (m *MockRedisClient) GetGPUState(ctx context.Context, gpuID int) (*types.GPUState, error) {
+    args := m.Called(ctx, gpuID)
+    return args.Get(0).(*types.GPUState), args.Error(1)
+}
+
+func TestAllocateGPUs(t *testing.T) {
+    // Setup
+    mockClient := new(MockRedisClient)
+    engine := &AllocationEngine{client: mockClient}
     
-    # Test the function
-    usage = detect_gpu_usage()
+    // Mock expectations
+    mockClient.On("GetGPUState", mock.Anything, 0).Return(&types.GPUState{}, nil)
     
-    # Assertions
-    assert len(usage) == 3
-    assert usage[0]['memory_mb'] == 1024
+    // Test
+    result, err := engine.AllocateGPUs(context.Background(), &types.AllocationRequest{
+        GPUCount: 1,
+        User:     "testuser",
+    })
+    
+    // Assertions
+    assert.NoError(t, err)
+    assert.Len(t, result, 1)
+    mockClient.AssertExpectations(t)
+}
 ```
 
 **Test error conditions:**
-```python
-def test_allocation_insufficient_gpus():
-    """Test allocation with insufficient GPUs."""
-    with pytest.raises(AllocationError) as exc_info:
-        reserve_gpus(gpu_count=10, duration="1h")
+```go
+func TestAllocateGPUs_InsufficientGPUs(t *testing.T) {
+    // Setup
+    mockClient := new(MockRedisClient)
+    engine := &AllocationEngine{client: mockClient}
     
-    assert "Not enough GPUs available" in str(exc_info.value)
+    // Mock returning no available GPUs
+    mockClient.On("GetGPUCount", mock.Anything).Return(2, nil)
+    mockClient.On("GetGPUState", mock.Anything, mock.Anything).Return(&types.GPUState{User: "other"}, nil)
+    
+    // Test
+    _, err := engine.AllocateGPUs(context.Background(), &types.AllocationRequest{
+        GPUCount: 10,
+        User:     "testuser",
+    })
+    
+    // Assertions
+    assert.Error(t, err)
+    assert.Contains(t, err.Error(), "Not enough GPUs available")
+}
 ```
 
 ### 3. Integration Testing
 
 **Redis integration tests:**
-```python
-import redis
-import pytest
+```go
+package redis_client
 
-@pytest.fixture
-def redis_client():
-    """Provide clean Redis instance for testing."""
-    client = redis.Redis(host='localhost', port=6379, db=15)  # Test DB
-    client.flushdb()  # Clean state
-    yield client
-    client.flushdb()  # Cleanup
+import (
+    "context"
+    "testing"
+    "github.com/go-redis/redis/v8"
+    "github.com/stretchr/testify/assert"
+    "github.com/russellb/canhazgpu/internal/types"
+)
 
-def test_gpu_state_persistence(redis_client):
-    """Test GPU state persistence in Redis."""
-    # Set up initial state
-    initialize_gpu_pool(8, redis_client)
+func setupTestRedis(t *testing.T) *Client {
+    // Use test database (15) to avoid conflicts
+    config := &types.Config{
+        RedisHost: "localhost",
+        RedisPort: 6379,
+        RedisDB:   15,
+    }
     
-    # Reserve a GPU
-    allocated = reserve_gpus(1, "1h", redis_client)
+    client := NewClient(config)
     
-    # Verify state persistence
-    gpu_state = redis_client.get(f"canhazgpu:gpu:{allocated[0]}")
-    assert gpu_state is not None
+    // Clean state before test
+    client.rdb.FlushDB(context.Background())
+    
+    // Cleanup after test
+    t.Cleanup(func() {
+        client.rdb.FlushDB(context.Background())
+        client.Close()
+    })
+    
+    return client
+}
+
+func TestGPUStatePersistence(t *testing.T) {
+    client := setupTestRedis(t)
+    ctx := context.Background()
+    
+    // Set up initial state
+    err := client.SetGPUCount(ctx, 4)
+    assert.NoError(t, err)
+    
+    // Reserve a GPU by setting state
+    state := &types.GPUState{
+        User:      "testuser",
+        StartTime: types.FlexibleTime{Time: time.Now()},
+        Type:      "manual",
+    }
+    err = client.SetGPUState(ctx, 0, state)
+    assert.NoError(t, err)
+    
+    // Verify state persistence
+    retrievedState, err := client.GetGPUState(ctx, 0)
+    assert.NoError(t, err)
+    assert.Equal(t, "testuser", retrievedState.User)
+}
 ```
 
 ### 4. Test Coverage
 
 Aim for >90% test coverage:
 ```bash
-# Install coverage tool
-pip install coverage
-
 # Run tests with coverage
-coverage run -m pytest tests/
-coverage report
-coverage html  # Generate HTML report
+go test -race -coverprofile=coverage.out ./...
+
+# View coverage report
+go tool cover -html=coverage.out
+
+# Get coverage percentage
+go tool cover -func=coverage.out
+
+# Generate coverage for specific packages
+go test -coverprofile=coverage.out ./internal/gpu/
+go tool cover -html=coverage.out
 ```
 
 ## Feature Development
@@ -254,43 +339,62 @@ coverage html  # Generate HTML report
 
 To add a new command:
 
-1. **Add Click command:**
-```python
-@main.command()
-@click.option('--option', help='Option description')
-def new_command(option):
-    """Command description."""
-    try:
-        result = implement_new_command(option)
-        click.echo(f"Success: {result}")
-    except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+1. **Add Cobra command file:**
+```go
+// internal/cli/newcommand.go
+package cli
+
+import (
+    "github.com/spf13/cobra"
+)
+
+func init() {
+    rootCmd.AddCommand(newCmd)
+}
+
+var newCmd = &cobra.Command{
+    Use:   "new",
+    Short: "Command description",
+    RunE: func(cmd *cobra.Command, args []string) error {
+        option, _ := cmd.Flags().GetString("option")
+        return runNewCommand(cmd.Context(), option)
+    },
+}
+
+func init() {
+    newCmd.Flags().String("option", "", "Option description")
+}
 ```
 
 2. **Implement core logic:**
-```python
-def implement_new_command(option: str) -> str:
-    """Implement the new command functionality.
+```go
+func runNewCommand(ctx context.Context, option string) error {
+    if option == "" {
+        return fmt.Errorf("option is required")
+    }
     
-    Args:
-        option: Command option value
-        
-    Returns:
-        Success message
-        
-    Raises:
-        CommandError: If command fails
-    """
-    # Implementation
+    result, err := implementNewCommand(ctx, option)
+    if err != nil {
+        return fmt.Errorf("command failed: %w", err)
+    }
+    
+    fmt.Printf("Success: %s\n", result)
+    return nil
+}
+
+func implementNewCommand(ctx context.Context, option string) (string, error) {
+    // Implementation
+    return "result", nil
+}
 ```
 
 3. **Add tests:**
-```python
-def test_new_command():
-    """Test new command functionality."""
-    result = implement_new_command("test_value")
-    assert result == "expected_result"
+```go
+func TestNewCommand(t *testing.T) {
+    result, err := implementNewCommand(context.Background(), "test_value")
+    assert.NoError(t, err)
+    assert.Equal(t, "expected_result", result)
+}
 ```
 
 4. **Update documentation:**

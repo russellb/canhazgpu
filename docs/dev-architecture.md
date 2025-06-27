@@ -1,6 +1,6 @@
 # Architecture
 
-canhazgpu is designed as a single-file Python CLI tool that uses Redis for distributed coordination and nvidia-smi for GPU validation. This document describes the internal architecture and design decisions.
+canhazgpu is designed as a Go CLI application that uses Redis for distributed coordination and nvidia-smi for GPU validation. This document describes the internal architecture and design decisions.
 
 ## High-Level Architecture
 
