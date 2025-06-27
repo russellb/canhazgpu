@@ -113,13 +113,18 @@ func runRun(ctx context.Context, gpuCount int, command []string) error {
 	// Run command
 	err = cmd.Run()
 
-	// Handle exit code
+	// Handle exit code properly - ensure cleanup happens before exiting
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
+				// Stop heartbeat and clean up GPUs before exiting
+				heartbeat.Stop()
+				
+				// Exit with the same code as the failed command
 				os.Exit(status.ExitStatus())
 			}
 		}
+		// For other types of errors, the defer will handle cleanup
 		return fmt.Errorf("command failed: %v", err)
 	}
 
