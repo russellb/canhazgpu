@@ -8,9 +8,13 @@ import click
 import redis
 import subprocess
 import threading
-from datetime import datetime, timedelta
+import random
+import re
 
 REDIS_KEY_PREFIX = 'canhazgpu:'
+ALLOCATION_LOCK_KEY = f'{REDIS_KEY_PREFIX}allocation_lock'
+LOCK_TIMEOUT = 10  # seconds
+MAX_RETRIES = 5
 
 
 def get_redis():
@@ -31,6 +35,66 @@ def format_duration(seconds):
     return f"{hours}h {minutes}m {seconds}s"
 
 
+def parse_duration(duration_str):
+    """Parse duration string like '2h', '30m', '1d' into seconds."""
+    if not duration_str:
+        return 8 * 3600  # 8 hours default
+    
+    # Match number followed by unit (h, m, d)
+    match = re.match(r'^(\d+(?:\.\d+)?)\s*([hmd])$', duration_str.lower().strip())
+    if not match:
+        raise click.BadParameter(f"Invalid duration format: {duration_str}. Use format like '2h', '30m', or '1d'")
+    
+    value, unit = match.groups()
+    value = float(value)
+    
+    if unit == 'h':
+        return int(value * 3600)
+    elif unit == 'm':
+        return int(value * 60)
+    elif unit == 'd':
+        return int(value * 24 * 3600)
+    
+    raise click.BadParameter(f"Unknown time unit: {unit}")
+
+
+def format_expiry_time(expiry_ts):
+    """Format expiry timestamp for display."""
+    now = now_ts()
+    if expiry_ts <= now:
+        return "EXPIRED"
+    
+    remaining = expiry_ts - now
+    return f"expires in {format_duration(remaining)}"
+
+
+def acquire_allocation_lock(r, lock_id):
+    """Acquire global allocation lock with retry and exponential backoff."""
+    for attempt in range(MAX_RETRIES):
+        # Try to acquire lock with SET NX EX
+        if r.set(ALLOCATION_LOCK_KEY, lock_id, nx=True, ex=LOCK_TIMEOUT):
+            return True
+        
+        # Exponential backoff with jitter
+        wait_time = (2 ** attempt) * 0.1 + random.uniform(0, 0.1)
+        time.sleep(wait_time)
+    
+    return False
+
+
+def release_allocation_lock(r, lock_id):
+    """Release allocation lock only if we own it."""
+    # Lua script for atomic check-and-delete
+    lua_script = """
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("del", KEYS[1])
+    else
+        return 0
+    end
+    """
+    return r.eval(lua_script, 1, ALLOCATION_LOCK_KEY, lock_id)
+
+
 @click.group()
 def cli():
     pass
@@ -38,16 +102,49 @@ def cli():
 
 @cli.command()
 @click.option('--gpus', required=True, type=int, help='Number of GPUs available on this machine')
-def admin(gpus):
+@click.option('--force', is_flag=True, help='Force reinitialization even if already initialized')
+def admin(gpus, force):
+    """Initialize GPU pool for this machine.
+    
+    Examples:
+        canhazgpu admin --gpus 8
+        canhazgpu admin --gpus 4 --force
+    """
     r = get_redis()
+    
+    # Check if already initialized
+    existing_count = r.get(f'{REDIS_KEY_PREFIX}gpu_count')
+    if existing_count and not force:
+        existing_count = int(existing_count)
+        click.echo(f"Warning: GPU pool already initialized with {existing_count} GPUs.", err=True)
+        click.echo("Use --force to override and reinitialize.", err=True)
+        sys.exit(1)
+    
+    # Clean up any existing GPU reservations if reinitializing
+    if existing_count and force:
+        existing_count = int(existing_count)
+        click.echo(f"Force reinitializing: clearing {existing_count} existing GPUs...")
+        for gpu_id in range(existing_count):
+            r.delete(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}')
+    
+    # Initialize new GPU pool with initial last_released timestamp
+    init_time = now_ts()
     for gpu_id in range(gpus):
-        r.set(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}', json.dumps({}))
+        r.set(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}', json.dumps({'last_released': init_time}))
     r.set(f'{REDIS_KEY_PREFIX}gpu_count', gpus)
-    click.echo(f"Initialized {gpus} GPUs (IDs 0 to {gpus - 1})")
+    
+    if existing_count and force:
+        click.echo(f"Reinitialized {gpus} GPUs (IDs 0 to {gpus - 1})")
+    else:
+        click.echo(f"Initialized {gpus} GPUs (IDs 0 to {gpus - 1})")
 
 
 @cli.command()
 def status():
+    """Show current GPU allocation status.
+    
+    Example: canhazgpu status
+    """
     r = get_redis()
     gpu_count = int(r.get(f'{REDIS_KEY_PREFIX}gpu_count') or 0)
     now = now_ts()
@@ -55,38 +152,159 @@ def status():
         data = r.get(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}')
         if data:
             entry = json.loads(data)
-            if entry:
+            if entry and entry.get('user'):
                 user = entry.get('user')
                 start = entry.get('start_time')
-                heartbeat = entry.get('last_heartbeat')
+                reservation_type = entry.get('type', 'run')
                 age = now - start if start else 0
-                hb_age = now - heartbeat if heartbeat else 0
-                click.echo(f"GPU {gpu_id}: IN USE by {user} for {format_duration(age)} (last heartbeat {format_duration(hb_age)} ago)")
+                
+                if reservation_type == 'manual' and entry.get('expiry_time'):
+                    expiry_info = format_expiry_time(entry['expiry_time'])
+                    click.echo(f"GPU {gpu_id}: IN USE by {user} for {format_duration(age)} (manual, {expiry_info})")
+                else:
+                    heartbeat = entry.get('last_heartbeat')
+                    hb_age = now - heartbeat if heartbeat else 0
+                    click.echo(f"GPU {gpu_id}: IN USE by {user} for {format_duration(age)} (run, last heartbeat {format_duration(hb_age)} ago)")
             else:
-                click.echo(f"GPU {gpu_id}: AVAILABLE")
+                # Available GPU - show last released time if available
+                last_released = entry.get('last_released')
+                if last_released:
+                    time_since_release = now - last_released
+                    click.echo(f"GPU {gpu_id}: AVAILABLE (last released {format_duration(time_since_release)} ago)")
+                else:
+                    click.echo(f"GPU {gpu_id}: AVAILABLE")
         else:
             click.echo(f"GPU {gpu_id}: AVAILABLE")
 
 
-def allocate_gpus(r, count):
+def rollback_reservations(r, reserved_gpus):
+    """Rollback GPU reservations by clearing their state and recording release time."""
+    release_time = now_ts()
+    for gpu_id in reserved_gpus:
+        key = f'{REDIS_KEY_PREFIX}gpu:{gpu_id}'
+        r.set(key, json.dumps({'last_released': release_time}))
+
+
+def get_available_gpus_sorted_by_lru(r):
+    """Get available GPUs sorted by least recently used (oldest last_released first)."""
     gpu_count = int(r.get(f'{REDIS_KEY_PREFIX}gpu_count') or 0)
     now = now_ts()
-    available = []
-
+    available_gpus = []
+    
     for gpu_id in range(gpu_count):
         key = f'{REDIS_KEY_PREFIX}gpu:{gpu_id}'
         data = r.get(key)
-        if not data:
-            available.append(gpu_id)
-        else:
+        
+        if data:
             entry = json.loads(data)
-            hb = entry.get('last_heartbeat')
-            if not entry or (hb and now - hb > 900):  # 15 minutes
-                available.append(gpu_id)
+            if not entry or not is_gpu_reserved(entry, now):
+                # GPU is available - get last_released time
+                last_released = entry.get('last_released', 0) if entry else 0
+                available_gpus.append((gpu_id, last_released))
+        else:
+            # No data means never used - highest priority (oldest timestamp = 0)
+            available_gpus.append((gpu_id, 0))
+    
+    # Sort by last_released time (oldest first - LRU)
+    available_gpus.sort(key=lambda x: x[1])
+    return [gpu_id for gpu_id, _ in available_gpus]
 
-    if len(available) < count:
+
+def atomic_reserve_gpus(r, count, user, reservation_type='run', expiry_time=None):
+    """Atomically reserve GPUs using Redis SET NX operations with LRU selection."""
+    now = now_ts()
+    reserved = []
+    
+    reservation_data = {
+        'user': user,
+        'start_time': now,
+        'last_heartbeat': now,
+        'type': reservation_type
+    }
+    
+    if expiry_time:
+        reservation_data['expiry_time'] = expiry_time
+    
+    reservation_json = json.dumps(reservation_data)
+    
+    # Get available GPUs sorted by LRU (least recently used first)
+    available_gpu_ids = get_available_gpus_sorted_by_lru(r)
+    
+    if len(available_gpu_ids) < count:
         return None
-    return available[:count]
+    
+    # Try to reserve GPUs in LRU order
+    for gpu_id in available_gpu_ids:
+        if len(reserved) >= count:
+            break
+            
+        key = f'{REDIS_KEY_PREFIX}gpu:{gpu_id}'
+        
+        # Try to atomically claim the GPU
+        # Use Lua script to atomically check and set
+        lua_script = """
+        local key = KEYS[1]
+        local data = redis.call("get", key)
+        local now = tonumber(ARGV[1])
+        local reservation = ARGV[2]
+        
+        if not data or data == '{}' then
+            redis.call("set", key, reservation)
+            return 1
+        else
+            local entry = cjson.decode(data)
+            
+            -- Check if reservation is expired
+            local expired = false
+            if entry.expiry_time and now > entry.expiry_time then
+                expired = true
+            elseif entry.last_heartbeat and (now - entry.last_heartbeat > 900) then
+                expired = true
+            elseif not entry.user then
+                expired = true
+            end
+            
+            if expired then
+                redis.call("set", key, reservation)
+                return 1
+            else
+                return 0
+            end
+        end
+        """
+        
+        if r.eval(lua_script, 1, key, now, reservation_json):
+            reserved.append(gpu_id)
+    
+    # If we couldn't get enough GPUs, rollback and return None
+    if len(reserved) < count:
+        rollback_reservations(r, reserved)
+        return None
+    
+    return reserved
+
+
+def is_gpu_reserved(entry, current_time):
+    """Check if a GPU is currently reserved."""
+    if not entry or not entry.get('user'):
+        return False
+    
+    # Check expiry time for manual reservations
+    if entry.get('expiry_time'):
+        return current_time < entry['expiry_time']
+    
+    # Check heartbeat for run-type reservations
+    hb = entry.get('last_heartbeat')
+    if hb and current_time - hb <= 900:  # 15 minutes
+        return True
+    
+    return False
+
+
+def reserve_gpus_manual(r, count, user, duration_seconds):
+    """Reserve GPUs manually for a specified duration."""
+    expiry_time = now_ts() + duration_seconds
+    return atomic_reserve_gpus(r, count, user, 'manual', expiry_time)
 
 
 def heartbeat(r, gpu_ids, user):
@@ -102,9 +320,13 @@ def heartbeat(r, gpu_ids, user):
 
 
 @cli.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True))
-@click.option('--gpus', required=True, type=int, help='Number of GPUs to reserve')
+@click.option('--gpus', default=1, type=int, help='Number of GPUs to reserve')
 @click.argument('args', nargs=-1, type=click.UNPROCESSED)
 def run(gpus, args):
+    """Reserve GPUs and run a command with CUDA_VISIBLE_DEVICES set.
+    
+    Example: canhazgpu run --gpus 2 -- python train.py
+    """
     if '--' not in sys.argv:
         click.echo("Error: must separate command with --", err=True)
         sys.exit(1)
@@ -117,17 +339,24 @@ def run(gpus, args):
 
     r = get_redis()
     user = get_username()
-    gpu_ids = allocate_gpus(r, gpus)
-    if not gpu_ids:
-        click.echo("Error: Not enough GPUs available", err=True)
+    
+    # Generate unique lock ID for this process
+    lock_id = f"{user}:{os.getpid()}:{now_ts()}"
+    
+    # Acquire global allocation lock
+    if not acquire_allocation_lock(r, lock_id):
+        click.echo("Error: Could not acquire allocation lock after retries", err=True)
         sys.exit(1)
-
-    for gpu_id in gpu_ids:
-        r.set(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}', json.dumps({
-            'user': user,
-            'start_time': now_ts(),
-            'last_heartbeat': now_ts()
-        }))
+    
+    try:
+        # Atomically reserve GPUs
+        gpu_ids = atomic_reserve_gpus(r, gpus, user)
+        if not gpu_ids:
+            click.echo("Error: Not enough GPUs available", err=True)
+            sys.exit(1)
+    finally:
+        # Always release the allocation lock
+        release_allocation_lock(r, lock_id)
 
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, gpu_ids))
     click.echo(f"Running with GPUs: {os.environ['CUDA_VISIBLE_DEVICES']}")
@@ -139,9 +368,79 @@ def run(gpus, args):
         result = subprocess.run(command)
         sys.exit(result.returncode)
     finally:
-        for gpu_id in gpu_ids:
-            r.set(f'{REDIS_KEY_PREFIX}gpu:{gpu_id}', json.dumps({}))
+        # Clean up GPU reservations
+        rollback_reservations(r, gpu_ids)
         click.echo("Released GPUs.")
+
+
+@cli.command()
+@click.option('--gpus', default=1, type=int, help='Number of GPUs to reserve')
+@click.option('--duration', default='8h', help='Duration to reserve GPUs (e.g., 2h, 30m, 1d)')
+def reserve(gpus, duration):
+    """Reserve GPUs manually for a specified duration.
+    
+    Examples:
+        canhazgpu reserve --gpus 2 --duration 4h
+        canhazgpu reserve --duration 30m
+        canhazgpu reserve --gpus 1 --duration 2d
+    """
+    try:
+        duration_seconds = parse_duration(duration)
+    except click.BadParameter as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    
+    r = get_redis()
+    user = get_username()
+    
+    # Generate unique lock ID for this process
+    lock_id = f"{user}:{os.getpid()}:{now_ts()}"
+    
+    # Acquire global allocation lock
+    if not acquire_allocation_lock(r, lock_id):
+        click.echo("Error: Could not acquire allocation lock after retries", err=True)
+        sys.exit(1)
+    
+    try:
+        # Atomically reserve GPUs
+        gpu_ids = reserve_gpus_manual(r, gpus, user, duration_seconds)
+        if not gpu_ids:
+            click.echo("Error: Not enough GPUs available", err=True)
+            sys.exit(1)
+    finally:
+        # Always release the allocation lock
+        release_allocation_lock(r, lock_id)
+    
+    expiry_time = now_ts() + duration_seconds
+    click.echo(f"Reserved {len(gpu_ids)} GPU(s) {gpu_ids} for {duration} ({format_expiry_time(expiry_time)})")
+
+
+@cli.command()
+def release():
+    """Release all manually reserved GPUs held by the current user.
+    
+    Example: canhazgpu release
+    """
+    r = get_redis()
+    user = get_username()
+    gpu_count = int(r.get(f'{REDIS_KEY_PREFIX}gpu_count') or 0)
+    released = []
+    
+    for gpu_id in range(gpu_count):
+        key = f'{REDIS_KEY_PREFIX}gpu:{gpu_id}'
+        data = r.get(key)
+        if data:
+            entry = json.loads(data)
+            if (entry and 
+                entry.get('user') == user and 
+                entry.get('type') == 'manual'):
+                r.set(key, json.dumps({}))
+                released.append(gpu_id)
+    
+    if released:
+        click.echo(f"Released {len(released)} GPU(s): {released}")
+    else:
+        click.echo("No manually reserved GPUs found for current user")
 
 
 if __name__ == '__main__':
