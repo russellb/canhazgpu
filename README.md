@@ -4,6 +4,22 @@
 
 In shared development environments with multiple GPUs, researchers and developers often face conflicts when trying to use GPUs simultaneously, leading to out-of-memory errors, failed training runs, and wasted time debugging resource conflicts. This utility provides a simple reservation system that coordinates GPU access across multiple users and processes on a single machine.
 
+### Who this is for
+
+You peacefully share a host but want a helper to avoid accidental conflicts.
+
+- You have a single host with NVIDIA GPUs shared by multiple users
+- You all log in and run commands manually for development and/or testing
+- You can still talk to each other about playing nice and sharing your (GPU) toys
+
+### Who this is NOT for
+
+If your needs are more than this, you probably want something more powerful like Kubernetes.
+
+- You want to manage resources across a cluster
+- You want to set resource usage limits or other policies
+- You want to support workload priorities and preemption
+
 ## Quick Start
 
 ```bash
