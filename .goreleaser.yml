@@ -51,6 +51,9 @@ changelog:
       - '^docs:'
       - '^test:'
 
+brews:
+  - skip_upload: true
+
 release:
   github:
     owner: russellb
@@ -106,11 +109,3 @@ release:
     - NVIDIA GPUs with nvidia-smi available
     - Go 1.23+ (if building from source)
 
-brews:
-  - name: canhazgpu
-    description: "GPU reservation tool for single host shared development systems"
-    homepage: "https://github.com/russellb/canhazgpu"
-    license: "Apache-2.0"
-    repository:
-      owner: russellb
-      name: homebrew-tap
