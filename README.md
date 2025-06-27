@@ -47,21 +47,29 @@ Reinitialized 4 GPUs (IDs 0 to 3)
 
 ## Checking Status
 
-View current GPU allocation status:
+View current GPU allocation status with automatic validation:
 
 ```
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 0h 30m 15s ago)
-GPU 1: IN USE by alice for 0h 15m 30s (run, last heartbeat 0h 0m 5s ago)
-GPU 2: AVAILABLE (last released 2h 45m 12s ago)
-GPU 3: IN USE by bob for 1h 2m 15s (manual, expires in 3h 15m 45s)
+GPU 0: AVAILABLE (last released 0h 30m 15s ago) [validated: 45MB used]
+GPU 1: IN USE by alice for 0h 15m 30s (run, last heartbeat 0h 0m 5s ago) [validated: 8452MB, 1 processes]
+GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
+GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validated: no actual usage detected]
 ```
 
 The status shows:
 - **AVAILABLE**: GPU is free to use, with time since last release
-- **IN USE**: GPU is reserved, showing user, duration, and type:
+- **IN USE**: GPU is properly reserved, showing user, duration, and type:
   - `(run, ...)`: GPU reserved via `run` command with heartbeat info
   - `(manual, ...)`: GPU manually reserved with expiry time
+- **IN USE WITHOUT RESERVATION**: GPU is being used without proper reservation, showing:
+  - Which user(s) are running unauthorized processes
+  - Memory usage and process details
+  - Suggests running `canhazgpu status` for full details
+- **Validation info**: Shows actual GPU usage detected via nvidia-smi:
+  - `[validated: XMB, Y processes]`: Confirms reservation matches actual usage
+  - `[validated: no actual usage detected]`: Reserved but no processes running
+  - `[validated: XMB used]`: Shows memory usage on "available" GPUs
 
 ## Usage Modes
 
@@ -81,11 +89,19 @@ canhazgpu run --gpus 1 -- vllm serve my/model
 ```
 
 The `run` command:
-- Reserves the requested number of GPUs
+- Validates actual GPU availability using nvidia-smi
+- Excludes GPUs that are in use without reservation
+- Reserves the requested number of GPUs using LRU allocation
 - Sets `CUDA_VISIBLE_DEVICES` to the allocated GPU IDs
 - Runs your command
 - Automatically releases GPUs when the command finishes
 - Maintains a heartbeat while running to keep the reservation active
+
+If allocation fails due to unauthorized usage:
+```bash
+❯ canhazgpu run --gpus 2 -- python train.py
+Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use without reservation - run 'canhazgpu status' for details)
+```
 
 ### Manual GPU Reservation
 
@@ -111,6 +127,12 @@ Duration formats supported:
 - `1d` - 1 day
 - `0.5h` - 30 minutes (decimal values supported)
 
+The `reserve` command also validates GPU availability and excludes unauthorized usage:
+```bash
+❯ canhazgpu reserve --gpus 2 --duration 4h
+Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use without reservation - run 'canhazgpu status' for details)
+```
+
 ### Releasing Manual Reservations
 
 Release all your manually reserved GPUs:
@@ -121,6 +143,40 @@ canhazgpu release
 ```
 
 Note: This only releases manual reservations, not active `run` sessions.
+
+## Unauthorized Usage Detection
+
+The system automatically detects and prevents allocation of GPUs that are in use without proper reservations:
+
+### Detection Methods
+- **nvidia-smi integration**: Queries actual GPU processes and memory usage
+- **Process ownership**: Identifies which users are running unauthorized processes
+- **Real-time validation**: Checks during every allocation attempt
+- **Memory threshold**: Considers GPUs with >100MB usage as "in use"
+
+### Status Display Examples
+
+**Single unauthorized user:**
+```bash
+GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
+```
+
+**Multiple unauthorized users:**
+```bash
+GPU 3: IN USE WITHOUT RESERVATION by users alice, bob and charlie - 2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
+```
+
+**Validation mismatch (reserved but unused):**
+```bash
+GPU 4: IN USE by alice for 1h 30m 0s (manual, expires in 2h 30m 0s) [validated: no actual usage detected]
+```
+
+### Allocation Protection
+When requesting GPUs, the system:
+1. Scans for unauthorized usage using nvidia-smi
+2. Excludes those GPUs from the available pool
+3. Provides detailed error messages if insufficient GPUs remain
+4. Suggests running `canhazgpu status` to see unauthorized usage details
 
 ## GPU Allocation Strategy
 
@@ -144,7 +200,8 @@ The system will allocate GPUs 1 and 5 (oldest releases first).
 - `redis` Python library (`pip install redis`)
 - `click` Python library (`pip install click`)
 - Redis server running on localhost:6379
-- Only supports NVIDIA GPUs (automatically sets `CUDA_VISIBLE_DEVICES`)
+- NVIDIA GPUs with nvidia-smi available (automatically sets `CUDA_VISIBLE_DEVICES`)
+- For user detection: access to `/proc` filesystem or `ps` command
 
 ## Features
 
@@ -154,3 +211,8 @@ The system will allocate GPUs 1 and 5 (oldest releases first).
 - ✅ **LRU allocation**: Fair distribution using least recently used strategy
 - ✅ **Heartbeat monitoring**: Detects crashed processes and reclaims GPUs
 - ✅ **Flexible duration formats**: Support for minutes, hours, and days
+- ✅ **Unauthorized usage detection**: Identifies GPUs in use without proper reservations
+- ✅ **User accountability**: Shows which users are running unauthorized processes
+- ✅ **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
+- ✅ **Smart allocation**: Automatically excludes unauthorized GPUs from allocation
+- ✅ **Detailed error messages**: Clear feedback when GPUs unavailable due to unauthorized usage
