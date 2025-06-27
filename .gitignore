@@ -21,3 +21,6 @@ canhazgpu
 .DS_Store
 *.tmp
 *.temp
+
+# Goreleaser
+dist/
