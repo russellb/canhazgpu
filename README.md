@@ -99,17 +99,20 @@ For detailed usage, configuration, and administration:
 ## Installation
 
 ```bash
-# Option 1: Build from source
+# Option 1: Install directly from GitHub (recommended)
+go install github.com/russellb/canhazgpu@latest
+
+# Option 2: Build from source
 git clone https://github.com/russellb/canhazgpu.git
 cd canhazgpu
 make install
 
-# Option 2: Download pre-built binary (when available)
+# Option 3: Download pre-built binary (when available)
 wget https://github.com/russellb/canhazgpu/releases/latest/download/canhazgpu
 chmod +x canhazgpu
 sudo cp canhazgpu /usr/local/bin/
 
-# Install bash completion (optional)
+# Install bash completion (optional but recommended)
 wget https://raw.githubusercontent.com/russellb/canhazgpu/main/autocomplete_canhazgpu.sh
 sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
 

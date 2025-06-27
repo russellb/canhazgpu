@@ -58,7 +58,17 @@ If not installed, install NVIDIA drivers for your system.
 
 ## Install canhazgpu
 
-### Option 1: Build from Source (Recommended)
+### Option 1: Install from GitHub (Recommended)
+```bash
+# Install directly from GitHub using Go
+go install github.com/russellb/canhazgpu@latest
+
+# The binary will be installed to $GOPATH/bin or $HOME/go/bin
+# Make sure this directory is in your PATH
+export PATH="$HOME/go/bin:$PATH"
+```
+
+### Option 2: Build from Source
 ```bash
 # Clone the repository
 git clone https://github.com/russellb/canhazgpu.git
@@ -71,7 +81,7 @@ make install
 make docs-deps
 ```
 
-### Option 2: Pre-built Binary
+### Option 3: Pre-built Binary
 ```bash
 # Download pre-built binary (when available)
 wget https://github.com/russellb/canhazgpu/releases/latest/download/canhazgpu
@@ -85,7 +95,7 @@ sudo cp canhazgpu /usr/local/bin/
 sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
 ```
 
-### Option 3: Local Installation
+### Option 4: Local Installation
 ```bash
 # Keep in local directory and add to PATH
 export PATH="$PWD:$PATH"

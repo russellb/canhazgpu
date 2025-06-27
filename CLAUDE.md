@@ -29,10 +29,18 @@ The tool is a Go application structured as a CLI with internal packages that imp
 ## Development Commands
 
 ### Build and Installation
+
 ```bash
+# Option 1: Install directly from GitHub (recommended for users)
+go install github.com/russellb/canhazgpu@latest
+
+# Option 2: Build from source
 make build            # Build the Go binary to ./build/canhazgpu
 make install          # Build and install to /usr/local/bin with bash completion
 make test             # Run Go tests (when implemented)
+
+# Option 3: Install from local source
+go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 ```
 
 ### Usage Examples
@@ -70,7 +78,8 @@ make test             # Run Go tests (when implemented)
 ## Key Implementation Details
 
 ### Project Structure
-```
+
+```text
 ├── main.go                          # Entry point
 ├── internal/
 │   ├── cli/                        # Cobra CLI commands
@@ -93,49 +102,58 @@ make test             # Run Go tests (when implemented)
 ```
 
 ### GPU Validation and Detection
+
 - `DetectGPUUsage()` in `internal/gpu/validation.go`: Uses nvidia-smi to query actual GPU processes and memory usage
 - `GetProcessOwner()` in `internal/gpu/validation.go`: Identifies process owners via /proc filesystem or ps command
 - Unauthorized usage detection excludes GPUs from allocation pool automatically
 - Memory threshold of 100MB determines if GPU is considered "in use"
 
 ### Allocation Strategy
+
 - `GetAvailableGPUsSortedByLRU()` in `internal/gpu/allocation.go`: LRU allocation with unauthorized usage exclusion
 - `AtomicReserveGPUs()` in `internal/redis_client/client.go`: Race-condition-safe reservation with Lua scripts
 - Enhanced Redis Lua scripts validate unauthorized usage list during atomic operations
 - Detailed error messages when allocation fails due to unauthorized usage
 
 ### Reservation Types
+
 - **Run-type**: Maintained by heartbeat, auto-released when process ends
 - **Manual-type**: Time-based expiry, explicit release required
 - `LastReleased` timestamp tracking for LRU allocation decisions  
 - Support for flexible duration formats (30m, 2h, 1d) via `ParseDuration()`
 
 ### Locking and Concurrency
+
 - Global allocation lock (`AcquireAllocationLock`, `ReleaseAllocationLock`) prevents race conditions
 - Exponential backoff with jitter for lock acquisition retries
 - Atomic operations using Redis Lua scripts prevent partial allocation failures
 - Lock timeout of 10 seconds with up to 5 retry attempts
 
 ### Status and Monitoring
+
 - Real-time validation shows actual vs reserved GPU usage
 - User accountability displays specific users running unauthorized processes
 - Validation info format: `[validated: XMB, Y processes]`
 - "IN USE WITHOUT RESERVATION" status for unauthorized usage
 
 ### Time Handling
+
 - `FlexibleTime` type in `internal/types/types.go` handles both Unix timestamps (Python compatibility) and RFC3339 strings (Go native)
 - Ensures backward compatibility with existing Python-created Redis data
 
 ## Redis Schema
 
 ### Core Keys
+
 - `canhazgpu:gpu_count`: Total number of available GPUs
 - `canhazgpu:allocation_lock`: Global allocation lock for race condition prevention
 
 ### GPU State Objects (`canhazgpu:gpu:{id}`)
+
 Available state: `{'last_released': timestamp}` or `{}`
 
 Reserved state:
+
 ```json
 {
   "user": "username",
@@ -147,6 +165,7 @@ Reserved state:
 ```
 
 ### Validation Integration
+
 - Unauthorized usage detection runs during allocation
 - LRU allocation excludes GPUs in unauthorized use
 - Redis Lua scripts receive unauthorized GPU lists for atomic validation
