@@ -1,0 +1,82 @@
+site_name: canhazgpu Documentation
+site_description: A GPU reservation tool for single host shared development systems
+site_author: Russell Bryant
+site_url: https://russellb.github.io/canhazgpu
+
+repo_name: russellb/canhazgpu
+repo_url: https://github.com/russellb/canhazgpu
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: blue
+      accent: light blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.action.edit
+    - content.action.view
+    - content.code.copy
+
+plugins:
+  - search
+  - git-revision-date-localized
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Quick Start: quickstart.md
+  - Usage:
+    - Commands Overview: commands.md
+    - Running Jobs: usage-run.md
+    - Manual Reservations: usage-reserve.md
+    - Status Monitoring: usage-status.md
+  - Features:
+    - GPU Validation: features-validation.md
+    - Unauthorized Usage Detection: features-unauthorized.md
+    - LRU Allocation: features-lru.md
+  - Administration:
+    - Setup & Configuration: admin-setup.md
+    - Troubleshooting: admin-troubleshooting.md
+  - Development:
+    - Architecture: dev-architecture.md
+    - Contributing: dev-contributing.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/rbryant/canhazgpu

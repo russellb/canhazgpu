@@ -1,0 +1,279 @@
+# LRU Allocation Strategy
+
+canhazgpu uses a **Least Recently Used (LRU)** allocation strategy to ensure fair distribution of GPU resources over time. This approach promotes equitable access and can help with thermal management and hardware longevity.
+
+## How LRU Works
+
+### Basic Principle
+When multiple GPUs are available for allocation, canhazgpu selects the GPU(s) that were **released longest ago**. This ensures that:
+
+- All GPUs get used over time
+- No single GPU is overworked while others sit idle
+- Resource allocation is fair across time periods
+- Thermal loads are distributed across hardware
+
+### Timestamp Tracking
+Each GPU maintains a `last_released` timestamp in Redis:
+
+```json
+{
+  "last_released": 1672531200.123
+}
+```
+
+When a GPU is released (either from `run` completion or manual `release`), this timestamp is updated to the current time.
+
+## LRU in Action
+
+### Example Scenario
+Consider a system with 4 GPUs where you request 2 GPUs:
+
+```bash
+❯ canhazgpu status
+GPU 0: AVAILABLE (last released 5h 30m 15s ago)    # Oldest release
+GPU 1: AVAILABLE (last released 1h 45m 30s ago)    # Recent release  
+GPU 2: AVAILABLE (last released 3h 12m 45s ago)    # Middle age
+GPU 3: AVAILABLE (last released 2h 08m 12s ago)    # Middle age
+```
+
+**LRU Ranking** (oldest first):
+1. GPU 0 (5h 30m ago) ← Selected
+2. GPU 2 (3h 12m ago) ← Selected  
+3. GPU 3 (2h 08m ago)
+4. GPU 1 (1h 45m ago)
+
+**Result**: GPUs 0 and 2 are allocated.
+
+### Allocation Output
+```bash
+❯ canhazgpu run --gpus 2 -- python train.py
+Reserved 2 GPU(s): [0, 2] for command execution
+# CUDA_VISIBLE_DEVICES=0,2 python train.py
+```
+
+## LRU with Unauthorized Usage
+
+### Exclusion from LRU Pool
+Unauthorized GPUs are automatically excluded from LRU consideration:
+
+```bash
+❯ canhazgpu status
+GPU 0: AVAILABLE (last released 4h 0m 0s ago)
+GPU 1: IN USE WITHOUT RESERVATION by user bob - 1024MB used
+GPU 2: AVAILABLE (last released 1h 0m 0s ago)  
+GPU 3: AVAILABLE (last released 2h 0m 0s ago)
+```
+
+**LRU Pool** (unauthorized GPU 1 excluded):
+1. GPU 0 (4h ago) ← Available for allocation
+2. GPU 3 (2h ago) ← Available for allocation
+3. GPU 2 (1h ago) ← Available for allocation
+
+**Request 2 GPUs**: Would get GPUs 0 and 3.
+
+### Error Handling
+```bash
+❯ canhazgpu run --gpus 4 -- python train.py
+Error: Not enough GPUs available. Requested: 4, Available: 3 (1 GPUs in use without reservation - run 'canhazgpu status' for details)
+```
+
+The system shows you exactly why allocation failed.
+
+## LRU Benefits
+
+### Fair Resource Distribution
+Without LRU, users might always get the same GPUs:
+- GPU 0 gets used constantly
+- GPU 7 never gets used
+- Uneven wear and thermal stress
+
+With LRU:
+- All GPUs get used over time
+- Fair rotation ensures equitable access
+- Better long-term hardware health
+
+### Thermal Management
+**Problem without LRU:**
+```bash
+# Always allocating GPU 0
+GPU 0: 85°C (constantly hot)
+GPU 1: 35°C (always idle)
+GPU 2: 35°C (always idle)
+GPU 3: 35°C (always idle)
+```
+
+**With LRU distribution:**
+```bash
+# Heat distributed across GPUs
+GPU 0: 65°C (used 2 hours ago)
+GPU 1: 45°C (used 6 hours ago)  
+GPU 2: 85°C (currently in use)
+GPU 3: 55°C (used 4 hours ago)
+```
+
+### Usage Pattern Analytics
+LRU timestamps provide valuable usage analytics:
+
+```bash
+❯ canhazgpu status
+GPU 0: AVAILABLE (last released 0h 15m 30s ago)    # Recently active
+GPU 1: AVAILABLE (last released 8h 45m 12s ago)    # Underutilized
+GPU 2: IN USE by alice for 2h 30m 0s (run, ...)    # Currently active
+GPU 3: AVAILABLE (last released 1h 20m 45s ago)    # Normal usage
+```
+
+From this, you can identify:
+- **Underutilized resources** (GPU 1)
+- **Normal usage patterns** (GPUs 0, 3)
+- **Current workloads** (GPU 2)
+
+## Advanced LRU Scenarios
+
+### Mixed Reservation Types
+```bash
+❯ canhazgpu status
+GPU 0: AVAILABLE (last released 2h 0m 0s ago)
+GPU 1: IN USE by bob for 1h 0m 0s (run, ...)
+GPU 2: IN USE by alice for 30m 0s (manual, expires in 3h 30m 0s)
+GPU 3: AVAILABLE (last released 6h 0m 0s ago)
+```
+
+**Available for LRU**: GPUs 0 and 3
+**LRU order**: GPU 3 (6h ago), then GPU 0 (2h ago)
+
+### New System Initialization
+When GPUs are first initialized, they have no `last_released` timestamp:
+
+```bash
+❯ canhazgpu admin --gpus 4
+Initialized 4 GPUs (IDs 0 to 7)
+
+❯ canhazgpu status
+GPU 0: AVAILABLE (never used)
+GPU 1: AVAILABLE (never used)
+GPU 2: AVAILABLE (never used)  
+GPU 3: AVAILABLE (never used)
+```
+
+**Initial LRU behavior**: 
+- GPUs with no `last_released` timestamp are considered "oldest"
+- Allocation order is deterministic (typically lowest ID first)
+- After first use cycle, normal LRU takes over
+
+### LRU After System Restart
+LRU timestamps persist in Redis across system restarts:
+
+```bash
+# Before restart
+❯ canhazgpu status
+GPU 0: AVAILABLE (last released 1h 30m 0s ago)
+GPU 1: AVAILABLE (last released 4h 15m 0s ago)
+
+# After system restart
+❯ canhazgpu status  
+GPU 0: AVAILABLE (last released 1h 35m 0s ago)  # Time continues
+GPU 1: AVAILABLE (last released 4h 20m 0s ago)  # Time continues
+```
+
+## LRU Implementation Details
+
+### Atomic LRU Selection
+LRU selection happens atomically within Redis Lua scripts to prevent race conditions:
+
+```lua
+-- Simplified LRU logic (actual implementation in Redis Lua)
+local available_gpus = {}
+for i = 0, gpu_count - 1 do
+    local gpu_data = redis.call('GET', 'canhazgpu:gpu:' .. i)
+    if gpu_data == false or gpu_is_available(gpu_data) then
+        -- Add to available list with timestamp
+        table.insert(available_gpus, {id = i, last_released = get_timestamp(gpu_data)})
+    end
+end
+
+-- Sort by last_released (oldest first)
+table.sort(available_gpus, function(a, b) 
+    return a.last_released < b.last_released 
+end)
+
+-- Select requested number of GPUs
+local selected = {}
+for i = 1, requested_count do
+    if available_gpus[i] then
+        table.insert(selected, available_gpus[i].id)
+    end
+end
+```
+
+### Performance Considerations
+LRU calculation is efficient:
+- **Time complexity**: O(n log n) where n is the number of available GPUs
+- **Space complexity**: O(n) for sorting
+- **Typical performance**: <1ms for systems with dozens of GPUs
+
+## Monitoring LRU Effectiveness
+
+### Usage Distribution Analysis
+```bash
+#!/bin/bash
+# lru_analysis.sh - Analyze GPU usage distribution
+
+echo "GPU Usage Distribution (last 24h):"
+canhazgpu status | grep "AVAILABLE" | while read -r line; do
+    GPU=$(echo "$line" | awk '{print $2}' | tr -d ':')
+    TIME=$(echo "$line" | sed -n 's/.*last released \([^)]*\).*/\1/p')
+    echo "GPU $GPU: $TIME"
+done | sort -k3,3n
+```
+
+### Identifying Imbalances
+```bash
+❯ canhazgpu status
+GPU 0: AVAILABLE (last released 0h 15m 0s ago)     # Heavily used
+GPU 1: AVAILABLE (last released 0h 30m 0s ago)     # Heavily used
+GPU 2: AVAILABLE (last released 12h 45m 0s ago)    # Underutilized!
+GPU 3: AVAILABLE (last released 0h 45m 0s ago)     # Normal usage
+```
+
+GPU 2 hasn't been used in 12+ hours - might indicate:
+- Hardware issues with that GPU
+- User preferences avoiding that GPU
+- Configuration problems
+
+## Customizing LRU Behavior
+
+Currently, LRU is the only allocation strategy, but the system is designed to support alternatives:
+
+### Potential Future Strategies
+- **Round-robin**: Strict rotation regardless of release time
+- **Random**: Random selection for load balancing
+- **Thermal-aware**: Prefer cooler GPUs
+- **Performance-based**: Prefer faster GPUs for specific workloads
+
+### Configuration Extension Points
+The LRU logic is centralized and could be made configurable:
+```bash
+# Potential future configuration
+canhazgpu admin --allocation-strategy lru
+canhazgpu admin --allocation-strategy round-robin
+canhazgpu admin --allocation-strategy thermal-aware
+```
+
+## Best Practices with LRU
+
+### For Users
+- **Don't game the system**: Trust the LRU allocation for fairness
+- **Release promptly**: Quick releases improve the LRU distribution
+- **Monitor your usage patterns**: Use `status` to see resource distribution
+
+### For Administrators
+- **Monitor distribution**: Check for GPUs that are never used
+- **Investigate imbalances**: GPUs with very old `last_released` times may have issues
+- **Plan maintenance**: Use LRU data to schedule maintenance during low-usage periods
+
+### For System Health
+- **Thermal monitoring**: LRU helps distribute heat loads
+- **Hardware longevity**: Even usage patterns extend hardware life
+- **Performance consistency**: All GPUs stay active and ready
+
+The LRU allocation strategy ensures that canhazgpu provides fair, efficient, and sustainable GPU resource management for your entire team.
