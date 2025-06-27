@@ -1,7 +1,7 @@
 site_name: canhazgpu Documentation
 site_description: A GPU reservation tool for single host shared development systems
 site_author: Russell Bryant
-site_url: https://russellb.github.io/canhazgpu
+site_url: http://blog.russellbryant.net/canhazgpu/
 
 repo_name: russellb/canhazgpu
 repo_url: https://github.com/russellb/canhazgpu

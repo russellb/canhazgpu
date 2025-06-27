@@ -81,13 +81,13 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 
 For detailed usage, configuration, and administration:
 
-**📚 [Full Documentation](https://russellb.github.io/canhazgpu/)**
+**📚 [Full Documentation](http://blog.russellbryant.net/canhazgpu/)**
 
-- **[Installation Guide](https://russellb.github.io/canhazgpu/installation/)** - Setup and dependencies
-- **[Quick Start](https://russellb.github.io/canhazgpu/quickstart/)** - Get up and running
-- **[Usage Guide](https://russellb.github.io/canhazgpu/usage-run/)** - Detailed command examples
-- **[Administration](https://russellb.github.io/canhazgpu/admin-setup/)** - Production setup and monitoring
-- **[Troubleshooting](https://russellb.github.io/canhazgpu/admin-troubleshooting/)** - Common issues and solutions
+- **[Installation Guide](http://blog.russellbryant.net/canhazgpu/installation/)** - Setup and dependencies
+- **[Quick Start](http://blog.russellbryant.net/canhazgpu/quickstart/)** - Get up and running
+- **[Usage Guide](http://blog.russellbryant.net/canhazgpu/usage-run/)** - Detailed command examples
+- **[Administration](http://blog.russellbryant.net/canhazgpu/admin-setup/)** - Production setup and monitoring
+- **[Troubleshooting](http://blog.russellbryant.net/canhazgpu/admin-troubleshooting/)** - Common issues and solutions
 
 ## Requirements
 
@@ -125,4 +125,4 @@ canhazgpu admin --gpus $(nvidia-smi -L | wc -l)
 
 ## Contributing
 
-See the [Contributing Guide](https://russellb.github.io/canhazgpu/dev-contributing/) for development setup, coding standards, and how to submit contributions.
+See the [Contributing Guide](http://blog.russellbryant.net/canhazgpu/dev-contributing/) for development setup, coding standards, and how to submit contributions.

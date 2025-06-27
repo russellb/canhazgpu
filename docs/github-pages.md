@@ -21,7 +21,7 @@ This guide covers deploying the canhazgpu documentation to GitHub Pages using Mk
    - Click "Save"
 
 3. **Verify Configuration**
-   - You should see "Your site is ready to be published at https://russellb.github.io/canhazgpu/"
+   - You should see "Your site is ready to be published at http://blog.russellbryant.net/canhazgpu/"
    - The workflow will automatically deploy when you push to main branch
 
 **Alternative: Manual Enablement**
@@ -198,41 +198,46 @@ mkdocs serve
 **Pull request previews:**
 The workflow also runs on pull requests to validate the build without deploying.
 
-## Custom Domain (Optional)
+## Custom Domain Configuration
 
-### 1. Configure Custom Domain
+### 1. Current Custom Domain Setup
 
-**Add CNAME file:**
-```bash
-echo "docs.canhazgpu.com" > docs/CNAME
-```
+The documentation is configured to use the custom domain `blog.russellbryant.net/canhazgpu/`:
 
-**Update mkdocs.yml:**
+**GitHub Pages Settings:**
+- Custom domain configured in repository Settings → Pages → Custom domain
+- Set to: `blog.russellbryant.net/canhazgpu`
+
+**MkDocs configuration:** `mkdocs.yml`
 ```yaml
-site_url: https://docs.canhazgpu.com
+site_url: http://blog.russellbryant.net/canhazgpu/
 ```
 
-**Update GitHub Actions:**
+### 2. Changing the Custom Domain
+
+To use a different custom domain:
+
+1. **Update GitHub Pages Settings:**
+   - Go to repository Settings → Pages
+   - Under "Custom domain", enter your domain
+   - Save settings
+
+2. **Update mkdocs.yml:**
 ```yaml
-- name: Deploy to GitHub Pages
-  uses: peaceiris/actions-gh-pages@v3
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
-    publish_dir: ./site
-    cname: docs.canhazgpu.com
+site_url: https://your-custom-domain.com
 ```
 
-### 2. DNS Configuration
+### 3. DNS Configuration
 
 Configure DNS records with your domain provider:
 
 ```
 Type: CNAME
-Name: docs
+Name: your-subdomain
 Value: your-username.github.io
 ```
 
-### 3. SSL Certificate
+### 4. SSL Certificate
 
 GitHub Pages automatically provides SSL certificates for custom domains.
 
