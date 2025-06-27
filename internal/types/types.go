@@ -1,0 +1,120 @@
+package types
+
+import (
+	"fmt"
+	"strconv"
+	"time"
+)
+
+// GPUState represents the state of a GPU in Redis
+type GPUState struct {
+	User          string       `json:"user,omitempty"`
+	StartTime     FlexibleTime `json:"start_time,omitempty"`
+	LastHeartbeat FlexibleTime `json:"last_heartbeat,omitempty"`
+	Type          string       `json:"type,omitempty"` // "run" or "manual"
+	ExpiryTime    FlexibleTime `json:"expiry_time,omitempty"`
+	LastReleased  FlexibleTime `json:"last_released,omitempty"`
+}
+
+// FlexibleTime handles both Unix timestamps and RFC3339 time strings
+type FlexibleTime struct {
+	time.Time
+}
+
+func (ft *FlexibleTime) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 || string(data) == "null" {
+		return nil
+	}
+
+	// Remove quotes if present
+	s := string(data)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+
+	// Try parsing as Unix timestamp first (Python compatibility)
+	if timestamp, err := strconv.ParseFloat(s, 64); err == nil {
+		ft.Time = time.Unix(int64(timestamp), 0)
+		return nil
+	}
+
+	// Try parsing as RFC3339 string
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		ft.Time = t
+		return nil
+	}
+
+	// Try parsing as Unix timestamp string
+	if timestamp, err := strconv.ParseInt(s, 10, 64); err == nil {
+		ft.Time = time.Unix(timestamp, 0)
+		return nil
+	}
+
+	return fmt.Errorf("cannot parse time: %s", s)
+}
+
+func (ft FlexibleTime) MarshalJSON() ([]byte, error) {
+	if ft.Time.IsZero() {
+		return []byte("null"), nil
+	}
+	return ft.Time.MarshalJSON()
+}
+
+// ToTime converts FlexibleTime to time.Time
+func (ft FlexibleTime) ToTime() time.Time {
+	return ft.Time
+}
+
+// GPUUsage represents actual GPU usage detected via nvidia-smi
+type GPUUsage struct {
+	GPUID     int              `json:"gpu_id"`
+	MemoryMB  int              `json:"memory_mb"`
+	Processes []GPUProcessInfo `json:"processes"`
+	Users     map[string]bool  `json:"users"`
+}
+
+// GPUProcessInfo represents a process using a GPU
+type GPUProcessInfo struct {
+	PID         int    `json:"pid"`
+	ProcessName string `json:"process_name"`
+	User        string `json:"user"`
+	MemoryMB    int    `json:"memory_mb"`
+}
+
+// AllocationRequest represents a request to allocate GPUs
+type AllocationRequest struct {
+	GPUCount        int
+	User            string
+	ReservationType string
+	ExpiryTime      *time.Time
+}
+
+// AllocationResult represents the result of a GPU allocation
+type AllocationResult struct {
+	AllocatedGPUs []int
+	Error         error
+}
+
+// Config represents the application configuration
+type Config struct {
+	RedisHost string
+	RedisPort int
+	RedisDB   int
+}
+
+// Constants
+const (
+	ReservationTypeRun    = "run"
+	ReservationTypeManual = "manual"
+
+	RedisKeyPrefix         = "canhazgpu:"
+	RedisKeyGPUCount       = RedisKeyPrefix + "gpu_count"
+	RedisKeyAllocationLock = RedisKeyPrefix + "allocation_lock"
+
+	HeartbeatInterval = 60 * time.Second
+	HeartbeatTimeout  = 15 * time.Minute
+	LockTimeout       = 10 * time.Second
+	MaxLockRetries    = 5
+
+	MemoryThresholdMB = 100
+)

@@ -35,7 +35,31 @@ _canhazgpu_complete() {
     fi
 
     # Before '--', provide completion for canhazgpu itself
-    local opts="admin run status --gpus --help"
-    COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
+    case "$prev" in
+        canhazgpu)
+            COMPREPLY=( $(compgen -W "admin reserve release run status help --help --redis-host --redis-port --redis-db" -- "$cur") )
+            ;;
+        admin)
+            COMPREPLY=( $(compgen -W "--gpus --force --help" -- "$cur") )
+            ;;
+        reserve)
+            COMPREPLY=( $(compgen -W "--gpus --duration --help" -- "$cur") )
+            ;;
+        release)
+            COMPREPLY=( $(compgen -W "--help" -- "$cur") )
+            ;;
+        run)
+            COMPREPLY=( $(compgen -W "--gpus --help --" -- "$cur") )
+            ;;
+        status)
+            COMPREPLY=( $(compgen -W "--help" -- "$cur") )
+            ;;
+        --duration)
+            COMPREPLY=( $(compgen -W "30m 1h 2h 4h 8h 1d 2d" -- "$cur") )
+            ;;
+        *)
+            COMPREPLY=( $(compgen -W "admin reserve release run status help --help --redis-host --redis-port --redis-db" -- "$cur") )
+            ;;
+    esac
 }
 complete -F _canhazgpu_complete -o default -o bashdefault canhazgpu

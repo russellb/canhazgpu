@@ -1,0 +1,247 @@
+package gpu
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/russellb/canhazgpu/internal/redis_client"
+	"github.com/russellb/canhazgpu/internal/types"
+)
+
+type AllocationEngine struct {
+	client *redis_client.Client
+}
+
+func NewAllocationEngine(client *redis_client.Client) *AllocationEngine {
+	return &AllocationEngine{client: client}
+}
+
+// AllocateGPUs allocates GPUs using LRU strategy with race condition protection
+func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.AllocationRequest) ([]int, error) {
+	// Validate GPU availability using nvidia-smi
+	usage, err := DetectGPUUsage(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate GPU usage: %v", err)
+	}
+
+	// Get list of unauthorized GPUs
+	unauthorizedGPUs := GetUnauthorizedGPUs(ctx, usage)
+
+	// Acquire allocation lock
+	if err := ae.client.AcquireAllocationLock(ctx); err != nil {
+		return nil, err
+	}
+	defer ae.client.ReleaseAllocationLock(ctx)
+
+	// Perform atomic allocation
+	allocatedGPUs, err := ae.client.AtomicReserveGPUs(ctx, request, unauthorizedGPUs)
+	if err != nil {
+		// Check if it's an availability error and provide detailed message
+		if err.Error() == "Not enough GPUs available" {
+			gpuCount, _ := ae.client.GetGPUCount(ctx)
+			available := gpuCount - len(unauthorizedGPUs)
+
+			var unauthorizedMsg string
+			if len(unauthorizedGPUs) > 0 {
+				unauthorizedMsg = fmt.Sprintf(" (%d GPUs in use without reservation - run 'canhazgpu status' for details)", len(unauthorizedGPUs))
+			}
+
+			return nil, fmt.Errorf("not enough GPUs available. Requested: %d, Available: %d%s",
+				request.GPUCount, available, unauthorizedMsg)
+		}
+		return nil, err
+	}
+
+	return allocatedGPUs, nil
+}
+
+// ReleaseGPUs releases manually reserved GPUs for a user
+func (ae *AllocationEngine) ReleaseGPUs(ctx context.Context, user string) ([]int, error) {
+	gpuCount, err := ae.client.GetGPUCount(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var releasedGPUs []int
+	now := time.Now()
+
+	for gpuID := 0; gpuID < gpuCount; gpuID++ {
+		state, err := ae.client.GetGPUState(ctx, gpuID)
+		if err != nil {
+			continue
+		}
+
+		// Only release manual reservations by this user
+		if state.User == user && state.Type == types.ReservationTypeManual {
+			// Mark as available with last_released timestamp
+			availableState := &types.GPUState{
+				LastReleased: types.FlexibleTime{now},
+			}
+
+			if err := ae.client.SetGPUState(ctx, gpuID, availableState); err != nil {
+				return nil, fmt.Errorf("failed to release GPU %d: %v", gpuID, err)
+			}
+
+			releasedGPUs = append(releasedGPUs, gpuID)
+		}
+	}
+
+	return releasedGPUs, nil
+}
+
+// GetGPUStatus returns the current status of all GPUs with validation
+func (ae *AllocationEngine) GetGPUStatus(ctx context.Context) ([]GPUStatusInfo, error) {
+	gpuCount, err := ae.client.GetGPUCount(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get actual GPU usage
+	usage, err := DetectGPUUsage(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate GPU usage: %v", err)
+	}
+
+	var statuses []GPUStatusInfo
+
+	for gpuID := 0; gpuID < gpuCount; gpuID++ {
+		state, err := ae.client.GetGPUState(ctx, gpuID)
+		if err != nil {
+			statuses = append(statuses, GPUStatusInfo{
+				GPUID:  gpuID,
+				Status: "ERROR",
+				Error:  fmt.Sprintf("Failed to get state: %v", err),
+			})
+			continue
+		}
+
+		status := ae.buildGPUStatus(gpuID, state, usage[gpuID])
+		statuses = append(statuses, status)
+	}
+
+	return statuses, nil
+}
+
+// GPUStatusInfo represents the status of a single GPU
+type GPUStatusInfo struct {
+	GPUID             int
+	Status            string // "AVAILABLE", "IN_USE", "UNAUTHORIZED", "ERROR"
+	User              string
+	ReservationType   string
+	Duration          time.Duration
+	LastHeartbeat     time.Time
+	ExpiryTime        time.Time
+	LastReleased      time.Time
+	ValidationInfo    string
+	UnauthorizedUsers []string
+	ProcessInfo       string
+	Error             string
+}
+
+func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usage *types.GPUUsage) GPUStatusInfo {
+	status := GPUStatusInfo{GPUID: gpuID}
+
+	// Check for unauthorized usage first
+	if IsGPUInUnauthorizedUse(usage) {
+		status.Status = "UNAUTHORIZED"
+
+		// Get users from processes
+		var users []string
+		for user := range usage.Users {
+			users = append(users, user)
+		}
+		status.UnauthorizedUsers = users
+
+		// Build process info string
+		var processes []string
+		for _, proc := range usage.Processes {
+			processes = append(processes, fmt.Sprintf("PID %d (%s)", proc.PID, proc.ProcessName))
+		}
+		status.ProcessInfo = fmt.Sprintf("%dMB used by %s", usage.MemoryMB,
+			strings.Join(processes, ", "))
+
+		if len(processes) > 3 {
+			status.ProcessInfo = fmt.Sprintf("%dMB used by %s and %d more",
+				usage.MemoryMB, strings.Join(processes[:3], ", "), len(processes)-3)
+		}
+
+		return status
+	}
+
+	// Check if GPU is reserved
+	if state.User != "" {
+		status.Status = "IN_USE"
+		status.User = state.User
+		status.ReservationType = state.Type
+		status.Duration = time.Since(state.StartTime.ToTime())
+		status.LastHeartbeat = state.LastHeartbeat.ToTime()
+		status.ExpiryTime = state.ExpiryTime.ToTime()
+
+		// Build validation info
+		if usage != nil && usage.MemoryMB > types.MemoryThresholdMB {
+			if len(usage.Processes) > 0 {
+				status.ValidationInfo = fmt.Sprintf("[validated: %dMB, %d processes]",
+					usage.MemoryMB, len(usage.Processes))
+			} else {
+				status.ValidationInfo = fmt.Sprintf("[validated: %dMB used]", usage.MemoryMB)
+			}
+		} else {
+			status.ValidationInfo = "[validated: no actual usage detected]"
+		}
+	} else {
+		status.Status = "AVAILABLE"
+		status.LastReleased = state.LastReleased.ToTime()
+
+		// Show memory usage for available GPUs
+		if usage != nil {
+			status.ValidationInfo = fmt.Sprintf("[validated: %dMB used]", usage.MemoryMB)
+		}
+	}
+
+	return status
+}
+
+// CleanupExpiredReservations removes expired manual reservations
+func (ae *AllocationEngine) CleanupExpiredReservations(ctx context.Context) error {
+	gpuCount, err := ae.client.GetGPUCount(ctx)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+
+	for gpuID := 0; gpuID < gpuCount; gpuID++ {
+		state, err := ae.client.GetGPUState(ctx, gpuID)
+		if err != nil {
+			continue
+		}
+
+		// Check for expired manual reservations
+		if state.Type == types.ReservationTypeManual &&
+			!state.ExpiryTime.ToTime().IsZero() &&
+			now.After(state.ExpiryTime.ToTime()) {
+
+			// Release expired reservation
+			availableState := &types.GPUState{
+				LastReleased: types.FlexibleTime{now},
+			}
+			ae.client.SetGPUState(ctx, gpuID, availableState)
+		}
+
+		// Check for stale heartbeats (run-type reservations)
+		if state.Type == types.ReservationTypeRun &&
+			!state.LastHeartbeat.ToTime().IsZero() &&
+			now.Sub(state.LastHeartbeat.ToTime()) > types.HeartbeatTimeout {
+
+			// Release stale reservation
+			availableState := &types.GPUState{
+				LastReleased: types.FlexibleTime{now},
+			}
+			ae.client.SetGPUState(ctx, gpuID, availableState)
+		}
+	}
+
+	return nil
+}

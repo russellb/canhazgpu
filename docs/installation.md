@@ -2,17 +2,18 @@
 
 ## Requirements
 
-- **Python 3.6+**
+- **Go 1.23+** (for building from source)
 - **Redis server** running on localhost:6379
 - **NVIDIA GPUs** with nvidia-smi available
 - **System access** to `/proc` filesystem or `ps` command for user detection
 
 ## Dependencies
 
-Install the required Python packages:
+### Go Dependencies
+If building from source, Go dependencies are automatically managed:
 
 ```bash
-pip install redis click
+go mod download
 ```
 
 ## Redis Setup
@@ -57,10 +58,23 @@ If not installed, install NVIDIA drivers for your system.
 
 ## Install canhazgpu
 
-### Option 1: Direct Installation (Recommended)
+### Option 1: Build from Source (Recommended)
 ```bash
-# Download the canhazgpu script
-wget https://raw.githubusercontent.com/russellb/canhazgpu/main/canhazgpu
+# Clone the repository
+git clone https://github.com/russellb/canhazgpu.git
+cd canhazgpu
+
+# Build and install using Makefile
+make install
+
+# Optional: Install documentation dependencies for building docs
+make docs-deps
+```
+
+### Option 2: Pre-built Binary
+```bash
+# Download pre-built binary (when available)
+wget https://github.com/russellb/canhazgpu/releases/latest/download/canhazgpu
 chmod +x canhazgpu
 
 # Download bash completion script (optional)
@@ -69,16 +83,6 @@ wget https://raw.githubusercontent.com/russellb/canhazgpu/main/autocomplete_canh
 # Install system-wide
 sudo cp canhazgpu /usr/local/bin/
 sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
-```
-
-### Option 2: Using the Makefile
-```bash
-git clone https://github.com/russellb/canhazgpu.git
-cd canhazgpu
-make install
-
-# Optional: Install documentation dependencies for building docs
-make docs-deps
 ```
 
 ### Option 3: Local Installation

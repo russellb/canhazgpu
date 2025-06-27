@@ -15,15 +15,16 @@ cd canhazgpu
 **Install dependencies:**
 ```bash
 # System requirements
+# - Go 1.23+
 # - Redis server
-# - Python 3.6+
 # - NVIDIA drivers with nvidia-smi
 
-# Python dependencies
-pip install redis click
+# Go dependencies (automatic)
+go mod download
 
 # Development dependencies
-pip install pytest pytest-mock black flake8 mypy
+go install golang.org/x/tools/cmd/goimports@latest
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 # Documentation dependencies (optional)
 pip install -r requirements-docs.txt
@@ -34,8 +35,11 @@ pip install -r requirements-docs.txt
 # Start Redis for testing
 redis-server --daemonize yes
 
+# Build the project
+make build
+
 # Verify environment
-python3 canhazgpu --help
+./build/canhazgpu --help
 ```
 
 ### 2. Development Workflow
@@ -46,22 +50,22 @@ git checkout -b feature/your-feature-name
 ```
 
 **Make your changes:**
-- Edit the `canhazgpu` script
+- Edit Go source files in `internal/` directories
 - Add tests for new functionality
 - Update documentation if needed
 
 **Run tests:**
 ```bash
-# Unit tests
-pytest tests/
+# Build the project
+make build
 
-# Integration tests
-pytest tests/integration/
+# Run tests
+make test
 
-# Linting
-flake8 canhazgpu
-black --check canhazgpu
-mypy canhazgpu
+# Linting and formatting
+gofmt -s -w .
+goimports -w .
+golangci-lint run
 ```
 
 **Commit your changes:**

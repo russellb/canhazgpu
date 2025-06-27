@@ -1,0 +1,87 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/russellb/canhazgpu/internal/gpu"
+	"github.com/russellb/canhazgpu/internal/redis_client"
+	"github.com/russellb/canhazgpu/internal/types"
+	"github.com/russellb/canhazgpu/internal/utils"
+	"github.com/spf13/cobra"
+)
+
+var reserveCmd = &cobra.Command{
+	Use:   "reserve",
+	Short: "Reserve GPUs manually for a specified duration",
+	Long: `Reserve GPUs manually for a specified duration without running a command.
+This is useful for interactive development sessions or planning work.
+
+Duration formats supported:
+- 30m (30 minutes)
+- 2h (2 hours)  
+- 1d (1 day)
+- 0.5h (30 minutes with decimal)
+
+The reserved GPUs must be manually released with 'canhazgpu release' or will
+automatically expire after the specified duration.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		gpuCount, _ := cmd.Flags().GetInt("gpus")
+		durationStr, _ := cmd.Flags().GetString("duration")
+
+		return runReserve(cmd.Context(), gpuCount, durationStr)
+	},
+}
+
+func init() {
+	reserveCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
+	reserveCmd.Flags().StringP("duration", "d", "8h", "Duration to reserve GPUs (e.g., 30m, 2h, 1d)")
+
+	rootCmd.AddCommand(reserveCmd)
+}
+
+func runReserve(ctx context.Context, gpuCount int, durationStr string) error {
+	if gpuCount <= 0 {
+		return fmt.Errorf("GPU count must be greater than 0")
+	}
+
+	// Parse duration
+	duration, err := utils.ParseDuration(durationStr)
+	if err != nil {
+		return err
+	}
+
+	config := getConfig()
+	client := redis_client.NewClient(config)
+	defer client.Close()
+
+	// Test Redis connection
+	if err := client.Ping(ctx); err != nil {
+		return fmt.Errorf("failed to connect to Redis: %v", err)
+	}
+
+	// Create allocation engine
+	engine := gpu.NewAllocationEngine(client)
+
+	// Create allocation request
+	user := getCurrentUser()
+	expiryTime := time.Now().Add(duration)
+	request := &types.AllocationRequest{
+		GPUCount:        gpuCount,
+		User:            user,
+		ReservationType: types.ReservationTypeManual,
+		ExpiryTime:      &expiryTime,
+	}
+
+	// Allocate GPUs
+	allocatedGPUs, err := engine.AllocateGPUs(ctx, request)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Reserved %d GPU(s): %v for %s\n",
+		len(allocatedGPUs), allocatedGPUs, utils.FormatDuration(duration))
+
+	return nil
+}

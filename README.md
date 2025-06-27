@@ -91,7 +91,7 @@ For detailed usage, configuration, and administration:
 
 ## Requirements
 
-- **Python 3.6+** with `redis` and `click` packages
+- **Go 1.23+** (for building from source)
 - **Redis server** running on localhost:6379
 - **NVIDIA GPUs** with nvidia-smi available
 - **System access** to `/proc` filesystem or `ps` command
@@ -99,11 +99,13 @@ For detailed usage, configuration, and administration:
 ## Installation
 
 ```bash
-# Install dependencies
-pip install redis click
+# Option 1: Build from source
+git clone https://github.com/russellb/canhazgpu.git
+cd canhazgpu
+make install
 
-# Install canhazgpu
-wget https://raw.githubusercontent.com/russellb/canhazgpu/main/canhazgpu
+# Option 2: Download pre-built binary (when available)
+wget https://github.com/russellb/canhazgpu/releases/latest/download/canhazgpu
 chmod +x canhazgpu
 sudo cp canhazgpu /usr/local/bin/
 
