@@ -143,34 +143,7 @@ type GPUStatusInfo struct {
 func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usage *types.GPUUsage) GPUStatusInfo {
 	status := GPUStatusInfo{GPUID: gpuID}
 
-	// Check for unauthorized usage first
-	if IsGPUInUnauthorizedUse(usage) {
-		status.Status = "UNAUTHORIZED"
-
-		// Get users from processes
-		var users []string
-		for user := range usage.Users {
-			users = append(users, user)
-		}
-		status.UnauthorizedUsers = users
-
-		// Build process info string
-		var processes []string
-		for _, proc := range usage.Processes {
-			processes = append(processes, fmt.Sprintf("PID %d (%s)", proc.PID, proc.ProcessName))
-		}
-		status.ProcessInfo = fmt.Sprintf("%dMB used by %s", usage.MemoryMB,
-			strings.Join(processes, ", "))
-
-		if len(processes) > 3 {
-			status.ProcessInfo = fmt.Sprintf("%dMB used by %s and %d more",
-				usage.MemoryMB, strings.Join(processes[:3], ", "), len(processes)-3)
-		}
-
-		return status
-	}
-
-	// Check if GPU is reserved
+	// Check if GPU is reserved first - if it has a valid reservation, it's not unauthorized
 	if state.User != "" {
 		status.Status = "IN_USE"
 		status.User = state.User
@@ -191,12 +164,37 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 			status.ValidationInfo = "[validated: no actual usage detected]"
 		}
 	} else {
-		status.Status = "AVAILABLE"
-		status.LastReleased = state.LastReleased.ToTime()
+		// GPU has no reservation - check if it's being used without authorization
+		if IsGPUInUnauthorizedUse(usage) {
+			status.Status = "UNAUTHORIZED"
 
-		// Show memory usage for available GPUs
-		if usage != nil {
-			status.ValidationInfo = fmt.Sprintf("[validated: %dMB used]", usage.MemoryMB)
+			// Get users from processes
+			var users []string
+			for user := range usage.Users {
+				users = append(users, user)
+			}
+			status.UnauthorizedUsers = users
+
+			// Build process info string
+			var processes []string
+			for _, proc := range usage.Processes {
+				processes = append(processes, fmt.Sprintf("PID %d (%s)", proc.PID, proc.ProcessName))
+			}
+			status.ProcessInfo = fmt.Sprintf("%dMB used by %s", usage.MemoryMB,
+				strings.Join(processes, ", "))
+
+			if len(processes) > 3 {
+				status.ProcessInfo = fmt.Sprintf("%dMB used by %s and %d more",
+					usage.MemoryMB, strings.Join(processes[:3], ", "), len(processes)-3)
+			}
+		} else {
+			status.Status = "AVAILABLE"
+			status.LastReleased = state.LastReleased.ToTime()
+
+			// Show memory usage for available GPUs
+			if usage != nil {
+				status.ValidationInfo = fmt.Sprintf("[validated: %dMB used]", usage.MemoryMB)
+			}
 		}
 	}
 

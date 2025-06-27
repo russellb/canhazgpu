@@ -11,7 +11,10 @@ help:
 	@echo "  make build        - Build the canhazgpu binary"
 	@echo "  make install      - Build and install to /usr/local/bin"
 	@echo "  make clean        - Clean build artifacts"
-	@echo "  make test         - Run tests"
+	@echo "  make test         - Run tests (includes integration tests - may be slow)"
+	@echo "  make test-short   - Run tests (skip integration tests - fast)"
+	@echo "  make test-coverage- Run tests with coverage report"
+	@echo "  make test-integration - Run integration tests only (requires Redis/nvidia-smi)"
 	@echo "  make deps         - Download Go dependencies"
 	@echo ""
 	@echo "Documentation targets:"
@@ -47,6 +50,23 @@ clean:
 test:
 	@echo "Running tests"
 	@go test -v ./...
+
+.PHONY: test-short
+test-short:
+	@echo "Running tests (short mode, skipping integration tests)"
+	@go test -short -v ./...
+
+.PHONY: test-coverage
+test-coverage:
+	@echo "Running tests with coverage"
+	@go test -v -coverprofile=coverage.out ./...
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated at coverage.html"
+
+.PHONY: test-integration
+test-integration:
+	@echo "Running integration tests (requires Redis)"
+	@go test -v ./... -run Integration
 
 .PHONY: docs-deps
 docs-deps:

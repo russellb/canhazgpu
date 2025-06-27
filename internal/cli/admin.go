@@ -53,7 +53,7 @@ func runAdmin(ctx context.Context, gpuCount int, force bool) error {
 
 	// Clear existing state if force is used
 	if force && err == nil {
-		fmt.Printf("Force reinitializing: clearing %d existing GPUs...\n", existingCount)
+		fmt.Printf("Releasing all GPUs: admin force reset (clearing %d existing GPUs)\n", existingCount)
 		if err := client.ClearAllGPUStates(ctx); err != nil {
 			return fmt.Errorf("failed to clear existing GPU states: %v", err)
 		}

@@ -89,6 +89,23 @@ type AllocationRequest struct {
 	ExpiryTime      *time.Time
 }
 
+// Validate checks if the allocation request is valid
+func (ar *AllocationRequest) Validate() error {
+	if ar.GPUCount <= 0 {
+		return fmt.Errorf("gpu count must be positive, got %d", ar.GPUCount)
+	}
+	
+	if ar.User == "" {
+		return fmt.Errorf("user cannot be empty")
+	}
+	
+	if ar.ReservationType != ReservationTypeRun && ar.ReservationType != ReservationTypeManual {
+		return fmt.Errorf("invalid reservation type: %s", ar.ReservationType)
+	}
+	
+	return nil
+}
+
 // AllocationResult represents the result of a GPU allocation
 type AllocationResult struct {
 	AllocatedGPUs []int

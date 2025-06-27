@@ -96,7 +96,7 @@ func (hm *HeartbeatManager) sendHeartbeat() error {
 			continue
 		} else {
 			// GPU should be reserved by us but isn't - this is a problem!
-			return fmt.Errorf("GPU %d reservation lost: expected user=%s, type=%s but found user=%s, type=%s", 
+			return fmt.Errorf("GPU %d reservation lost: expected user=%s, type=%s but found user=%s, type=%s",
 				gpuID, hm.user, types.ReservationTypeRun, state.User, state.Type)
 		}
 	}
