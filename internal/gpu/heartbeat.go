@@ -68,7 +68,8 @@ func (hm *HeartbeatManager) heartbeatLoop() {
 			return
 		case <-ticker.C:
 			if err := hm.sendHeartbeat(); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Failed to send heartbeat: %v\n", err)
+				fmt.Fprintf(os.Stderr, "ERROR: Failed to send heartbeat: %v\n", err)
+				fmt.Fprintf(os.Stderr, "GPU reservations may be at risk of expiring!\n")
 			}
 		}
 	}
@@ -90,6 +91,13 @@ func (hm *HeartbeatManager) sendHeartbeat() error {
 			if err := hm.client.SetGPUState(hm.ctx, gpuID, state); err != nil {
 				return fmt.Errorf("failed to update heartbeat for GPU %d: %v", gpuID, err)
 			}
+		} else if state.User != "" {
+			// GPU is reserved by someone else - this is expected, skip silently
+			continue
+		} else {
+			// GPU should be reserved by us but isn't - this is a problem!
+			return fmt.Errorf("GPU %d reservation lost: expected user=%s, type=%s but found user=%s, type=%s", 
+				gpuID, hm.user, types.ReservationTypeRun, state.User, state.Type)
 		}
 	}
 
