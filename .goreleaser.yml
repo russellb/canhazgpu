@@ -1,0 +1,116 @@
+project_name: canhazgpu
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    binary: canhazgpu
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - autocomplete_canhazgpu.sh
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+release:
+  github:
+    owner: russellb
+    name: canhazgpu
+  draft: false
+  prerelease: auto
+  mode: replace
+  header: |
+    # canhazgpu - GPU Reservation Tool
+    
+    A GPU reservation tool for single host shared development systems. Coordinates GPU access across multiple users and processes using Redis backend with comprehensive validation and automatic cleanup.
+    
+    ## Features
+    - **Automatic GPU allocation** with LRU (Least Recently Used) strategy
+    - **Real-time validation** using nvidia-smi integration
+    - **Race condition protection** with Redis-based distributed locking
+    - **Unauthorized usage detection** and conflict prevention
+    - **Flexible reservations** supporting both command execution and manual reservations
+    - **Automatic cleanup** when processes end or reservations expire
+    
+    ## Installation
+    
+    ### Using go install (recommended)
+    ```bash
+    go install github.com/russellb/canhazgpu@{{ .Tag }}
+    ```
+    
+    ### Download pre-built archive
+    Download the appropriate archive for your platform, extract it, and move the binary to your PATH:
+    
+    ```bash
+    # Linux example
+    wget https://github.com/russellb/canhazgpu/releases/download/{{ .Tag }}/canhazgpu_Linux_x86_64.tar.gz
+    tar -xzf canhazgpu_Linux_x86_64.tar.gz
+    sudo mv canhazgpu /usr/local/bin/
+    sudo mv autocomplete_canhazgpu.sh /etc/bash_completion.d/
+    ```
+    
+    ## Quick Start
+    ```bash
+    # Initialize GPU pool
+    canhazgpu admin --gpus $(nvidia-smi -L | wc -l)
+    
+    # Run a command with GPU reservation
+    canhazgpu run --gpus 1 -- python train.py
+    
+    # Check status
+    canhazgpu status
+    ```
+    
+    ## Requirements
+    - Redis server running on localhost:6379
+    - NVIDIA GPUs with nvidia-smi available
+    - Go 1.23+ (if building from source)
+
+brews:
+  - name: canhazgpu
+    description: "GPU reservation tool for single host shared development systems"
+    homepage: "https://github.com/russellb/canhazgpu"
+    license: "Apache-2.0"
+    repository:
+      owner: russellb
+      name: homebrew-tap

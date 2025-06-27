@@ -54,6 +54,10 @@ func Execute(ctx context.Context) error {
 	return rootCmd.ExecuteContext(ctx)
 }
 
+func SetVersion(v string) {
+	rootCmd.Version = v
+}
+
 func getConfig() *types.Config {
 	if config == nil {
 		initConfig()
