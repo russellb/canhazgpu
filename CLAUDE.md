@@ -8,13 +8,14 @@ This is `canhazgpu`, a GPU reservation tool for single host shared development s
 
 ## Architecture
 
-The tool is a Go application structured as a CLI with internal packages that implements six main commands:
+The tool is a Go application structured as a CLI with internal packages that implements seven main commands:
 - `admin`: Initialize and configure the GPU pool with optional --force flag
 - `status`: Show current GPU allocation status with automatic nvidia-smi validation
 - `run`: Reserve GPU(s) and execute a command with `CUDA_VISIBLE_DEVICES` set
 - `reserve`: Manually reserve GPU(s) for a specified duration 
 - `release`: Release all manually reserved GPUs for the current user
 - `report`: Generate GPU usage reports showing historical usage patterns by user
+- `web`: Start a web server providing a dashboard for real-time monitoring and reports
 
 ### Core Components
 

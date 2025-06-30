@@ -233,7 +233,43 @@ sudo crontab -e
 
 ### 2. Usage Monitoring
 
-**Usage statistics script:**
+**Option 1: Using the built-in report command:**
+```bash
+# Generate weekly usage report
+canhazgpu report --days 7
+
+# Generate monthly report
+canhazgpu report --days 30
+
+# Add to crontab for automated reports
+0 8 * * 1 /usr/local/bin/canhazgpu report --days 7 | mail -s "Weekly GPU Report" admin@example.com
+```
+
+**Option 2: Web dashboard for continuous monitoring:**
+```bash
+# Start web dashboard as a systemd service
+sudo tee /etc/systemd/system/canhazgpu-web.service << EOF
+[Unit]
+Description=canhazgpu Web Dashboard
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=canhazgpu
+ExecStart=/usr/local/bin/canhazgpu web --port 8080
+Restart=always
+RestartSec=5
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl enable canhazgpu-web
+sudo systemctl start canhazgpu-web
+```
+
+**Option 3: Legacy statistics script:**
 ```bash
 #!/bin/bash
 # /usr/local/bin/canhazgpu-stats.sh

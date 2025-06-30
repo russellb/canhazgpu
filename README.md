@@ -40,6 +40,9 @@ canhazgpu release
 
 # Generate usage reports
 canhazgpu report --days 7
+
+# Start web dashboard
+canhazgpu web --port 8080
 ```
 
 ## Key Features
@@ -51,6 +54,7 @@ canhazgpu report --days 7
 - **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
 - **Flexible reservations**: Support for both command execution and manual reservations
 - **Usage reporting**: Track and analyze GPU usage patterns over time by user
+- **Web dashboard**: Real-time monitoring interface with status and usage reports
 
 ## Usage Examples
 
@@ -119,6 +123,27 @@ Unique users: 3
 
 # Show usage for the last 7 days
 canhazgpu report --days 7
+```
+
+### Web Dashboard
+Monitor GPU status and usage through a web interface:
+
+```bash
+# Start the web server on default port 8080
+canhazgpu web
+
+# Start on a custom port
+canhazgpu web --port 3000
+
+# Bind to specific interface
+canhazgpu web --host 127.0.0.1 --port 8080
+```
+
+The dashboard provides:
+- Real-time GPU status with automatic refresh
+- Interactive usage reports with customizable time periods
+- Visual representation of GPU allocation and usage patterns
+- Mobile-responsive design for monitoring on any device
 ```
 
 ## Documentation

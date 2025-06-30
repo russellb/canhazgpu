@@ -1,6 +1,6 @@
 # Commands Overview
 
-canhazgpu provides five main commands for GPU management:
+canhazgpu provides seven main commands for GPU management:
 
 ```bash
 ❯ canhazgpu --help
@@ -9,9 +9,11 @@ Usage: canhazgpu [OPTIONS] COMMAND [ARGS]...
 Commands:
   admin    Initialize GPU pool for this machine
   release  Release all manually reserved GPUs held by the current user
+  report   Generate GPU usage reports
   reserve  Reserve GPUs manually for a specified duration
   run      Reserve GPUs and run a command with CUDA_VISIBLE_DEVICES set
   status   Show current GPU allocation status
+  web      Start a web server for GPU status monitoring
 ```
 
 ## admin
@@ -165,6 +167,95 @@ No manually reserved GPUs found for current user
 !!! note "Scope"
     This only releases manual reservations made with the `reserve` command. 
     It does not affect active `run` sessions.
+
+## report
+
+Generate GPU usage reports showing historical usage patterns by user.
+
+```bash
+canhazgpu report [--days <num>]
+```
+
+**Options:**
+- `--days`: Number of days to include in the report (default: 30)
+
+**Examples:**
+```bash
+# Show usage for the last 30 days (default)
+canhazgpu report
+
+# Show usage for the last 7 days
+canhazgpu report --days 7
+
+# Show usage for the last 24 hours
+canhazgpu report --days 1
+```
+
+**Example Output:**
+```bash
+=== GPU Usage Report ===
+Period: 2025-05-31 to 2025-06-30 (30 days)
+
+User                       GPU Hours      Percentage        Run     Manual
+---------------------------------------------------------------------------
+alice                          24.50          55.2%         12          8
+bob                            15.25          34.4%          6         15
+charlie                         4.60          10.4%          3          2
+---------------------------------------------------------------------------
+TOTAL                          44.35         100.0%         21         25
+
+Total reservations: 46
+Unique users: 3
+```
+
+**Report Features:**
+- Shows GPU hours consumed by each user
+- Percentage of total usage
+- Breakdown by reservation type (run vs manual)
+- Total statistics for the period
+- Includes both completed and in-progress reservations
+
+## web
+
+Start a web server providing a dashboard for real-time monitoring and reports.
+
+```bash
+canhazgpu web [--port <port>] [--host <host>]
+```
+
+**Options:**
+- `--port`: Port to run the web server on (default: 8080)
+- `--host`: Host to bind the web server to (default: 0.0.0.0)
+
+**Examples:**
+```bash
+# Start web server on default port 8080
+canhazgpu web
+
+# Start on a custom port
+canhazgpu web --port 3000
+
+# Bind to localhost only
+canhazgpu web --host 127.0.0.1 --port 8080
+
+# Run on a specific interface
+canhazgpu web --host 192.168.1.100 --port 8888
+```
+
+**Dashboard Features:**
+- **Real-time GPU Status**: Automatically refreshes every 30 seconds
+- **Interactive Usage Reports**: Customizable time periods (1-90 days)
+- **Visual Design**: Dark theme with color-coded status indicators
+- **Mobile Responsive**: Works on desktop and mobile devices
+- **API Endpoints**: 
+  - `/api/status` - Current GPU status as JSON
+  - `/api/report?days=N` - Usage report as JSON
+
+**Use Cases:**
+- Team dashboards on shared displays
+- Remote monitoring without SSH access
+- Integration with monitoring systems via API
+- Mobile access for on-the-go checks
 
 ## Command Interactions
 

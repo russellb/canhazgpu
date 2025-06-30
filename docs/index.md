@@ -21,6 +21,12 @@ canhazgpu reserve --gpus 1 --duration 4h
 
 # Release manual reservations
 canhazgpu release
+
+# View usage reports
+canhazgpu report --days 7
+
+# Start web dashboard
+canhazgpu web --port 8080
 ```
 
 ## Key Features
@@ -34,6 +40,8 @@ canhazgpu release
 - ✅ **User accountability**: Shows which users are running unauthorized processes
 - ✅ **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
 - ✅ **Smart allocation**: Automatically excludes unauthorized GPUs from allocation
+- ✅ **Usage reporting**: Track and analyze GPU usage patterns over time
+- ✅ **Web dashboard**: Real-time monitoring interface with status and reports
 
 ## Status Display
 

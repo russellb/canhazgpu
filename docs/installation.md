@@ -127,7 +127,7 @@ With bash completion enabled, you can use tab completion:
 ```bash
 # Complete commands
 canhazgpu <TAB>
-# Shows: admin  release  reserve  run  status
+# Shows: admin  release  report  reserve  run  status  web
 
 # Complete options
 canhazgpu run --<TAB>

@@ -19,6 +19,8 @@ canhazgpu is designed as a Go CLI application that uses Redis for distributed co
 │ - release       │    │ - Locking       │    │ - Memory usage  │
 │ - status        │    │ - LRU tracking  │    │ - Conflict check│
 │ - admin         │    │ - Expiry        │    │ - Real-time scan│
+│ - report        │    │ - Usage history │    │ - GPU processes │
+│ - web           │    │ - Time tracking │    │ - Memory usage  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
@@ -404,6 +406,95 @@ Could add notifications for:
 - System health issues
 
 **Implementation:** Add notification hooks to key operations
+
+## Go Implementation Architecture
+
+The Go implementation follows a modular architecture with clear separation of concerns:
+
+### Package Structure
+
+```
+internal/
+├── cli/                    # Command implementations (Cobra)
+│   ├── root.go            # Root command and global config
+│   ├── admin.go           # GPU pool initialization
+│   ├── status.go          # Status display
+│   ├── run.go             # Run with GPU reservation
+│   ├── reserve.go         # Manual reservation
+│   ├── release.go         # Release reservations
+│   ├── report.go          # Usage reporting
+│   └── web.go             # Web dashboard server
+├── gpu/                    # GPU management logic
+│   ├── allocation.go      # LRU allocation engine
+│   ├── validation.go      # nvidia-smi integration
+│   └── heartbeat.go       # Heartbeat manager
+├── redis_client/          # Redis operations
+│   └── client.go          # Redis client with Lua scripts
+└── types/                 # Shared types
+    └── types.go           # Config, state, and domain types
+```
+
+### New Features in Go Implementation
+
+#### 1. Usage Tracking and Reporting
+
+**Architecture:**
+- Usage records created when GPUs are released
+- Stored in Redis with key pattern `canhazgpu:usage_history:*`
+- 90-day expiration to prevent unbounded growth
+- Report aggregation includes both historical and current usage
+
+**Implementation:**
+```go
+type UsageRecord struct {
+    User            string
+    GPUID           int
+    StartTime       FlexibleTime
+    EndTime         FlexibleTime
+    Duration        float64
+    ReservationType string
+}
+```
+
+#### 2. Web Dashboard
+
+**Architecture:**
+- Embedded HTML/CSS/JS using Go's embed package
+- RESTful API endpoints for status and reports
+- Real-time updates with auto-refresh
+- Responsive design for mobile access
+
+**API Endpoints:**
+- `GET /` - Dashboard UI
+- `GET /api/status` - Current GPU status (JSON)
+- `GET /api/report?days=N` - Usage report (JSON)
+
+**Key Design Decisions:**
+- Single binary deployment (UI embedded)
+- No external dependencies for web UI
+- Dark theme for developer-friendly interface
+- Progressive enhancement approach
+
+#### 3. Enhanced LRU Implementation
+
+**Improvements:**
+- Proper RFC3339 timestamp parsing in Lua scripts
+- Better handling of never-used GPUs (last_released = 0)
+- Atomic operations prevent allocation races
+
+### Performance Optimizations
+
+1. **Concurrent Operations**: Command implementations use goroutines where beneficial
+2. **Connection Pooling**: Redis client maintains persistent connections
+3. **Embedded Resources**: Web assets compiled into binary
+4. **Efficient Serialization**: JSON marshaling optimized for common paths
+
+### Security Considerations
+
+1. **Web Server**: Configurable bind address for network isolation
+2. **No Authentication**: Designed for trusted environments
+3. **Read-Only Web**: Dashboard cannot modify state
+4. **Process Validation**: Uses /proc filesystem for ownership detection
 
 ## Testing Strategy
 
