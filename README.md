@@ -23,6 +23,9 @@ If your needs are more than this, you probably want something more powerful like
 ## Quick Start
 
 ```bash
+# Start Redis server listening on localhost:6379
+# This is the default configuration in most cases.
+
 # Initialize GPU pool
 canhazgpu admin --gpus 8
 
