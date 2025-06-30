@@ -132,6 +132,23 @@ func (hm *HeartbeatManager) releaseGPUs() {
 
 		// Only release if this is still our reservation
 		if state.User == hm.user && state.Type == types.ReservationTypeRun {
+			// Record usage history
+			duration := now.Sub(state.StartTime.ToTime()).Seconds()
+			usageRecord := &types.UsageRecord{
+				User:            state.User,
+				GPUID:           gpuID,
+				StartTime:       state.StartTime,
+				EndTime:         types.FlexibleTime{now},
+				Duration:        duration,
+				ReservationType: state.Type,
+			}
+			
+			if err := hm.client.RecordUsageHistory(ctx, usageRecord); err != nil {
+				// Log error but don't fail the release
+				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history: %v\n", err)
+			}
+			
+			// Release the GPU
 			availableState := &types.GPUState{
 				LastReleased: types.FlexibleTime{now},
 			}

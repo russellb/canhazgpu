@@ -3,6 +3,7 @@ package gpu
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -75,6 +76,22 @@ func (ae *AllocationEngine) ReleaseGPUs(ctx context.Context, user string) ([]int
 
 		// Only release manual reservations by this user
 		if state.User == user && state.Type == types.ReservationTypeManual {
+			// Record usage history
+			duration := now.Sub(state.StartTime.ToTime()).Seconds()
+			usageRecord := &types.UsageRecord{
+				User:            state.User,
+				GPUID:           gpuID,
+				StartTime:       state.StartTime,
+				EndTime:         types.FlexibleTime{now},
+				Duration:        duration,
+				ReservationType: state.Type,
+			}
+			
+			if err := ae.client.RecordUsageHistory(ctx, usageRecord); err != nil {
+				// Log error but don't fail the release
+				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history: %v\n", err)
+			}
+			
 			// Mark as available with last_released timestamp
 			availableState := &types.GPUState{
 				LastReleased: types.FlexibleTime{now},
@@ -216,24 +233,43 @@ func (ae *AllocationEngine) CleanupExpiredReservations(ctx context.Context) erro
 			continue
 		}
 
+		var shouldRelease bool
+		var reason string
+
 		// Check for expired manual reservations
 		if state.Type == types.ReservationTypeManual &&
 			!state.ExpiryTime.ToTime().IsZero() &&
 			now.After(state.ExpiryTime.ToTime()) {
-
-			// Release expired reservation
-			availableState := &types.GPUState{
-				LastReleased: types.FlexibleTime{now},
-			}
-			ae.client.SetGPUState(ctx, gpuID, availableState)
+			shouldRelease = true
+			reason = "expired"
 		}
 
 		// Check for stale heartbeats (run-type reservations)
 		if state.Type == types.ReservationTypeRun &&
 			!state.LastHeartbeat.ToTime().IsZero() &&
 			now.Sub(state.LastHeartbeat.ToTime()) > types.HeartbeatTimeout {
+			shouldRelease = true
+			reason = "stale heartbeat"
+		}
 
-			// Release stale reservation
+		if shouldRelease && state.User != "" {
+			// Record usage history
+			duration := now.Sub(state.StartTime.ToTime()).Seconds()
+			usageRecord := &types.UsageRecord{
+				User:            state.User,
+				GPUID:           gpuID,
+				StartTime:       state.StartTime,
+				EndTime:         types.FlexibleTime{now},
+				Duration:        duration,
+				ReservationType: state.Type,
+			}
+			
+			if err := ae.client.RecordUsageHistory(ctx, usageRecord); err != nil {
+				// Log error but don't fail the cleanup
+				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history for %s: %v\n", reason, err)
+			}
+
+			// Release reservation
 			availableState := &types.GPUState{
 				LastReleased: types.FlexibleTime{now},
 			}

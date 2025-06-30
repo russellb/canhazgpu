@@ -112,6 +112,16 @@ type AllocationResult struct {
 	Error         error
 }
 
+// UsageRecord represents a historical GPU usage record
+type UsageRecord struct {
+	User          string       `json:"user"`
+	GPUID         int          `json:"gpu_id"`
+	StartTime     FlexibleTime `json:"start_time"`
+	EndTime       FlexibleTime `json:"end_time"`
+	Duration      float64      `json:"duration_seconds"`
+	ReservationType string     `json:"reservation_type"`
+}
+
 // Config represents the application configuration
 type Config struct {
 	RedisHost string
@@ -127,6 +137,7 @@ const (
 	RedisKeyPrefix         = "canhazgpu:"
 	RedisKeyGPUCount       = RedisKeyPrefix + "gpu_count"
 	RedisKeyAllocationLock = RedisKeyPrefix + "allocation_lock"
+	RedisKeyUsageHistory   = RedisKeyPrefix + "usage_history:"
 
 	HeartbeatInterval = 60 * time.Second
 	HeartbeatTimeout  = 15 * time.Minute
