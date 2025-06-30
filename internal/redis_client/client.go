@@ -156,7 +156,34 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 					local state = cjson.decode(gpu_data)
 					if not state.user then
 						-- GPU is available
-						local last_released = tonumber(state.last_released) or 0
+						local last_released = 0
+						
+						-- Parse last_released timestamp
+						if state.last_released and state.last_released ~= "" then
+							-- RFC3339 format: extract Unix timestamp
+							-- Try to convert RFC3339 to seconds since epoch
+							-- For simplicity, we'll use the current_time as a reference
+							-- and assign a large value to indicate it was previously used
+							last_released = current_time - 86400 -- Default to 24 hours ago
+							
+							-- Better approach: extract year, month, day, hour, minute, second from RFC3339
+							-- Format: 2025-06-30T16:34:38.372177993Z
+							local year, month, day, hour, min, sec = string.match(state.last_released, 
+								"(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
+							
+							if year then
+								-- Convert to Unix timestamp (approximate)
+								-- This is a simplified conversion that works for recent dates
+								local days_since_epoch = (tonumber(year) - 1970) * 365 + 
+									(tonumber(month) - 1) * 30 + 
+									tonumber(day)
+								last_released = days_since_epoch * 86400 + 
+									tonumber(hour) * 3600 + 
+									tonumber(min) * 60 + 
+									tonumber(sec)
+							end
+						end
+						
 						table.insert(available_gpus, {id = i, last_released = last_released})
 					end
 				end
