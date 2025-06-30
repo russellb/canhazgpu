@@ -37,7 +37,7 @@ _canhazgpu_complete() {
     # Before '--', provide completion for canhazgpu itself
     case "$prev" in
         canhazgpu)
-            COMPREPLY=( $(compgen -W "admin reserve release run status help --help --redis-host --redis-port --redis-db" -- "$cur") )
+            COMPREPLY=( $(compgen -W "admin reserve release run status report help --help --redis-host --redis-port --redis-db" -- "$cur") )
             ;;
         admin)
             COMPREPLY=( $(compgen -W "--gpus --force --help" -- "$cur") )
@@ -54,11 +54,17 @@ _canhazgpu_complete() {
         status)
             COMPREPLY=( $(compgen -W "--help" -- "$cur") )
             ;;
+        report)
+            COMPREPLY=( $(compgen -W "--days --help" -- "$cur") )
+            ;;
         --duration)
             COMPREPLY=( $(compgen -W "30m 1h 2h 4h 8h 1d 2d" -- "$cur") )
             ;;
+        --days)
+            COMPREPLY=( $(compgen -W "1 3 7 14 30 60 90" -- "$cur") )
+            ;;
         *)
-            COMPREPLY=( $(compgen -W "admin reserve release run status help --help --redis-host --redis-port --redis-db" -- "$cur") )
+            COMPREPLY=( $(compgen -W "admin reserve release run status report help --help --redis-host --redis-port --redis-db" -- "$cur") )
             ;;
     esac
 }

@@ -8,12 +8,13 @@ This is `canhazgpu`, a GPU reservation tool for single host shared development s
 
 ## Architecture
 
-The tool is a Go application structured as a CLI with internal packages that implements five main commands:
+The tool is a Go application structured as a CLI with internal packages that implements six main commands:
 - `admin`: Initialize and configure the GPU pool with optional --force flag
 - `status`: Show current GPU allocation status with automatic nvidia-smi validation
 - `run`: Reserve GPU(s) and execute a command with `CUDA_VISIBLE_DEVICES` set
 - `reserve`: Manually reserve GPU(s) for a specified duration 
 - `release`: Release all manually reserved GPUs for the current user
+- `report`: Generate GPU usage reports showing historical usage patterns by user
 
 ### Core Components
 
@@ -62,6 +63,9 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 
 # Release manual reservations
 ./build/canhazgpu release
+
+# Generate usage report for last 7 days
+./build/canhazgpu report --days 7
 ```
 
 ## Dependencies
@@ -88,7 +92,8 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 │   │   ├── status.go               # status command implementation  
 │   │   ├── run.go                  # run command implementation
 │   │   ├── reserve.go              # reserve command implementation
-│   │   └── release.go              # release command implementation
+│   │   ├── release.go              # release command implementation
+│   │   └── report.go               # report command implementation
 │   ├── gpu/                        # GPU management logic
 │   │   ├── allocation.go           # LRU allocation and coordination
 │   │   ├── validation.go           # nvidia-smi integration and usage detection
@@ -147,6 +152,7 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 
 - `canhazgpu:gpu_count`: Total number of available GPUs
 - `canhazgpu:allocation_lock`: Global allocation lock for race condition prevention
+- `canhazgpu:usage_history:{timestamp}:{user}:{gpu_id}`: Historical usage records for reporting
 
 ### GPU State Objects (`canhazgpu:gpu:{id}`)
 
@@ -170,3 +176,11 @@ Reserved state:
 - LRU allocation excludes GPUs in unauthorized use
 - Redis Lua scripts receive unauthorized GPU lists for atomic validation
 - Process ownership data enriches status display but not stored in Redis
+
+### Usage Tracking and Reporting
+
+- Historical usage records automatically created when GPUs are released
+- Records include user, GPU ID, start/end times, duration, and reservation type
+- Usage data stored in Redis with 90-day expiration to prevent unbounded growth
+- `report` command aggregates usage by user with configurable time windows
+- Supports both historical completed usage and current in-progress reservations

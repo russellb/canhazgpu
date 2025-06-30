@@ -37,6 +37,9 @@ canhazgpu reserve --gpus 1 --duration 4h
 
 # Release manual reservations when done
 canhazgpu release
+
+# Generate usage reports
+canhazgpu report --days 7
 ```
 
 ## Key Features
@@ -47,6 +50,7 @@ canhazgpu release
 - **Unauthorized usage detection**: Identifies GPUs in use without proper reservations
 - **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
 - **Flexible reservations**: Support for both command execution and manual reservations
+- **Usage reporting**: Track and analyze GPU usage patterns over time by user
 
 ## Usage Examples
 
@@ -91,6 +95,30 @@ GPU 0: AVAILABLE (last released 0h 30m 15s ago) [validated: 45MB used]
 GPU 1: IN USE by alice for 0h 15m 30s (run, last heartbeat 0h 0m 5s ago) [validated: 8452MB, 1 processes]
 GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
 GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validated: no actual usage detected]
+```
+
+### Usage Reporting
+View GPU usage patterns over time for capacity planning and accountability:
+
+```bash
+# Show usage for the last 30 days (default)
+❯ canhazgpu report
+=== GPU Usage Report ===
+Period: 2025-05-31 to 2025-06-30 (30 days)
+
+User                       GPU Hours      Percentage        Run     Manual
+---------------------------------------------------------------------------
+alice                          24.50          55.2%         12          8
+bob                            15.25          34.4%          6         15
+charlie                         4.60          10.4%          3          2
+---------------------------------------------------------------------------
+TOTAL                          44.35         100.0%         21         25
+
+Total reservations: 46
+Unique users: 3
+
+# Show usage for the last 7 days
+canhazgpu report --days 7
 ```
 
 ## Documentation
