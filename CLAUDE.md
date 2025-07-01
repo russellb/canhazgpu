@@ -14,7 +14,7 @@ The tool is a Go application structured as a CLI with internal packages that imp
 - `run`: Reserve GPU(s) and execute a command with `CUDA_VISIBLE_DEVICES` set
 - `reserve`: Manually reserve GPU(s) for a specified duration 
 - `release`: Release all manually reserved GPUs for the current user
-- `report`: Generate GPU usage reports showing historical usage patterns by user
+- `report`: Generate GPU reservation reports showing historical reservation patterns by user
 - `web`: Start a web server providing a dashboard for real-time monitoring and reports
 
 ### Core Components
@@ -65,7 +65,7 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 # Release manual reservations
 ./build/canhazgpu release
 
-# Generate usage report for last 7 days
+# Generate reservation report for last 7 days
 ./build/canhazgpu report --days 7
 ```
 
@@ -178,7 +178,7 @@ Reserved state:
 - Redis Lua scripts receive unreserved GPU lists for atomic validation
 - Process ownership data enriches status display but not stored in Redis
 
-### Usage Tracking and Reporting
+### Reservation Tracking and Reporting
 
 - Historical usage records automatically created when GPUs are released
 - Records include user, GPU ID, start/end times, duration, and reservation type

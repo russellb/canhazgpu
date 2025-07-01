@@ -170,7 +170,7 @@ No manually reserved GPUs found for current user
 
 ## report
 
-Generate GPU usage reports showing historical usage patterns by user.
+Generate GPU reservation reports showing historical reservation patterns by user.
 
 ```bash
 canhazgpu report [--days <num>]
@@ -181,19 +181,19 @@ canhazgpu report [--days <num>]
 
 **Examples:**
 ```bash
-# Show usage for the last 30 days (default)
+# Show reservations for the last 30 days (default)
 canhazgpu report
 
-# Show usage for the last 7 days
+# Show reservations for the last 7 days
 canhazgpu report --days 7
 
-# Show usage for the last 24 hours
+# Show reservations for the last 24 hours
 canhazgpu report --days 1
 ```
 
 **Example Output:**
 ```bash
-=== GPU Usage Report ===
+=== GPU Reservation Report ===
 Period: 2025-05-31 to 2025-06-30 (30 days)
 
 User                       GPU Hours      Percentage        Run     Manual
@@ -244,7 +244,7 @@ canhazgpu web --host 192.168.1.100 --port 8888
 
 **Dashboard Features:**
 - **Real-time GPU Status**: Automatically refreshes every 30 seconds
-- **Interactive Usage Reports**: Customizable time periods (1-90 days)
+- **Interactive Reservation Reports**: Customizable time periods (1-90 days)
 - **Visual Design**: Dark theme with color-coded status indicators
 - **Mobile Responsive**: Works on desktop and mobile devices
 - **API Endpoints**: 

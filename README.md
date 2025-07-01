@@ -41,7 +41,7 @@ canhazgpu reserve --gpus 1 --duration 4h
 # Release manual reservations when done
 canhazgpu release
 
-# Generate usage reports
+# Generate reservation reports
 canhazgpu report --days 7
 
 # Start web dashboard
@@ -56,8 +56,8 @@ canhazgpu web --port 8080
 - **Unreserved usage detection**: Identifies GPUs in use without proper reservations
 - **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
 - **Flexible reservations**: Support for both command execution and manual reservations
-- **Usage reporting**: Track and analyze GPU usage patterns over time by user
-- **Web dashboard**: Real-time monitoring interface with status and usage reports
+- **Reservation reporting**: Track and analyze GPU reservation patterns over time by user
+- **Web dashboard**: Real-time monitoring interface with status and reservation reports
 
 ## Documentation
 

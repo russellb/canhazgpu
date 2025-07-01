@@ -268,7 +268,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         </div>
 
         <div class="section">
-            <h2>Usage Report</h2>
+            <h2>GPU Reservation Report</h2>
             <div class="controls">
                 <div class="control-group">
                     <label for="days-select">Time Period:</label>
@@ -285,7 +285,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 <button onclick="refreshReport()">↻ Refresh</button>
                 <div class="timestamp" id="report-timestamp"></div>
             </div>
-            <div id="usage-report" class="loading">Loading usage report...</div>
+            <div id="usage-report" class="loading">Loading reservation report...</div>
         </div>
     </div>
 
@@ -408,7 +408,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             const container = document.getElementById('usage-report');
             
             if (!data || !data.users || data.users.length === 0) {
-                container.innerHTML = '<div>No usage data available for this period</div>';
+                container.innerHTML = '<div>No reservation data available for this period</div>';
                 return;
             }
 
@@ -483,7 +483,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 const data = await fetchReport(days);
                 renderReport(data);
             } catch (error) {
-                container.innerHTML = '<div class="error">Failed to load usage report: ' + error.message + '</div>';
+                container.innerHTML = '<div class="error">Failed to load reservation report: ' + error.message + '</div>';
             } finally {
                 container.classList.remove('refreshing');
             }

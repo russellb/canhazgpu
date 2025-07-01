@@ -18,8 +18,8 @@ var (
 
 var reportCmd = &cobra.Command{
 	Use:   "report",
-	Short: "Generate GPU usage reports",
-	Long:  `Generate reports on GPU usage over time, showing usage by user and aggregate totals.`,
+	Short: "Generate GPU reservation reports",
+	Long:  `Generate reports on GPU reservations over time, showing reservation data by user and aggregate totals.`,
 	RunE:  runReport,
 }
 
@@ -126,7 +126,7 @@ func displayReport(records []*types.UsageRecord, startTime, endTime time.Time) {
 	})
 
 	// Display report header
-	fmt.Printf("\n=== GPU Usage Report ===\n")
+	fmt.Printf("\n=== GPU Reservation Report ===\n")
 	fmt.Printf("Period: %s to %s (%d days)\n", 
 		startTime.Format("2006-01-02"), 
 		endTime.Format("2006-01-02"), 

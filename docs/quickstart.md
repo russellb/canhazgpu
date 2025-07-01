@@ -92,9 +92,9 @@ GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python
 GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s)
 ```
 
-## 7. Generate Usage Reports
+## 7. Generate GPU Reservation Reports
 
-View GPU usage patterns over time:
+View GPU reservation patterns over time:
 
 ```bash
 # Last 30 days (default)
@@ -121,7 +121,7 @@ canhazgpu web --port 3000
 
 Then open http://localhost:8080 in your browser to see:
 - Real-time GPU status
-- Interactive usage reports
+- Interactive reservation reports
 - Visual allocation indicators
 
 ## Common Patterns
