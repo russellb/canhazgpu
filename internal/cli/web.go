@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -73,6 +74,12 @@ type webServer struct {
 }
 
 func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
+	// Get system hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+
 	tmpl := `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -253,7 +260,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
     <header>
         <div class="container">
             <h1>canhazgpu Dashboard</h1>
-            <div class="subtitle">GPU Reservation System Monitor</div>
+            <div class="subtitle">GPU Reservation System Monitor - {{.Hostname}}</div>
         </div>
     </header>
     
@@ -522,7 +529,11 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	t.Execute(w, nil)
+	t.Execute(w, struct {
+		Hostname string
+	}{
+		Hostname: hostname,
+	})
 }
 
 func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
