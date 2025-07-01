@@ -124,6 +124,8 @@ Then open http://localhost:8080 in your browser to see:
 - Interactive reservation reports
 - Visual allocation indicators
 
+![Web Dashboard](images/web-screenshot.png)
+
 ## Common Patterns
 
 ### Long-Running Training

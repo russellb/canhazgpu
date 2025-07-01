@@ -242,6 +242,15 @@ canhazgpu web --host 127.0.0.1 --port 8080
 canhazgpu web --host 192.168.1.100 --port 8888
 ```
 
+![Web Dashboard Screenshot](images/web-screenshot.png)
+
+The dashboard displays:
+- System hostname in the header for easy identification
+- GPU cards showing status, user, duration, and validation info
+- Color-coded status badges (green=available, blue=in use, red=unreserved)
+- Reservation report with usage statistics and visual bars
+- Quick links to documentation and GitHub repository
+
 **Dashboard Features:**
 - **Real-time GPU Status**: Automatically refreshes every 30 seconds
 - **Interactive Reservation Reports**: Customizable time periods (1-90 days)

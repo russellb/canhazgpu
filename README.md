@@ -59,6 +59,18 @@ canhazgpu web --port 8080
 - **Reservation reporting**: Track and analyze GPU reservation patterns over time by user
 - **Web dashboard**: Real-time monitoring interface with status and reservation reports
 
+## Web Dashboard
+
+![canhazgpu Dashboard Screenshot](docs/images/web-screenshot.png)
+
+The web dashboard provides:
+- Real-time GPU status monitoring with automatic refresh
+- Interactive reservation reports with customizable time periods
+- Visual status indicators and usage visualization
+- Quick access to documentation and source code
+
+Start the dashboard with `canhazgpu web` and access it at http://localhost:8080
+
 ## Documentation
 
 For detailed usage, configuration, and administration:
