@@ -74,6 +74,7 @@ nav:
     - Troubleshooting: admin-troubleshooting.md
   - Development:
     - Architecture: dev-architecture.md
+    - Testing: dev-testing.md
     - Contributing: dev-contributing.md
 
 extra:

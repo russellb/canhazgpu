@@ -1,6 +1,6 @@
-# Testing Guide for canhazgpu
+# Testing
 
-This document explains the testing infrastructure for the canhazgpu GPU reservation tool.
+This guide explains how to run tests for canhazgpu and understand the testing infrastructure.
 
 ## Test Organization
 

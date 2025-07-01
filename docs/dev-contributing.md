@@ -170,6 +170,9 @@ go mod verify
 
 ## Testing Guidelines
 
+!!! info "Complete Testing Guide"
+    For comprehensive testing information including test types, running tests, and debugging, see the [Testing Guide](dev-testing.md).
+
 ### 1. Test Structure
 
 **Test organization:**
