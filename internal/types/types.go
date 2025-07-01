@@ -144,5 +144,5 @@ const (
 	LockTimeout       = 10 * time.Second
 	MaxLockRetries    = 5
 
-	MemoryThresholdMB = 100
+	MemoryThresholdMB = 1024
 )

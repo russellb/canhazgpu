@@ -110,15 +110,15 @@ func TestDetectGPUUsage_Structure(t *testing.T) {
 func TestGetUnreservedGPUs(t *testing.T) {
 	// Test the threshold logic that determines unreserved usage
 	usage := map[int]*types.GPUUsage{
-		0: {GPUID: 0, MemoryMB: 50},   // Below threshold - authorized
-		1: {GPUID: 1, MemoryMB: 150},  // Above threshold - unreserved  
-		2: {GPUID: 2, MemoryMB: 100},  // At threshold - authorized (uses > not >=)
+		0: {GPUID: 0, MemoryMB: 512},  // Below threshold - authorized
+		1: {GPUID: 1, MemoryMB: 1536}, // Above threshold - unreserved  
+		2: {GPUID: 2, MemoryMB: 1024}, // At threshold - authorized (uses > not >=)
 		3: {GPUID: 3, MemoryMB: 0},    // No usage - authorized
 	}
 	
 	unreserved := GetUnreservedGPUs(context.Background(), usage)
 	
-	// Should find only GPU 1 (>100MB threshold, not >=)
+	// Should find only GPU 1 (>1024MB threshold, not >=
 	expected := []int{1}
 	assert.ElementsMatch(t, expected, unreserved)
 }
@@ -136,17 +136,17 @@ func TestIsGPUInUnreservedUse(t *testing.T) {
 		},
 		{
 			name:     "Below threshold",
-			usage:    &types.GPUUsage{MemoryMB: 50},
+			usage:    &types.GPUUsage{MemoryMB: 512},
 			expected: false,
 		},
 		{
 			name:     "At threshold", 
 			usage:    &types.GPUUsage{MemoryMB: types.MemoryThresholdMB},
-			expected: false, // Uses > not >=, so exactly 100MB is authorized
+			expected: false, // Uses > not >=, so exactly 1024MB is authorized
 		},
 		{
 			name:     "Above threshold",
-			usage:    &types.GPUUsage{MemoryMB: 200},
+			usage:    &types.GPUUsage{MemoryMB: 1536},
 			expected: true,
 		},
 	}

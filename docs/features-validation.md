@@ -21,10 +21,10 @@ For each GPU process, canhazgpu identifies the owner:
 3. **Username resolution**: Convert UID to username using system user database
 
 ### Memory Threshold
-GPUs with more than **100MB** of memory usage are considered "in use":
+GPUs with more than **1GB** of memory usage are considered "in use":
 
-- **Below 100MB**: Baseline GPU driver usage, considered available
-- **Above 100MB**: Active workload detected, GPU marked as in use
+- **Below 1GB**: Baseline GPU driver usage, considered available
+- **Above 1GB**: Active workload detected, GPU marked as in use
 
 ## Validation Output
 
@@ -158,7 +158,7 @@ Some systems may have higher baseline GPU memory usage due to:
 - Persistent CUDA contexts
 - Background ML services
 
-The 100MB threshold can be adjusted if needed (currently hardcoded).
+The 1GB threshold can be adjusted if needed (currently hardcoded).
 
 ## Validation Performance
 

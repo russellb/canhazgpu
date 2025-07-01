@@ -112,7 +112,7 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 - `DetectGPUUsage()` in `internal/gpu/validation.go`: Uses nvidia-smi to query actual GPU processes and memory usage
 - `GetProcessOwner()` in `internal/gpu/validation.go`: Identifies process owners via /proc filesystem or ps command
 - Unreserved usage detection excludes GPUs from allocation pool automatically
-- Memory threshold of 100MB determines if GPU is considered "in use"
+- Memory threshold of 1GB determines if GPU is considered "in use"
 
 ### Allocation Strategy
 

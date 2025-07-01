@@ -5,7 +5,7 @@ One of canhazgpu's key features is detecting and handling GPUs that are being us
 ## What is Unreserved Usage?
 
 Unreserved usage occurs when:
-- A GPU has active processes consuming >100MB of memory
+- A GPU has active processes consuming >1GB of memory
 - No proper reservation exists for that GPU in the system
 - The GPU usage was not coordinated through canhazgpu
 
@@ -31,7 +31,7 @@ canhazgpu detects unreserved usage through:
 
 1. **nvidia-smi Integration**: Queries actual GPU processes and memory usage
 2. **Process Ownership Detection**: Identifies which users are running processes
-3. **Memory Threshold**: Considers GPUs with >100MB usage as "in use"
+3. **Memory Threshold**: Considers GPUs with >1GB usage as "in use"
 4. **Cross-Reference**: Compares actual usage against Redis reservation database
 
 ### Detection Timing
