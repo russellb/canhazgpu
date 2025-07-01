@@ -167,23 +167,48 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .gpu-card {
             background: #252525;
             border-radius: 6px;
-            padding: 15px;
+            padding: 12px;
             border: 1px solid #333;
             transition: all 0.3s ease;
+            cursor: pointer;
         }
         .gpu-card:hover {
             border-color: #4CAF50;
             box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
         }
+        .gpu-card.expanded {
+            padding: 15px;
+        }
         .gpu-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            position: relative;
+        }
+        .gpu-header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex: 1;
+        }
+        .expand-icon {
+            width: 20px;
+            height: 20px;
+            fill: #666;
+            transition: transform 0.3s ease;
+            flex-shrink: 0;
+        }
+        .gpu-card.expanded .expand-icon {
+            transform: rotate(90deg);
         }
         .gpu-id {
-            font-size: 1.3em;
+            font-size: 1.2em;
             font-weight: bold;
+        }
+        .gpu-summary {
+            font-size: 0.9em;
+            color: #888;
+            margin-left: 5px;
         }
         .status-badge {
             padding: 5px 12px;
@@ -191,6 +216,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             font-size: 0.85em;
             font-weight: 600;
             text-transform: uppercase;
+            flex-shrink: 0;
         }
         .status-available { background: #2e7d32; color: white; }
         .status-in-use { background: #1976d2; color: white; }
@@ -198,6 +224,13 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .gpu-details {
             font-size: 0.9em;
             color: #aaa;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #333;
+            display: none;
+        }
+        .gpu-card.expanded .gpu-details {
+            display: block;
         }
         .gpu-details div {
             margin: 5px 0;
@@ -317,6 +350,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             <h2>GPU Status</h2>
             <div class="controls">
                 <button onclick="refreshStatus()">↻ Refresh</button>
+                <button onclick="toggleExpandAll()" id="expand-all-btn">⤧ Expand All</button>
                 <div class="timestamp" id="status-timestamp"></div>
             </div>
             <div id="gpu-status" class="loading">Loading GPU status...</div>
@@ -410,9 +444,37 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 const statusClass = gpu.status.toLowerCase().replace('_', '-');
                 let statusText = gpu.status.replace('_', ' ');
                 
-                html += '<div class="gpu-card">';
+                // Generate summary text for collapsed view
+                let summary = '';
+                if (gpu.user) {
+                    summary = gpu.user;
+                    if (gpu.reservation_type === 'manual' && gpu.expiry_time) {
+                        const expiresIn = new Date(gpu.expiry_time) - new Date();
+                        if (expiresIn > 0) {
+                            summary += ', expires in ' + formatDuration(expiresIn / 1000);
+                        }
+                    } else if (gpu.duration) {
+                        summary += ', ' + formatDuration(gpu.duration / 1000000000);
+                    }
+                } else if (gpu.unreserved_users && gpu.unreserved_users.length > 0) {
+                    summary = 'Used by ' + gpu.unreserved_users.join(', ');
+                } else if (gpu.last_released) {
+                    summary = 'Last released ' + formatTimestamp(gpu.last_released);
+                }
+                
+                html += '<div class="gpu-card" onclick="toggleCard(this)">';
                 html += '<div class="gpu-header">';
+                html += '<div class="gpu-header-left">';
+                html += '<svg class="expand-icon" viewBox="0 0 24 24">';
+                html += '<path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/>';
+                html += '</svg>';
+                html += '<div>';
                 html += '<div class="gpu-id">GPU ' + gpu.gpu_id + '</div>';
+                if (summary) {
+                    html += '<div class="gpu-summary">' + summary + '</div>';
+                }
+                html += '</div>';
+                html += '</div>';
                 html += '<span class="status-badge status-' + statusClass + '">' + statusText + '</span>';
                 html += '</div>';
                 html += '<div class="gpu-details">';
@@ -566,6 +628,28 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 reportRefreshInterval = setInterval(refreshReport, 300000);
             }
         });
+
+        // Toggle individual GPU card
+        function toggleCard(card) {
+            card.classList.toggle('expanded');
+        }
+
+        // Toggle all GPU cards
+        function toggleExpandAll() {
+            const cards = document.querySelectorAll('.gpu-card');
+            const button = document.getElementById('expand-all-btn');
+            const allExpanded = Array.from(cards).every(card => card.classList.contains('expanded'));
+            
+            if (allExpanded) {
+                // Collapse all
+                cards.forEach(card => card.classList.remove('expanded'));
+                button.textContent = '⤧ Expand All';
+            } else {
+                // Expand all
+                cards.forEach(card => card.classList.add('expanded'));
+                button.textContent = '⤴ Collapse All';
+            }
+        }
     </script>
 </body>
 </html>`
