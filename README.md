@@ -32,7 +32,8 @@ canhazgpu admin --gpus 8
 # Check current status
 canhazgpu status
 
-# Run vLLM with an automatic 2 GPU reservation
+# Run vLLM with an automatic 2 GPU reservation.
+# - CUDA_VISIBLE_DEVICES is set in the environment before running the command.
 canhazgpu run --gpus 2 -- vllm serve my/model --tensor-parallel-size 2
 
 # Reserve a single GPU manually for development
