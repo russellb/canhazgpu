@@ -24,6 +24,11 @@ Duration formats supported:
 - 1d (1 day)
 - 0.5h (30 minutes with decimal)
 
+IMPORTANT: Unlike 'canhazgpu run', this command does NOT automatically set
+CUDA_VISIBLE_DEVICES. After reserving, you must manually set the environment
+variable based on the GPU IDs shown in the output:
+  export CUDA_VISIBLE_DEVICES=1,3
+
 The reserved GPUs must be manually released with 'canhazgpu release' or will
 automatically expire after the specified duration.`,
 	RunE: func(cmd *cobra.Command, args []string) error {

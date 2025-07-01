@@ -139,6 +139,9 @@ canhazgpu reserve --duration 30m
 canhazgpu reserve --gpus 1 --duration 2d
 ```
 
+**Important Note:**
+Unlike the `run` command, `reserve` does NOT automatically set `CUDA_VISIBLE_DEVICES`. You must manually set it based on the GPU IDs shown in the output.
+
 **Use Cases:**
 - Interactive development sessions
 - Jupyter notebook workflows

@@ -138,9 +138,12 @@ canhazgpu run --gpus 2 -- python train.py --epochs 100
 ```bash
 # Reserve GPUs for development session
 canhazgpu reserve --gpus 1 --duration 4h
+# Note the GPU ID from output, e.g., "Reserved 1 GPU(s): [3]"
 
-# Use the GPUs in your development environment
-# CUDA_VISIBLE_DEVICES will be set automatically for new shells
+# Manually set CUDA_VISIBLE_DEVICES
+export CUDA_VISIBLE_DEVICES=3
+
+# Use the GPU in your development environment
 
 # When done
 canhazgpu release
@@ -150,8 +153,12 @@ canhazgpu release
 ```bash
 # Reserve GPU for notebook session
 canhazgpu reserve --gpus 1 --duration 2h
+# Note the GPU ID from output, e.g., "Reserved 1 GPU(s): [2]"
 
-# Start Jupyter (will use the reserved GPU)
+# Set environment variable
+export CUDA_VISIBLE_DEVICES=2
+
+# Start Jupyter with the reserved GPU
 jupyter notebook
 
 # Release when done

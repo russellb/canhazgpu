@@ -65,12 +65,15 @@ Perfect for Jupyter notebooks, IPython sessions, or iterative model development:
 ```bash
 # Reserve GPU for notebook session
 canhazgpu reserve --duration 4h
+# Note the GPU IDs from the output, e.g., "Reserved 1 GPU(s): [2]"
 
-# Start Jupyter (automatically uses reserved GPU)
+# Manually set CUDA_VISIBLE_DEVICES
+export CUDA_VISIBLE_DEVICES=2
+
+# Start Jupyter with the reserved GPU
 jupyter notebook
 
 # Your notebooks now have exclusive GPU access
-# CUDA_VISIBLE_DEVICES is automatically set
 ```
 
 ### Batch Job Preparation
@@ -79,8 +82,12 @@ Reserve GPUs while you prepare and test your batch jobs:
 ```bash
 # Reserve GPUs for job prep
 canhazgpu reserve --gpus 2 --duration 2h
+# Note the GPU IDs from the output, e.g., "Reserved 2 GPU(s): [1, 3]"
 
-# Test your scripts
+# Manually set CUDA_VISIBLE_DEVICES
+export CUDA_VISIBLE_DEVICES=1,3
+
+# Test your scripts with the reserved GPUs
 python test_distributed.py
 
 # Run the actual job (using same GPUs)
