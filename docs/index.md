@@ -36,10 +36,10 @@ canhazgpu web --port 8080
 - ✅ **Automatic cleanup**: GPUs auto-released when processes end or reservations expire
 - ✅ **LRU allocation**: Fair distribution using least recently used strategy
 - ✅ **Heartbeat monitoring**: Detects crashed processes and reclaims GPUs
-- ✅ **Unauthorized usage detection**: Identifies GPUs in use without proper reservations
-- ✅ **User accountability**: Shows which users are running unauthorized processes
+- ✅ **Unreserved usage detection**: Identifies GPUs in use without proper reservations
+- ✅ **User accountability**: Shows which users are running unreserved processes
 - ✅ **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
-- ✅ **Smart allocation**: Automatically excludes unauthorized GPUs from allocation
+- ✅ **Smart allocation**: Automatically excludes unreserved GPUs from allocation
 - ✅ **Usage reporting**: Track and analyze GPU usage patterns over time
 - ✅ **Web dashboard**: Real-time monitoring interface with status and reports
 
@@ -65,4 +65,4 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 - **ML/AI Research Teams**: Coordinate GPU access across multiple researchers
 - **Shared Workstations**: Prevent conflicts on multi-GPU development machines  
 - **Training Pipelines**: Ensure exclusive GPU access for long-running jobs
-- **Resource Monitoring**: Track unauthorized GPU usage and enforce policies
+- **Resource Monitoring**: Track unreserved GPU usage and enforce policies

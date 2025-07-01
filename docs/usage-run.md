@@ -109,7 +109,7 @@ Error: Not enough GPUs available. Requested: 3, Available: 2 (1 GPUs in use with
 When this happens:
 1. Check `canhazgpu status` to see current allocations
 2. Wait for other jobs to complete
-3. Contact users with unauthorized GPU usage
+3. Contact users with unreserved GPU usage
 4. Reduce the number of requested GPUs
 
 ### Command Failures

@@ -1,6 +1,6 @@
 # GPU Validation
 
-canhazgpu integrates with nvidia-smi to provide real-time validation of GPU usage, ensuring that reservations match actual resource utilization and detecting unauthorized usage.
+canhazgpu integrates with nvidia-smi to provide real-time validation of GPU usage, ensuring that reservations match actual resource utilization and detecting unreserved usage.
 
 ## How Validation Works
 
@@ -71,9 +71,9 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, ...) [validated: no actual usage
 ```bash
 by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
 ```
-- Shows specific user running unauthorized processes
+- Shows specific user running unreserved processes
 - Lists PIDs and process names
-- Memory usage quantifies the unauthorized resource consumption
+- Memory usage quantifies the unreserved resource consumption
 
 ## Validation Benefits
 
@@ -109,7 +109,7 @@ Identifies stale reservations that could be released early to improve resource a
 Before any GPU allocation, canhazgpu:
 
 1. **Scans all GPUs** using nvidia-smi
-2. **Identifies unauthorized usage** and excludes those GPUs
+2. **Identifies unreserved usage** and excludes those GPUs
 3. **Updates available GPU pool** with only truly available GPUs
 4. **Proceeds with allocation** using the validated pool
 
@@ -182,8 +182,8 @@ Validation integrates with LRU (Least Recently Used) allocation:
 
 ### Race Condition Protection
 Validation is integrated into the atomic allocation process:
-- Redis Lua scripts receive unauthorized GPU lists
-- Allocation fails if requested GPUs become unauthorized during allocation
+- Redis Lua scripts receive unreserved GPU lists
+- Allocation fails if requested GPUs become unreserved during allocation
 - Ensures consistent state between validation and allocation
 
 ### Heartbeat System

@@ -120,7 +120,7 @@ func (c *Client) ReleaseAllocationLock(ctx context.Context) error {
 }
 
 // Atomic GPU Allocation using Lua script
-func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.AllocationRequest, unauthorizedGPUs []int) ([]int, error) {
+func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.AllocationRequest, unreservedGPUs []int) ([]int, error) {
 	luaScript := `
 		local gpu_count = tonumber(ARGV[1])
 		local requested = tonumber(ARGV[2])
@@ -128,15 +128,15 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		local reservation_type = ARGV[4]
 		local current_time = tonumber(ARGV[5])
 		local expiry_time = ARGV[6]
-		local unauthorized_gpus_json = ARGV[7]
+		local unreserved_gpus_json = ARGV[7]
 		
-		-- Parse unauthorized GPUs
-		local unauthorized_gpus = {}
-		if unauthorized_gpus_json and unauthorized_gpus_json ~= "" and unauthorized_gpus_json ~= "[]" and unauthorized_gpus_json ~= "null" then
-			local success, unauthorized_list = pcall(cjson.decode, unauthorized_gpus_json)
-			if success and unauthorized_list and type(unauthorized_list) == "table" then
-				for _, gpu_id in ipairs(unauthorized_list) do
-					unauthorized_gpus[tonumber(gpu_id)] = true
+		-- Parse unreserved GPUs
+		local unreserved_gpus = {}
+		if unreserved_gpus_json and unreserved_gpus_json ~= "" and unreserved_gpus_json ~= "[]" and unreserved_gpus_json ~= "null" then
+			local success, unreserved_list = pcall(cjson.decode, unreserved_gpus_json)
+			if success and unreserved_list and type(unreserved_list) == "table" then
+				for _, gpu_id in ipairs(unreserved_list) do
+					unreserved_gpus[tonumber(gpu_id)] = true
 				end
 			end
 		end
@@ -147,8 +147,8 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 			local key = "canhazgpu:gpu:" .. i
 			local gpu_data = redis.call('GET', key)
 			
-			-- Skip unauthorized GPUs
-			if not unauthorized_gpus[i] then
+			-- Skip unreserved GPUs
+			if not unreserved_gpus[i] then
 				if not gpu_data then
 					-- GPU is available (never used)
 					table.insert(available_gpus, {id = i, last_released = 0})
@@ -227,8 +227,8 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		return allocated
 	`
 
-	// Convert unauthorized GPUs to JSON
-	unauthorizedJSON, err := json.Marshal(unauthorizedGPUs)
+	// Convert unreserved GPUs to JSON
+	unreservedJSON, err := json.Marshal(unreservedGPUs)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		request.ReservationType,
 		currentTime,
 		expiryTime,
-		string(unauthorizedJSON),
+		string(unreservedJSON),
 	).Result()
 
 	if err != nil {

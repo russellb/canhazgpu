@@ -205,10 +205,10 @@ canhazgpu status > /dev/null || {
     exit 1
 }
 
-# Check for unauthorized usage
+# Check for unreserved usage
 UNAUTHORIZED=$(canhazgpu status | grep "WITHOUT RESERVATION" || true)
 if [ -n "$UNAUTHORIZED" ]; then
-    echo "WARNING: Unauthorized GPU usage detected:"
+    echo "WARNING: Unreserved GPU usage detected:"
     echo "$UNAUTHORIZED"
 fi
 
@@ -287,12 +287,12 @@ UNAUTHORIZED=$(echo "$STATUS" | grep "WITHOUT RESERVATION" | wc -l)
 echo "Total GPUs: $TOTAL"
 echo "Available: $AVAILABLE"
 echo "In Use (Reserved): $IN_USE"
-echo "Unauthorized Usage: $UNAUTHORIZED"
+echo "Unreserved Usage: $UNAUTHORIZED"
 echo "Utilization: $(( 100 * (IN_USE + UNAUTHORIZED) / TOTAL ))%"
 
 if [ $UNAUTHORIZED -gt 0 ]; then
     echo ""
-    echo "Unauthorized Usage Details:"
+    echo "Unreserved Usage Details:"
     echo "$STATUS" | grep "WITHOUT RESERVATION"
 fi
 ```

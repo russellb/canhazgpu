@@ -53,7 +53,7 @@ canhazgpu web --port 8080
 - **Race condition protection**: Uses Redis-based distributed locking
 - **Automatic cleanup**: GPUs auto-released when processes end or reservations expire
 - **LRU allocation**: Fair distribution using least recently used strategy
-- **Unauthorized usage detection**: Identifies GPUs in use without proper reservations
+- **Unreserved usage detection**: Identifies GPUs in use without proper reservations
 - **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
 - **Flexible reservations**: Support for both command execution and manual reservations
 - **Usage reporting**: Track and analyze GPU usage patterns over time by user
@@ -108,7 +108,7 @@ canhazgpu admin --gpus $(nvidia-smi -L | wc -l)
 2. **Coordination**: Uses Redis for distributed state management and race condition prevention  
 3. **Allocation**: LRU (Least Recently Used) strategy ensures fair resource distribution
 4. **Monitoring**: Heartbeat system tracks active reservations and handles cleanup
-5. **Enforcement**: Automatically excludes unauthorized GPU usage from allocation
+5. **Enforcement**: Automatically excludes unreserved GPU usage from allocation
 
 ## Contributing
 

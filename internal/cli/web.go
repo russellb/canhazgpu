@@ -155,7 +155,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         }
         .status-available { background: #2e7d32; color: white; }
         .status-in-use { background: #1976d2; color: white; }
-        .status-unauthorized { background: #d32f2f; color: white; }
+        .status-unreserved { background: #d32f2f; color: white; }
         .gpu-details {
             font-size: 0.9em;
             color: #aaa;
@@ -383,8 +383,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                     html += '<div><strong>Validation:</strong> ' + gpu.validation_info + '</div>';
                 }
                 
-                if (gpu.unauthorized_users && gpu.unauthorized_users.length > 0) {
-                    html += '<div><strong>Unauthorized users:</strong> ' + gpu.unauthorized_users.join(', ') + '</div>';
+                if (gpu.unreserved_users && gpu.unreserved_users.length > 0) {
+                    html += '<div><strong>Unreserved users:</strong> ' + gpu.unreserved_users.join(', ') + '</div>';
                 }
                 
                 if (gpu.process_info) {
@@ -551,7 +551,7 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		ExpiryTime        *time.Time `json:"expiry_time,omitempty"`
 		LastReleased      *time.Time `json:"last_released,omitempty"`
 		ValidationInfo    string    `json:"validation_info,omitempty"`
-		UnauthorizedUsers []string  `json:"unauthorized_users,omitempty"`
+		UnreservedUsers []string  `json:"unreserved_users,omitempty"`
 		ProcessInfo       string    `json:"process_info,omitempty"`
 		Error             string    `json:"error,omitempty"`
 	}
@@ -565,7 +565,7 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 			ReservationType:   status.ReservationType,
 			Duration:          int64(status.Duration),
 			ValidationInfo:    status.ValidationInfo,
-			UnauthorizedUsers: status.UnauthorizedUsers,
+			UnreservedUsers: status.UnreservedUsers,
 			ProcessInfo:       status.ProcessInfo,
 			Error:             status.Error,
 		}

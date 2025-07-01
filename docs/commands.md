@@ -263,8 +263,8 @@ canhazgpu web --host 192.168.1.100 --port 8888
 
 All allocation commands (`run` and `reserve`) automatically:
 
-1. **Scan for unauthorized usage** using nvidia-smi
-2. **Exclude unauthorized GPUs** from the available pool
+1. **Scan for unreserved usage** using nvidia-smi
+2. **Exclude unreserved GPUs** from the available pool
 3. **Provide detailed error messages** if insufficient GPUs remain
 
 ### LRU Allocation

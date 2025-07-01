@@ -105,7 +105,7 @@ def detect_gpu_usage():
 - Real-time GPU usage detection
 - Process ownership identification
 - Memory usage quantification
-- Unauthorized usage detection
+- Unreserved usage detection
 
 ### 4. Allocation Engine (`canhazgpu:lines 303-444`)
 
@@ -149,7 +149,7 @@ def atomic_reserve_gpus(requested_gpus, user, reservation_type, expiry_time=None
 **Key responsibilities:**
 - Atomic GPU allocation to prevent race conditions
 - LRU (Least Recently Used) allocation strategy
-- Integration with validation layer for unauthorized usage exclusion
+- Integration with validation layer for unreserved usage exclusion
 - Rollback on partial allocation failures
 
 ## Data Flow
@@ -330,7 +330,7 @@ GPU usage could change between validation and allocation.
 
 **Solution:**
 - Validation integrated into atomic Lua scripts
-- Unauthorized usage lists passed to allocation logic
+- Unreserved usage lists passed to allocation logic
 - Re-validation on allocation failure
 
 ## Performance Characteristics
@@ -401,7 +401,7 @@ Redis could be replaced with:
 
 Could add notifications for:
 - Allocation conflicts
-- Unauthorized usage
+- Unreserved usage
 - Reservation expiry
 - System health issues
 

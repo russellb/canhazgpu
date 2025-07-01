@@ -123,7 +123,7 @@ canhazgpu release
 
 ### Allocation Process
 1. **Validation**: Checks actual GPU usage with nvidia-smi
-2. **Conflict Detection**: Excludes GPUs in unauthorized use
+2. **Conflict Detection**: Excludes GPUs in unreserved use
 3. **LRU Selection**: Chooses least recently used GPUs
 4. **Time-based Expiry**: Sets expiration time based on duration
 5. **Persistent Storage**: Saves reservation in Redis

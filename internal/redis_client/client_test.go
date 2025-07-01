@@ -220,7 +220,7 @@ func TestClient_AtomicReserveGPUs_SimpleCase(t *testing.T) {
 	}
 }
 
-func TestClient_AtomicReserveGPUs_WithUnauthorized(t *testing.T) {
+func TestClient_AtomicReserveGPUs_WithUnreserved(t *testing.T) {
 	client := setupTestRedis(t)
 	ctx := context.Background()
 
@@ -228,21 +228,21 @@ func TestClient_AtomicReserveGPUs_WithUnauthorized(t *testing.T) {
 	err := client.SetGPUCount(ctx, 4)
 	require.NoError(t, err)
 
-	// Reserve 2 GPUs, excluding GPU 1 as unauthorized
+	// Reserve 2 GPUs, excluding GPU 1 as unreserved
 	request := &types.AllocationRequest{
 		GPUCount:        2,
 		User:            "testuser",
 		ReservationType: types.ReservationTypeRun,
 	}
 
-	unauthorizedGPUs := []int{1}
-	allocated, err := client.AtomicReserveGPUs(ctx, request, unauthorizedGPUs)
+	unreservedGPUs := []int{1}
+	allocated, err := client.AtomicReserveGPUs(ctx, request, unreservedGPUs)
 	assert.NoError(t, err)
 	assert.Len(t, allocated, 2)
 
 	// Verify that GPU 1 was not allocated
 	for _, gpuID := range allocated {
-		assert.NotEqual(t, 1, gpuID, "Unauthorized GPU should not be allocated")
+		assert.NotEqual(t, 1, gpuID, "Unreserved GPU should not be allocated")
 	}
 }
 

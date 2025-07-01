@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is `canhazgpu`, a GPU reservation tool for single host shared development systems. It's a Go CLI application that uses Redis as a backend to coordinate GPU allocations across multiple users and processes, with comprehensive validation to detect and prevent unauthorized GPU usage.
+This is `canhazgpu`, a GPU reservation tool for single host shared development systems. It's a Go CLI application that uses Redis as a backend to coordinate GPU allocations across multiple users and processes, with comprehensive validation to detect and prevent unreserved GPU usage.
 
 ## Architecture
 
@@ -23,8 +23,8 @@ The tool is a Go application structured as a CLI with internal packages that imp
 - **GPU Allocation Logic**: Tracks GPU state with JSON objects containing user, timestamps, heartbeat data, and reservation types
 - **Heartbeat System**: Background goroutine sends periodic heartbeats (60s interval) to maintain run-type reservations
 - **Auto-cleanup**: GPUs are automatically released when heartbeat expires (15 min timeout), manual reservations expire, or processes terminate
-- **Unauthorized Usage Detection**: nvidia-smi integration detects GPUs in use without proper reservations
-- **User Accountability**: Process ownership detection identifies which users are running unauthorized processes
+- **Unreserved Usage Detection**: nvidia-smi integration detects GPUs in use without proper reservations
+- **User Accountability**: Process ownership detection identifies which users are running unreserved processes
 - **LRU Allocation**: Least Recently Used strategy ensures fair GPU distribution over time
 - **Race Condition Protection**: Redis-based distributed locking prevents allocation conflicts
 
@@ -111,15 +111,15 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 
 - `DetectGPUUsage()` in `internal/gpu/validation.go`: Uses nvidia-smi to query actual GPU processes and memory usage
 - `GetProcessOwner()` in `internal/gpu/validation.go`: Identifies process owners via /proc filesystem or ps command
-- Unauthorized usage detection excludes GPUs from allocation pool automatically
+- Unreserved usage detection excludes GPUs from allocation pool automatically
 - Memory threshold of 100MB determines if GPU is considered "in use"
 
 ### Allocation Strategy
 
-- `GetAvailableGPUsSortedByLRU()` in `internal/gpu/allocation.go`: LRU allocation with unauthorized usage exclusion
+- `GetAvailableGPUsSortedByLRU()` in `internal/gpu/allocation.go`: LRU allocation with unreserved usage exclusion
 - `AtomicReserveGPUs()` in `internal/redis_client/client.go`: Race-condition-safe reservation with Lua scripts
-- Enhanced Redis Lua scripts validate unauthorized usage list during atomic operations
-- Detailed error messages when allocation fails due to unauthorized usage
+- Enhanced Redis Lua scripts validate unreserved usage list during atomic operations
+- Detailed error messages when allocation fails due to unreserved usage
 
 ### Reservation Types
 
@@ -138,9 +138,9 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 ### Status and Monitoring
 
 - Real-time validation shows actual vs reserved GPU usage
-- User accountability displays specific users running unauthorized processes
+- User accountability displays specific users running unreserved processes
 - Validation info format: `[validated: XMB, Y processes]`
-- "IN USE WITHOUT RESERVATION" status for unauthorized usage
+- "IN USE WITHOUT RESERVATION" status for unreserved usage
 
 ### Time Handling
 
@@ -173,9 +173,9 @@ Reserved state:
 
 ### Validation Integration
 
-- Unauthorized usage detection runs during allocation
-- LRU allocation excludes GPUs in unauthorized use
-- Redis Lua scripts receive unauthorized GPU lists for atomic validation
+- Unreserved usage detection runs during allocation
+- LRU allocation excludes GPUs in unreserved use
+- Redis Lua scripts receive unreserved GPU lists for atomic validation
 - Process ownership data enriches status display but not stored in Redis
 
 ### Usage Tracking and Reporting

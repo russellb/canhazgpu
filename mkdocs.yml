@@ -67,7 +67,7 @@ nav:
     - Status Monitoring: usage-status.md
   - Features:
     - GPU Validation: features-validation.md
-    - Unauthorized Usage Detection: features-unauthorized.md
+    - Unreserved Usage Detection: features-unreserved.md
     - LRU Allocation: features-lru.md
   - Administration:
     - Setup & Configuration: admin-setup.md

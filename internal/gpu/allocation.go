@@ -27,8 +27,8 @@ func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.All
 		return nil, fmt.Errorf("failed to validate GPU usage: %v", err)
 	}
 
-	// Get list of unauthorized GPUs
-	unauthorizedGPUs := GetUnauthorizedGPUs(ctx, usage)
+	// Get list of unreserved GPUs
+	unreservedGPUs := GetUnreservedGPUs(ctx, usage)
 
 	// Acquire allocation lock
 	if err := ae.client.AcquireAllocationLock(ctx); err != nil {
@@ -37,20 +37,20 @@ func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.All
 	defer ae.client.ReleaseAllocationLock(ctx)
 
 	// Perform atomic allocation
-	allocatedGPUs, err := ae.client.AtomicReserveGPUs(ctx, request, unauthorizedGPUs)
+	allocatedGPUs, err := ae.client.AtomicReserveGPUs(ctx, request, unreservedGPUs)
 	if err != nil {
 		// Check if it's an availability error and provide detailed message
 		if err.Error() == "Not enough GPUs available" {
 			gpuCount, _ := ae.client.GetGPUCount(ctx)
-			available := gpuCount - len(unauthorizedGPUs)
+			available := gpuCount - len(unreservedGPUs)
 
-			var unauthorizedMsg string
-			if len(unauthorizedGPUs) > 0 {
-				unauthorizedMsg = fmt.Sprintf(" (%d GPUs in use without reservation - run 'canhazgpu status' for details)", len(unauthorizedGPUs))
+			var unreservedMsg string
+			if len(unreservedGPUs) > 0 {
+				unreservedMsg = fmt.Sprintf(" (%d GPUs in use without reservation - run 'canhazgpu status' for details)", len(unreservedGPUs))
 			}
 
 			return nil, fmt.Errorf("not enough GPUs available. Requested: %d, Available: %d%s",
-				request.GPUCount, available, unauthorizedMsg)
+				request.GPUCount, available, unreservedMsg)
 		}
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (ae *AllocationEngine) GetGPUStatus(ctx context.Context) ([]GPUStatusInfo, 
 // GPUStatusInfo represents the status of a single GPU
 type GPUStatusInfo struct {
 	GPUID             int
-	Status            string // "AVAILABLE", "IN_USE", "UNAUTHORIZED", "ERROR"
+	Status            string // "AVAILABLE", "IN_USE", "UNRESERVED", "ERROR"
 	User              string
 	ReservationType   string
 	Duration          time.Duration
@@ -152,7 +152,7 @@ type GPUStatusInfo struct {
 	ExpiryTime        time.Time
 	LastReleased      time.Time
 	ValidationInfo    string
-	UnauthorizedUsers []string
+	UnreservedUsers []string
 	ProcessInfo       string
 	Error             string
 }
@@ -181,16 +181,16 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 			status.ValidationInfo = "[validated: no actual usage detected]"
 		}
 	} else {
-		// GPU has no reservation - check if it's being used without authorization
-		if IsGPUInUnauthorizedUse(usage) {
-			status.Status = "UNAUTHORIZED"
+		// GPU has no reservation - check if it's being used without reservation
+		if IsGPUInUnreservedUse(usage) {
+			status.Status = "UNRESERVED"
 
 			// Get users from processes
 			var users []string
 			for user := range usage.Users {
 				users = append(users, user)
 			}
-			status.UnauthorizedUsers = users
+			status.UnreservedUsers = users
 
 			// Build process info string
 			var processes []string

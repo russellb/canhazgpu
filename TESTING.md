@@ -133,9 +133,9 @@ nvidia-smi not available or failed: exec: "nvidia-smi": executable file not foun
 **Solution**: This is expected on non-GPU systems - test will pass
 
 ### GPU Memory Threshold Understanding
-The system uses a >100MB threshold (not ≥100MB) for unauthorized GPU usage:
+The system uses a >100MB threshold (not ≥100MB) for unreserved GPU usage:
 - GPUs using exactly 100MB: Considered authorized
-- GPUs using >100MB: Considered unauthorized
+- GPUs using >100MB: Considered unreserved
 - Integration tests log actual GPU usage for verification
 
 ### Command Failure Cleanup

@@ -107,23 +107,23 @@ func TestDetectGPUUsage_Structure(t *testing.T) {
 	_ = err // Error is acceptable if nvidia-smi not available
 }
 
-func TestGetUnauthorizedGPUs(t *testing.T) {
-	// Test the threshold logic that determines unauthorized usage
+func TestGetUnreservedGPUs(t *testing.T) {
+	// Test the threshold logic that determines unreserved usage
 	usage := map[int]*types.GPUUsage{
 		0: {GPUID: 0, MemoryMB: 50},   // Below threshold - authorized
-		1: {GPUID: 1, MemoryMB: 150},  // Above threshold - unauthorized  
+		1: {GPUID: 1, MemoryMB: 150},  // Above threshold - unreserved  
 		2: {GPUID: 2, MemoryMB: 100},  // At threshold - authorized (uses > not >=)
 		3: {GPUID: 3, MemoryMB: 0},    // No usage - authorized
 	}
 	
-	unauthorized := GetUnauthorizedGPUs(context.Background(), usage)
+	unreserved := GetUnreservedGPUs(context.Background(), usage)
 	
 	// Should find only GPU 1 (>100MB threshold, not >=)
 	expected := []int{1}
-	assert.ElementsMatch(t, expected, unauthorized)
+	assert.ElementsMatch(t, expected, unreserved)
 }
 
-func TestIsGPUInUnauthorizedUse(t *testing.T) {
+func TestIsGPUInUnreservedUse(t *testing.T) {
 	tests := []struct {
 		name     string
 		usage    *types.GPUUsage
@@ -153,7 +153,7 @@ func TestIsGPUInUnauthorizedUse(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsGPUInUnauthorizedUse(tt.usage)
+			result := IsGPUInUnreservedUse(tt.usage)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

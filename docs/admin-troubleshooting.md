@@ -165,7 +165,7 @@ Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use with
 # Check detailed status
 canhazgpu status
 
-# Look for unauthorized usage
+# Look for unreserved usage
 canhazgpu status | grep "WITHOUT RESERVATION"
 
 # Check actual GPU processes
@@ -173,7 +173,7 @@ nvidia-smi
 ```
 
 **Solutions:**
-1. **Contact unauthorized users:**
+1. **Contact unreserved users:**
    - Identify users from status output
    - Ask them to use proper reservations
 
@@ -465,7 +465,7 @@ fi
 
 UNAUTHORIZED=$(canhazgpu status | grep "WITHOUT RESERVATION" | wc -l)
 if [ $UNAUTHORIZED -gt 0 ]; then
-    echo "WARNING: $UNAUTHORIZED unauthorized GPU usage detected"
+    echo "WARNING: $UNAUTHORIZED unreserved GPU usage detected"
 fi
 ```
 

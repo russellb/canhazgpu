@@ -70,7 +70,7 @@ release:
     - **Automatic GPU allocation** with LRU (Least Recently Used) strategy
     - **Real-time validation** using nvidia-smi integration
     - **Race condition protection** with Redis-based distributed locking
-    - **Unauthorized usage detection** and conflict prevention
+    - **Unreserved usage detection** and conflict prevention
     - **Flexible reservations** supporting both command execution and manual reservations
     - **Automatic cleanup** when processes end or reservations expire
     

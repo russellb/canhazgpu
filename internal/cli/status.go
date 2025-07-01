@@ -17,7 +17,7 @@ var statusCmd = &cobra.Command{
 - Which GPUs are available
 - Which GPUs are reserved and by whom
 - GPU usage validation via nvidia-smi
-- Unauthorized usage detection`,
+- Unreserved usage detection`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runStatus(cmd.Context())
 	},
@@ -97,8 +97,8 @@ func displayGPUStatus(status gpu.GPUStatusInfo) {
 		}
 		fmt.Println()
 
-	case "UNAUTHORIZED":
-		userList := utils.FormatUserList(status.UnauthorizedUsers, 3)
+	case "UNRESERVED":
+		userList := utils.FormatUserList(status.UnreservedUsers, 3)
 		fmt.Printf("GPU %d: IN USE WITHOUT RESERVATION by %s - %s\n",
 			status.GPUID, userList, status.ProcessInfo)
 

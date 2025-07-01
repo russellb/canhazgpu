@@ -68,11 +68,11 @@ GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python
 ```
 
 - **Meaning**: Someone is using the GPU without proper reservation
-- **User identification**: Shows which user(s) are running unauthorized processes
+- **User identification**: Shows which user(s) are running unreserved processes
 - **Process details**: Lists PIDs and process names using the GPU
 - **Impact**: This GPU will be excluded from allocation until usage stops
 
-**Multiple unauthorized users:**
+**Multiple unreserved users:**
 ```bash
 GPU 4: IN USE WITHOUT RESERVATION by users alice, bob and charlie - 2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
 ```
@@ -139,7 +139,7 @@ GPU 1: IN USE by bob for 2h 30m 0s (run, last heartbeat 0h 5m 30s ago) [validate
 - Possible network issues or process problems
 - May auto-release due to heartbeat timeout
 
-#### Unauthorized Usage Patterns
+#### Unreserved Usage Patterns
 ```bash
 GPU 2: IN USE WITHOUT RESERVATION by user charlie - 12GB used by PID 12345 (python3)
 GPU 5: IN USE WITHOUT RESERVATION by user charlie - 8GB used by PID 23456 (jupyter)
@@ -169,10 +169,10 @@ From this, you can see:
 ❯ canhazgpu status
 Available GPUs: 2 out of 8
 In use with reservations: 4 GPUs  
-Unauthorized usage: 2 GPUs
+Unreserved usage: 2 GPUs
 ```
 
-Clear indication that unauthorized usage is reducing available capacity.
+Clear indication that unreserved usage is reducing available capacity.
 
 ## Advanced Monitoring
 
@@ -193,7 +193,7 @@ UNAUTHORIZED=$(echo "$STATUS" | grep "WITHOUT RESERVATION" | wc -l)
 # Export metrics
 echo "gpu_available $AVAILABLE"
 echo "gpu_in_use $IN_USE"  
-echo "gpu_unauthorized $UNAUTHORIZED"
+echo "gpu_unreserved $UNAUTHORIZED"
 echo "gpu_total $((AVAILABLE + IN_USE + UNAUTHORIZED))"
 ```
 
@@ -212,16 +212,16 @@ grep "WITHOUT RESERVATION" gpu_monitoring.log | cut -d: -f2- | sort | uniq -c
 
 ### Automated Alerts
 
-#### Unauthorized Usage Detection
+#### Unreserved Usage Detection
 ```bash
 #!/bin/bash
-# unauthorized_alert.sh
+# unreserved_alert.sh
 
 STATUS=$(canhazgpu status)
 UNAUTHORIZED=$(echo "$STATUS" | grep "WITHOUT RESERVATION")
 
 if [ -n "$UNAUTHORIZED" ]; then
-    echo "ALERT: Unauthorized GPU usage detected!"
+    echo "ALERT: Unreserved GPU usage detected!"
     echo "$UNAUTHORIZED"
     
     # Send notification (customize as needed)
@@ -286,7 +286,7 @@ def get_gpu_status():
             if 'AVAILABLE' in line:
                 status[gpu_id] = 'available'
             elif 'WITHOUT RESERVATION' in line:
-                status[gpu_id] = 'unauthorized'  
+                status[gpu_id] = 'unreserved'  
             elif 'IN USE' in line:
                 status[gpu_id] = 'reserved'
     

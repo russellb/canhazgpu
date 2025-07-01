@@ -64,7 +64,7 @@ GPU 2: AVAILABLE (last released 1h 0m 0s ago)
 GPU 3: AVAILABLE (last released 2h 0m 0s ago)
 ```
 
-**LRU Pool** (unauthorized GPU 1 excluded):
+**LRU Pool** (unreserved GPU 1 excluded):
 1. GPU 0 (4h ago) ← Available for allocation
 2. GPU 3 (2h ago) ← Available for allocation
 3. GPU 2 (1h ago) ← Available for allocation
