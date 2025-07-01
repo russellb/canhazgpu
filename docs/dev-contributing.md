@@ -642,6 +642,9 @@ Any other relevant information
 
 ## Release Process
 
+!!! info "Complete Release Guide"
+    For detailed release procedures including goreleaser usage and troubleshooting, see the [Release Process Guide](dev-release.md).
+
 ### 1. Version Numbering
 
 Follow semantic versioning (SemVer):
@@ -649,14 +652,16 @@ Follow semantic versioning (SemVer):
 - **Minor** (0.X.0): New features, backward compatible
 - **Patch** (0.0.X): Bug fixes, backward compatible
 
-### 2. Release Checklist
+### 2. Quick Release Steps
 
-- [ ] All tests pass
-- [ ] Documentation updated
-- [ ] Version number bumped
-- [ ] Changelog updated
-- [ ] Performance regression tests
-- [ ] Security review (if applicable)
+```bash
+# Tag and push
+git tag vX.Y.Z
+git push origin vX.Y.Z
+
+# Release with goreleaser
+GITHUB_TOKEN=$(gh auth token) goreleaser --clean
+```
 
 ## Community Guidelines
 

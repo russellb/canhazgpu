@@ -76,6 +76,7 @@ nav:
     - Architecture: dev-architecture.md
     - Testing: dev-testing.md
     - Contributing: dev-contributing.md
+    - Release Process: dev-release.md
 
 extra:
   social:
