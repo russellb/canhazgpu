@@ -37,7 +37,7 @@ func runRelease(ctx context.Context) error {
 	}
 
 	// Create allocation engine
-	engine := gpu.NewAllocationEngine(client)
+	engine := gpu.NewAllocationEngine(client, config)
 
 	// Release GPUs for current user
 	user := getCurrentUser()

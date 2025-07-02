@@ -31,22 +31,26 @@ func init() {
 	rootCmd.PersistentFlags().String("redis-host", "localhost", "Redis host")
 	rootCmd.PersistentFlags().Int("redis-port", 6379, "Redis port")
 	rootCmd.PersistentFlags().Int("redis-db", 0, "Redis database")
+	rootCmd.PersistentFlags().Int("memory-threshold", types.MemoryThresholdMB, "Memory threshold in MB to consider a GPU as 'in use' (default: 1024)")
 
 	viper.BindPFlag("redis.host", rootCmd.PersistentFlags().Lookup("redis-host"))
 	viper.BindPFlag("redis.port", rootCmd.PersistentFlags().Lookup("redis-port"))
 	viper.BindPFlag("redis.db", rootCmd.PersistentFlags().Lookup("redis-db"))
+	viper.BindPFlag("memory.threshold", rootCmd.PersistentFlags().Lookup("memory-threshold"))
 
 	// Set defaults
 	viper.SetDefault("redis.host", "localhost")
 	viper.SetDefault("redis.port", 6379)
 	viper.SetDefault("redis.db", 0)
+	viper.SetDefault("memory.threshold", types.MemoryThresholdMB)
 }
 
 func initConfig() {
 	config = &types.Config{
-		RedisHost: viper.GetString("redis.host"),
-		RedisPort: viper.GetInt("redis.port"),
-		RedisDB:   viper.GetInt("redis.db"),
+		RedisHost:       viper.GetString("redis.host"),
+		RedisPort:       viper.GetInt("redis.port"),
+		RedisDB:         viper.GetInt("redis.db"),
+		MemoryThreshold: viper.GetInt("memory.threshold"),
 	}
 }
 

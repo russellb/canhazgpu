@@ -116,7 +116,7 @@ func TestGetUnreservedGPUs(t *testing.T) {
 		3: {GPUID: 3, MemoryMB: 0},    // No usage - authorized
 	}
 	
-	unreserved := GetUnreservedGPUs(context.Background(), usage)
+	unreserved := GetUnreservedGPUs(context.Background(), usage, types.MemoryThresholdMB)
 	
 	// Should find only GPU 1 (>1024MB threshold, not >=
 	expected := []int{1}
@@ -153,7 +153,7 @@ func TestIsGPUInUnreservedUse(t *testing.T) {
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := IsGPUInUnreservedUse(tt.usage)
+			result := IsGPUInUnreservedUse(tt.usage, types.MemoryThresholdMB)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

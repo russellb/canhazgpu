@@ -21,10 +21,23 @@ For each GPU process, canhazgpu identifies the owner:
 3. **Username resolution**: Convert UID to username using system user database
 
 ### Memory Threshold
-GPUs with more than **1GB** of memory usage are considered "in use":
+GPUs with more than the configured memory threshold are considered "in use" (default: **1GB = 1024 MB**):
 
-- **Below 1GB**: Baseline GPU driver usage, considered available
-- **Above 1GB**: Active workload detected, GPU marked as in use
+- **Below threshold**: Baseline GPU driver usage, considered available
+- **Above threshold**: Active workload detected, GPU marked as in use
+
+The threshold can be customized using the `--memory-threshold` flag:
+
+```bash
+# Use a lower threshold (512 MB) to detect lighter GPU usage
+canhazgpu status --memory-threshold 512
+
+# Use a higher threshold (2 GB) to ignore smaller allocations
+canhazgpu status --memory-threshold 2048
+
+# Apply to allocation commands as well
+canhazgpu run --memory-threshold 512 --gpus 1 -- python train.py
+```
 
 ## Validation Output
 

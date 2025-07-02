@@ -16,6 +16,29 @@ Commands:
   web      Start a web server for GPU status monitoring
 ```
 
+## Global Flags
+
+All commands support these global configuration flags:
+
+- `--redis-host`: Redis server hostname (default: localhost)
+- `--redis-port`: Redis server port (default: 6379)
+- `--redis-db`: Redis database number (default: 0)
+- `--memory-threshold`: Memory threshold in MB to consider a GPU as "in use" (default: 1024)
+
+**Examples:**
+```bash
+# Use a different Redis server
+canhazgpu status --redis-host redis.example.com --redis-port 6380
+
+# Set a lower memory threshold (512 MB instead of 1024 MB)
+canhazgpu status --memory-threshold 512
+
+# Combine flags
+canhazgpu run --memory-threshold 2048 --gpus 1 -- python train.py
+```
+
+The `--memory-threshold` flag controls when a GPU is considered "in use without reservation". GPUs using more than this amount of memory will be excluded from allocation and flagged as unreserved usage.
+
 ## admin
 
 Initialize and configure the GPU pool.
@@ -45,10 +68,23 @@ canhazgpu admin --gpus 4 --force
 Show current GPU allocation status with automatic validation.
 
 ```bash
-canhazgpu status
+canhazgpu status [--memory-threshold <mb>]
 ```
 
-**No options required** - validation is always enabled.
+**Options:**
+- `--memory-threshold`: Override the default memory threshold for unreserved usage detection (default: 1024 MB)
+
+**Examples:**
+```bash
+# Standard status check
+canhazgpu status
+
+# Use a lower threshold to detect lighter GPU usage
+canhazgpu status --memory-threshold 512
+
+# Use a higher threshold to ignore small allocations
+canhazgpu status --memory-threshold 2048
+```
 
 **Example Output:**
 ```bash
@@ -73,11 +109,12 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 Reserve GPUs and run a command with automatic cleanup.
 
 ```bash
-canhazgpu run --gpus <count> -- <command>
+canhazgpu run [--gpus <count>] [--memory-threshold <mb>] -- <command>
 ```
 
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)
+- `--memory-threshold`: Override the default memory threshold for unreserved usage detection (default: 1024 MB)
 
 **Examples:**
 ```bash
@@ -111,12 +148,13 @@ Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use with
 Manually reserve GPUs for a specified duration.
 
 ```bash
-canhazgpu reserve [--gpus <count>] [--duration <time>]
+canhazgpu reserve [--gpus <count>] [--duration <time>] [--memory-threshold <mb>]
 ```
 
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)
 - `--duration`: Duration to reserve GPUs (default: 8h)
+- `--memory-threshold`: Override the default memory threshold for unreserved usage detection (default: 1024 MB)
 
 **Duration Formats:**
 - `30m`: 30 minutes

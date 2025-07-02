@@ -53,7 +53,7 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	// Create server
 	server := &webServer{
 		client: client,
-		engine: gpu.NewAllocationEngine(client),
+		engine: gpu.NewAllocationEngine(client, config),
 	}
 
 	// Set up routes

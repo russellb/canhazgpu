@@ -52,7 +52,7 @@ func runReport(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get current GPU states for in-progress usage
-	ae := gpu.NewAllocationEngine(client)
+	ae := gpu.NewAllocationEngine(client, config)
 	currentStatuses, err := ae.GetGPUStatus(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current GPU status: %v", err)

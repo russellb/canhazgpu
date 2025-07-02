@@ -13,10 +13,14 @@ import (
 
 type AllocationEngine struct {
 	client *redis_client.Client
+	config *types.Config
 }
 
-func NewAllocationEngine(client *redis_client.Client) *AllocationEngine {
-	return &AllocationEngine{client: client}
+func NewAllocationEngine(client *redis_client.Client, config *types.Config) *AllocationEngine {
+	return &AllocationEngine{
+		client: client,
+		config: config,
+	}
 }
 
 // AllocateGPUs allocates GPUs using LRU strategy with race condition protection
@@ -28,7 +32,7 @@ func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.All
 	}
 
 	// Get list of unreserved GPUs
-	unreservedGPUs := GetUnreservedGPUs(ctx, usage)
+	unreservedGPUs := GetUnreservedGPUs(ctx, usage, ae.config.MemoryThreshold)
 
 	// Acquire allocation lock
 	if err := ae.client.AcquireAllocationLock(ctx); err != nil {
@@ -170,7 +174,7 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 		status.ExpiryTime = state.ExpiryTime.ToTime()
 
 		// Build validation info
-		if usage != nil && usage.MemoryMB > types.MemoryThresholdMB {
+		if usage != nil && usage.MemoryMB > ae.config.MemoryThreshold {
 			if len(usage.Processes) > 0 {
 				status.ValidationInfo = fmt.Sprintf("[validated: %dMB, %d processes]",
 					usage.MemoryMB, len(usage.Processes))
@@ -182,7 +186,7 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 		}
 	} else {
 		// GPU has no reservation - check if it's being used without reservation
-		if IsGPUInUnreservedUse(usage) {
+		if IsGPUInUnreservedUse(usage, ae.config.MemoryThreshold) {
 			status.Status = "UNRESERVED"
 
 			// Get users from processes

@@ -124,9 +124,10 @@ type UsageRecord struct {
 
 // Config represents the application configuration
 type Config struct {
-	RedisHost string
-	RedisPort int
-	RedisDB   int
+	RedisHost       string
+	RedisPort       int
+	RedisDB         int
+	MemoryThreshold int
 }
 
 // Constants

@@ -38,7 +38,7 @@ func runStatus(ctx context.Context) error {
 	}
 
 	// Create allocation engine and get status
-	engine := gpu.NewAllocationEngine(client)
+	engine := gpu.NewAllocationEngine(client, config)
 
 	// Clean up expired reservations first
 	if err := engine.CleanupExpiredReservations(ctx); err != nil {

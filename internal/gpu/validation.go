@@ -237,11 +237,11 @@ func getProcessOwnerFromPS(pid int) (string, error) {
 }
 
 // GetUnreservedGPUs returns list of GPU IDs that are in use without proper reservations
-func GetUnreservedGPUs(ctx context.Context, usage map[int]*types.GPUUsage) []int {
+func GetUnreservedGPUs(ctx context.Context, usage map[int]*types.GPUUsage, memoryThreshold int) []int {
 	var unreserved []int
 
 	for gpuID, gpuUsage := range usage {
-		if gpuUsage.MemoryMB > types.MemoryThresholdMB {
+		if gpuUsage.MemoryMB > memoryThreshold {
 			unreserved = append(unreserved, gpuID)
 		}
 	}
@@ -250,6 +250,6 @@ func GetUnreservedGPUs(ctx context.Context, usage map[int]*types.GPUUsage) []int
 }
 
 // IsGPUInUnreservedUse checks if a specific GPU is in unreserved use
-func IsGPUInUnreservedUse(usage *types.GPUUsage) bool {
-	return usage != nil && usage.MemoryMB > types.MemoryThresholdMB
+func IsGPUInUnreservedUse(usage *types.GPUUsage, memoryThreshold int) bool {
+	return usage != nil && usage.MemoryMB > memoryThreshold
 }

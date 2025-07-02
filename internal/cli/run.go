@@ -69,7 +69,7 @@ func runRun(ctx context.Context, gpuCount int, command []string) error {
 	}
 
 	// Create allocation engine
-	engine := gpu.NewAllocationEngine(client)
+	engine := gpu.NewAllocationEngine(client, config)
 
 	// Create allocation request
 	user := getCurrentUser()

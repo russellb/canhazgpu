@@ -16,10 +16,11 @@ func TestAllocationEngine_Structure(t *testing.T) {
 		RedisHost: "localhost",
 		RedisPort: 6379,
 		RedisDB:   15,
+		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
 
-	engine := NewAllocationEngine(redisClient)
+	engine := NewAllocationEngine(redisClient, config)
 	assert.NotNil(t, engine)
 	assert.NotNil(t, engine.client)
 }
@@ -36,10 +37,11 @@ func TestAllocationEngine_GetGPUStatus_Structure(t *testing.T) {
 		RedisHost: "localhost",
 		RedisPort: 6379,
 		RedisDB:   15,
+		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
 
-	engine := NewAllocationEngine(redisClient)
+	engine := NewAllocationEngine(redisClient, config)
 	
 	t.Log("Attempting to get GPU status (may timeout if Redis unavailable)")
 	// This should not panic even if Redis is empty or GPU count not set
@@ -69,10 +71,11 @@ func TestAllocationEngine_AllocateGPUs_Structure(t *testing.T) {
 		RedisHost: "localhost",
 		RedisPort: 6379,
 		RedisDB:   15,
+		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
 
-	engine := NewAllocationEngine(redisClient)
+	engine := NewAllocationEngine(redisClient, config)
 	
 	// Test with valid allocation request structure
 	request := &types.AllocationRequest{
@@ -112,10 +115,11 @@ func TestAllocationEngine_ReleaseGPUs_Structure(t *testing.T) {
 		RedisHost: "localhost",
 		RedisPort: 6379,
 		RedisDB:   15,
+		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
 
-	engine := NewAllocationEngine(redisClient)
+	engine := NewAllocationEngine(redisClient, config)
 	
 	t.Log("Attempting to release GPUs for test user")
 	// Test releasing GPUs for a user (should not panic even if no reservations exist)

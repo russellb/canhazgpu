@@ -67,6 +67,10 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 
 # Generate reservation report for last 7 days
 ./build/canhazgpu report --days 7
+
+# Customize memory threshold for GPU usage detection (default: 1024 MB)
+./build/canhazgpu status --memory-threshold 512
+./build/canhazgpu run --memory-threshold 2048 --gpus 1 -- python train.py
 ```
 
 ## Dependencies
@@ -112,7 +116,7 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 - `DetectGPUUsage()` in `internal/gpu/validation.go`: Uses nvidia-smi to query actual GPU processes and memory usage
 - `GetProcessOwner()` in `internal/gpu/validation.go`: Identifies process owners via /proc filesystem or ps command
 - Unreserved usage detection excludes GPUs from allocation pool automatically
-- Memory threshold of 1GB determines if GPU is considered "in use"
+- Configurable memory threshold (default: 1024 MB) determines if GPU is considered "in use" via --memory-threshold flag
 
 ### Allocation Strategy
 
