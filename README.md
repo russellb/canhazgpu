@@ -81,7 +81,7 @@ For detailed usage, configuration, and administration:
 - **[Installation Guide](http://blog.russellbryant.net/canhazgpu/installation/)** - Setup and dependencies
 - **[Quick Start](http://blog.russellbryant.net/canhazgpu/quickstart/)** - Get up and running
 - **[Usage Guide](http://blog.russellbryant.net/canhazgpu/usage-run/)** - Detailed command examples
-- **[Administration](http://blog.russellbryant.net/canhazgpu/admin-setup/)** - Production setup and monitoring
+- **[Configuration](http://blog.russellbryant.net/canhazgpu/configuration/)** - Configuration options and settings
 - **[Troubleshooting](http://blog.russellbryant.net/canhazgpu/admin-troubleshooting/)** - Common issues and solutions
 
 ## Requirements

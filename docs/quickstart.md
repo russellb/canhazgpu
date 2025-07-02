@@ -246,4 +246,4 @@ For more detailed troubleshooting, see the [Troubleshooting Guide](admin-trouble
 - **[Configuration](configuration.md)** - Set up defaults and customize behavior
 - **[Commands Overview](commands.md)** - Learn all available commands in detail
 - **[Usage Patterns](usage-run.md)** - Advanced usage patterns and examples
-- **[Administration](admin-setup.md)** - Configure for production use
+- **[Installation](installation.md)** - Install dependencies and configure

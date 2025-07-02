@@ -69,8 +69,8 @@ nav:
     - GPU Validation: features-validation.md
     - Unreserved Usage Detection: features-unreserved.md
     - LRU Allocation: features-lru.md
-  - Administration:
-    - Setup & Configuration: admin-setup.md
+  - Configuration:
+    - Configuration Guide: configuration.md
     - Troubleshooting: admin-troubleshooting.md
   - Development:
     - Architecture: dev-architecture.md

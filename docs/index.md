@@ -59,7 +59,7 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 2. **[Quick start guide](quickstart.md)** - Get up and running in minutes  
 3. **[Configuration](configuration.md)** - Set defaults and customize behavior
 4. **[Commands overview](commands.md)** - Learn all available commands
-5. **[Administration setup](admin-setup.md)** - Configure for your environment
+5. **[Administration setup](installation.md)** - Configure for your environment
 
 ## Use Cases
 
@@ -87,7 +87,7 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 - **[LRU Allocation](features-lru.md)** - Fair GPU distribution strategy
 
 ### Administration
-- **[Setup Guide](admin-setup.md)** - Production deployment
+- **[Installation Guide](installation.md)** - Dependencies and installation
 - **[Troubleshooting](admin-troubleshooting.md)** - Common issues and solutions
 
 ### Development

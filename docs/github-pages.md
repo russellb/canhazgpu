@@ -117,7 +117,7 @@ nav:
     - Unauthorized Usage Detection: features-unauthorized.md
     - LRU Allocation: features-lru.md
   - Administration:
-    - Setup & Configuration: admin-setup.md
+    - Setup & Configuration: installation.md
     - Troubleshooting: admin-troubleshooting.md
   - Development:
     - Architecture: dev-architecture.md
