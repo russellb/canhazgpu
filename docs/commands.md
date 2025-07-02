@@ -116,11 +116,8 @@ canhazgpu admin --gpus 4 --force
 Show current GPU allocation status with automatic validation.
 
 ```bash
-canhazgpu status [--memory-threshold <mb>]
+canhazgpu status
 ```
-
-**Options:**
-- `--memory-threshold`: Override the default memory threshold for unreserved usage detection (default: 1024 MB)
 
 **Examples:**
 ```bash
@@ -133,6 +130,9 @@ canhazgpu status --memory-threshold 512
 # Use a higher threshold to ignore small allocations
 canhazgpu status --memory-threshold 2048
 ```
+
+!!! note "Global Memory Threshold"
+    The `--memory-threshold` flag is a global option that affects GPU usage detection across all commands. It can be set in your [configuration file](configuration.md) or used with any command that performs GPU validation.
 
 **Example Output:**
 ```bash
@@ -157,12 +157,19 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 Reserve GPUs and run a command with automatic cleanup.
 
 ```bash
-canhazgpu run [--gpus <count>] [--memory-threshold <mb>] -- <command>
+canhazgpu run [--gpus <count>] [--timeout <duration>] -- <command>
 ```
 
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)
-- `--memory-threshold`: Override the default memory threshold for unreserved usage detection (default: 1024 MB)
+- `--timeout`: Maximum time to run command before killing it (default: none)
+
+**Timeout formats:**
+- `30s` (30 seconds)
+- `30m` (30 minutes)
+- `2h` (2 hours)  
+- `1d` (1 day)
+- `0.5h` (30 minutes with decimal)
 
 **Examples:**
 ```bash
@@ -174,6 +181,12 @@ canhazgpu run --gpus 2 -- python -m torch.distributed.launch train.py
 
 # Complex command with arguments
 canhazgpu run --gpus 1 -- python train.py --batch-size 32 --epochs 100
+
+# Training with timeout to prevent runaway processes
+canhazgpu run --gpus 1 --timeout 2h -- python train.py
+
+# Short timeout for testing
+canhazgpu run --gpus 1 --timeout 30m -- python test_model.py
 ```
 
 **Behavior:**
@@ -196,13 +209,12 @@ Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use with
 Manually reserve GPUs for a specified duration.
 
 ```bash
-canhazgpu reserve [--gpus <count>] [--duration <time>] [--memory-threshold <mb>]
+canhazgpu reserve [--gpus <count>] [--duration <time>]
 ```
 
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)
 - `--duration`: Duration to reserve GPUs (default: 8h)
-- `--memory-threshold`: Override the default memory threshold for unreserved usage detection (default: 1024 MB)
 
 **Duration Formats:**
 - `30m`: 30 minutes

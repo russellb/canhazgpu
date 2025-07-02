@@ -59,6 +59,9 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 # Run command with GPU reservation
 ./build/canhazgpu run --gpus 1 -- python train.py
 
+# Run command with timeout to prevent runaway processes
+./build/canhazgpu run --gpus 1 --timeout 2h -- python train.py
+
 # Manual GPU reservation
 ./build/canhazgpu reserve --gpus 2 --duration 4h
 

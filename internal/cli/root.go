@@ -7,6 +7,7 @@ import (
 
 	"github.com/russellb/canhazgpu/internal/types"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -74,6 +75,9 @@ func initConfig() {
 		fmt.Fprintf(os.Stderr, "Using config file: %s\n", viper.ConfigFileUsed())
 	}
 
+	// Bind all flags to viper for automatic config file support
+	bindAllFlags()
+
 	config = &types.Config{
 		RedisHost:       viper.GetString("redis.host"),
 		RedisPort:       viper.GetInt("redis.port"),
@@ -95,6 +99,32 @@ func getConfig() *types.Config {
 		initConfig()
 	}
 	return config
+}
+
+// bindAllFlags automatically binds all command flags to viper
+// This allows config files to override default values for any flag
+func bindAllFlags() {
+	// Walk through all commands and bind their flags
+	walkCommands(rootCmd, func(cmd *cobra.Command) {
+		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			// Create viper key from command and flag name
+			viperKey := flag.Name
+			if cmd.Name() != "canhazgpu" { // Don't prefix root command flags
+				viperKey = cmd.Name() + "." + flag.Name
+			}
+			
+			// Bind flag to viper
+			viper.BindPFlag(viperKey, flag)
+		})
+	})
+}
+
+// walkCommands recursively walks through all commands
+func walkCommands(cmd *cobra.Command, fn func(*cobra.Command)) {
+	fn(cmd)
+	for _, child := range cmd.Commands() {
+		walkCommands(child, fn)
+	}
 }
 
 func getCurrentUser() string {

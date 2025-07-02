@@ -5,10 +5,22 @@ The `run` command is the most common way to use canhazgpu. It reserves GPUs, run
 ## Basic Usage
 
 ```bash
-canhazgpu run --gpus <count> -- <command>
+canhazgpu run --gpus <count> [--timeout <duration>] -- <command>
 ```
 
 The `--` separator is important - it tells canhazgpu where its options end and your command begins.
+
+### Options
+
+- `--gpus, -g`: Number of GPUs to reserve (required)
+- `--timeout, -t`: Maximum time to run command before killing it (optional)
+
+Timeout formats supported:
+- `30s` (30 seconds)
+- `30m` (30 minutes)
+- `2h` (2 hours)  
+- `1d` (1 day)
+- `0.5h` (30 minutes with decimal)
 
 !!! tip "Bash Completion"
     For tab completion to work with commands after `--`, make sure you have installed the canhazgpu bash completion script. See the [Installation Guide](installation.md#bash-completion) for details.
@@ -80,6 +92,27 @@ canhazgpu run --gpus 4 -- python long_training.py --checkpoint-every 1000
 nohup canhazgpu run --gpus 1 -- python process_data.py > output.log 2>&1 &
 ```
 
+### Commands with Timeout
+```bash
+# Prevent runaway processes - kill after 2 hours
+canhazgpu run --gpus 1 --timeout 2h -- python train.py
+
+# Short timeout for testing
+canhazgpu run --gpus 1 --timeout 30m -- python test_model.py
+
+# Daily batch job with 12-hour limit
+canhazgpu run --gpus 2 --timeout 12h -- python daily_processing.py
+```
+
+!!! tip "Default Timeout Configuration"
+    You can set a default timeout in your [configuration file](configuration.md) to avoid specifying it every time:
+    
+    ```yaml
+    # ~/.canhazgpu.yaml
+    run:
+      timeout: "2h"  # Default 2-hour timeout for all run commands
+    ```
+
 ### Complex Commands
 ```bash
 # Multiple commands in sequence
@@ -148,8 +181,8 @@ This indicates high contention. Try again in a few seconds.
 # Save intermediate results
 canhazgpu run --gpus 2 -- python train.py --save-every 100 --resume-from checkpoint.pth
 
-# Implement timeout handling
-canhazgpu run --gpus 1 -- timeout 3600 python train.py  # 1 hour timeout
+# Use built-in timeout instead of system timeout
+canhazgpu run --gpus 1 --timeout 1h -- python train.py
 ```
 
 ## Integration with Job Schedulers

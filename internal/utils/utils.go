@@ -44,6 +44,15 @@ func ParseDuration(duration string) (time.Duration, error) {
 	}
 
 	// Handle integer values
+	if strings.HasSuffix(duration, "s") {
+		secondsStr := strings.TrimSuffix(duration, "s")
+		seconds, err := strconv.Atoi(secondsStr)
+		if err != nil {
+			return 0, fmt.Errorf("invalid duration format: %s", duration)
+		}
+		return time.Duration(seconds) * time.Second, nil
+	}
+
 	if strings.HasSuffix(duration, "m") {
 		minutesStr := strings.TrimSuffix(duration, "m")
 		minutes, err := strconv.Atoi(minutesStr)
@@ -71,7 +80,7 @@ func ParseDuration(duration string) (time.Duration, error) {
 		return time.Duration(days) * 24 * time.Hour, nil
 	}
 
-	return 0, fmt.Errorf("invalid duration format: %s (use formats like 30m, 2h, 1d)", duration)
+	return 0, fmt.Errorf("invalid duration format: %s (use formats like 30s, 30m, 2h, 1d)", duration)
 }
 
 // FormatDuration formats a duration into human readable format
