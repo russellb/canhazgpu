@@ -192,6 +192,11 @@ func getProcessOwner(pid int) (string, error) {
 	return getProcessOwnerFromPS(pid)
 }
 
+// GetProcessOwner is the exported version for tests
+func GetProcessOwner(pid int) (string, error) {
+	return getProcessOwner(pid)
+}
+
 // getProcessOwnerFromProc reads process owner from /proc filesystem
 func getProcessOwnerFromProc(pid int) (string, error) {
 	statusFile := fmt.Sprintf("/proc/%d/status", pid)
@@ -253,3 +258,4 @@ func GetUnreservedGPUs(ctx context.Context, usage map[int]*types.GPUUsage, memor
 func IsGPUInUnreservedUse(usage *types.GPUUsage, memoryThreshold int) bool {
 	return usage != nil && usage.MemoryMB > memoryThreshold
 }
+

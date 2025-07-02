@@ -33,7 +33,7 @@ deps:
 build: deps
 	@echo "Building $(BINARY_NAME)"
 	@mkdir -p $(BUILD_DIR)
-	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
+	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) main.go
 
 .PHONY: install
 install: build

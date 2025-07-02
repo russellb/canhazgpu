@@ -159,6 +159,7 @@ type GPUStatusInfo struct {
 	UnreservedUsers []string
 	ProcessInfo       string
 	Error             string
+	ModelInfo         *ModelInfo `json:"model_info,omitempty"` // Detected model information
 }
 
 func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usage *types.GPUUsage) GPUStatusInfo {
@@ -217,6 +218,11 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 				status.ValidationInfo = fmt.Sprintf("[validated: %dMB used]", usage.MemoryMB)
 			}
 		}
+	}
+
+	// Detect model information from processes if available
+	if usage != nil && len(usage.Processes) > 0 {
+		status.ModelInfo = DetectModelFromProcesses(usage.Processes)
 	}
 
 	return status
