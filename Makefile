@@ -46,6 +46,16 @@ clean:
 	@echo "Cleaning build artifacts"
 	@rm -rf $(BUILD_DIR)
 
+.PHONY: lint
+lint:
+	@echo "Running lint"
+	@go run github.com/golangci/golangci-lint/cmd/golangci-lint run
+
+.PHONY: fmt
+fmt:
+	@echo "Running fmt"
+	@go fmt ./...
+
 .PHONY: test
 test:
 	@echo "Running tests"
