@@ -1,3 +1,5 @@
+version: 2
+
 project_name: canhazgpu
 
 before:
@@ -5,7 +7,8 @@ before:
     - go mod tidy
 
 builds:
-  - env:
+  - id: default
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -22,7 +25,7 @@ builds:
     binary: canhazgpu
 
 archives:
-  - format: tar.gz
+  - id: default
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -30,9 +33,7 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
+    wrap_in_directory: false
     files:
       - autocomplete_canhazgpu.sh
       - README.md
@@ -42,7 +43,7 @@ checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
@@ -51,8 +52,9 @@ changelog:
       - '^docs:'
       - '^test:'
 
-brews:
-  - skip_upload: true
+# Homebrew formula disabled
+# brews:
+#   - skip_upload: true
 
 release:
   github:
