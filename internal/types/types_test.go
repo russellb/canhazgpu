@@ -63,7 +63,7 @@ func TestFlexibleTime_UnmarshalJSON(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.True(t, tt.expected.Equal(ft.Time), 
+			assert.True(t, tt.expected.Equal(ft.Time),
 				"Expected %v, got %v", tt.expected, ft.Time)
 		})
 	}
@@ -84,7 +84,7 @@ func TestFlexibleTime_ToTime(t *testing.T) {
 
 func TestGPUState_JSONSerialization(t *testing.T) {
 	originalTime := time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
-	
+
 	state := &GPUState{
 		User:          "testuser",
 		StartTime:     FlexibleTime{Time: originalTime},
@@ -122,7 +122,7 @@ func TestAllocationRequest_Validation(t *testing.T) {
 			name: "Valid run-type request",
 			request: &AllocationRequest{
 				GPUCount:        2,
-				User:           "testuser",
+				User:            "testuser",
 				ReservationType: "run",
 			},
 			valid: true,
@@ -131,9 +131,9 @@ func TestAllocationRequest_Validation(t *testing.T) {
 			name: "Valid manual-type request",
 			request: &AllocationRequest{
 				GPUCount:        1,
-				User:           "testuser", 
+				User:            "testuser",
 				ReservationType: "manual",
-				ExpiryTime:     &time.Time{},
+				ExpiryTime:      &time.Time{},
 			},
 			valid: true,
 		},
@@ -141,7 +141,7 @@ func TestAllocationRequest_Validation(t *testing.T) {
 			name: "Invalid GPU count",
 			request: &AllocationRequest{
 				GPUCount:        0,
-				User:           "testuser",
+				User:            "testuser",
 				ReservationType: "run",
 			},
 			valid: false,
@@ -150,7 +150,7 @@ func TestAllocationRequest_Validation(t *testing.T) {
 			name: "Empty user",
 			request: &AllocationRequest{
 				GPUCount:        1,
-				User:           "",
+				User:            "",
 				ReservationType: "run",
 			},
 			valid: false,
@@ -159,7 +159,7 @@ func TestAllocationRequest_Validation(t *testing.T) {
 			name: "Invalid reservation type",
 			request: &AllocationRequest{
 				GPUCount:        1,
-				User:           "testuser",
+				User:            "testuser",
 				ReservationType: "invalid",
 			},
 			valid: false,
@@ -180,11 +180,11 @@ func TestAllocationRequest_Validation(t *testing.T) {
 
 func TestConfig_Defaults(t *testing.T) {
 	config := &Config{}
-	
+
 	// Should have sensible defaults when not set
 	assert.Equal(t, "", config.RedisHost) // Will be set by viper
-	assert.Equal(t, 0, config.RedisPort)   // Will be set by viper  
-	assert.Equal(t, 0, config.RedisDB)     // Will be set by viper
+	assert.Equal(t, 0, config.RedisPort)  // Will be set by viper
+	assert.Equal(t, 0, config.RedisDB)    // Will be set by viper
 }
 
 func TestConstants(t *testing.T) {
@@ -192,7 +192,7 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "canhazgpu:", RedisKeyPrefix)
 	assert.Equal(t, "canhazgpu:gpu_count", RedisKeyGPUCount)
 	assert.Equal(t, "canhazgpu:allocation_lock", RedisKeyAllocationLock)
-	
+
 	// Verify timing constants are reasonable
 	assert.Equal(t, 60*time.Second, HeartbeatInterval)
 	assert.Equal(t, 15*time.Minute, HeartbeatTimeout)

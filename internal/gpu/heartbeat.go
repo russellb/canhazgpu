@@ -142,12 +142,12 @@ func (hm *HeartbeatManager) releaseGPUs() {
 				Duration:        duration,
 				ReservationType: state.Type,
 			}
-			
+
 			if err := hm.client.RecordUsageHistory(ctx, usageRecord); err != nil {
 				// Log error but don't fail the release
 				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history: %v\n", err)
 			}
-			
+
 			// Release the GPU
 			availableState := &types.GPUState{
 				LastReleased: types.FlexibleTime{now},

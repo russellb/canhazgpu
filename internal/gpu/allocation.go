@@ -90,12 +90,12 @@ func (ae *AllocationEngine) ReleaseGPUs(ctx context.Context, user string) ([]int
 				Duration:        duration,
 				ReservationType: state.Type,
 			}
-			
+
 			if err := ae.client.RecordUsageHistory(ctx, usageRecord); err != nil {
 				// Log error but don't fail the release
 				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history: %v\n", err)
 			}
-			
+
 			// Mark as available with last_released timestamp
 			availableState := &types.GPUState{
 				LastReleased: types.FlexibleTime{now},
@@ -147,19 +147,19 @@ func (ae *AllocationEngine) GetGPUStatus(ctx context.Context) ([]GPUStatusInfo, 
 
 // GPUStatusInfo represents the status of a single GPU
 type GPUStatusInfo struct {
-	GPUID             int
-	Status            string // "AVAILABLE", "IN_USE", "UNRESERVED", "ERROR"
-	User              string
-	ReservationType   string
-	Duration          time.Duration
-	LastHeartbeat     time.Time
-	ExpiryTime        time.Time
-	LastReleased      time.Time
-	ValidationInfo    string
+	GPUID           int
+	Status          string // "AVAILABLE", "IN_USE", "UNRESERVED", "ERROR"
+	User            string
+	ReservationType string
+	Duration        time.Duration
+	LastHeartbeat   time.Time
+	ExpiryTime      time.Time
+	LastReleased    time.Time
+	ValidationInfo  string
 	UnreservedUsers []string
-	ProcessInfo       string
-	Error             string
-	ModelInfo         *ModelInfo `json:"model_info,omitempty"` // Detected model information
+	ProcessInfo     string
+	Error           string
+	ModelInfo       *ModelInfo `json:"model_info,omitempty"` // Detected model information
 }
 
 func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usage *types.GPUUsage) GPUStatusInfo {
@@ -273,7 +273,7 @@ func (ae *AllocationEngine) CleanupExpiredReservations(ctx context.Context) erro
 				Duration:        duration,
 				ReservationType: state.Type,
 			}
-			
+
 			if err := ae.client.RecordUsageHistory(ctx, usageRecord); err != nil {
 				// Log error but don't fail the cleanup
 				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history for %s: %v\n", reason, err)

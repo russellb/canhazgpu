@@ -39,7 +39,7 @@ func TestGetProcessOwner(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			user, err := getProcessOwner(tt.pid)
-			
+
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Empty(t, user)
@@ -63,10 +63,10 @@ func TestDetectGPUUsage_Integration(t *testing.T) {
 
 	t.Log("Starting nvidia-smi integration test - may take 5-10 seconds or timeout")
 	t.Log("This test requires nvidia-smi command to be available on the system")
-	
+
 	// This test requires nvidia-smi to be available
 	usage, err := DetectGPUUsage(context.Background())
-	
+
 	// If nvidia-smi is not available, the function should handle it gracefully
 	if err != nil {
 		t.Logf("nvidia-smi not available or failed: %v (this is expected on non-GPU systems)", err)
@@ -74,20 +74,20 @@ func TestDetectGPUUsage_Integration(t *testing.T) {
 		assert.Empty(t, usage)
 		return
 	}
-	
+
 	t.Log("nvidia-smi detection completed successfully")
 
 	// If successful, usage should be a valid map
 	assert.NotNil(t, usage)
-	
+
 	// Each GPU usage should have valid data
 	for gpuID, gpuUsage := range usage {
 		assert.GreaterOrEqual(t, gpuID, 0)
 		assert.Equal(t, gpuID, gpuUsage.GPUID)
 		assert.GreaterOrEqual(t, gpuUsage.MemoryMB, 0) // Memory can be 0 or more
-		
+
 		t.Logf("GPU %d: %dMB memory usage, %d processes", gpuID, gpuUsage.MemoryMB, len(gpuUsage.Processes))
-		
+
 		// Each process should have valid data
 		for _, proc := range gpuUsage.Processes {
 			assert.Greater(t, proc.PID, 0)
@@ -100,24 +100,24 @@ func TestDetectGPUUsage_Integration(t *testing.T) {
 func TestDetectGPUUsage_Structure(t *testing.T) {
 	// Test that DetectGPUUsage function exists and can be called
 	usage, err := DetectGPUUsage(context.Background())
-	
+
 	// Don't check for success since nvidia-smi might not be available in test environment
 	// Just verify it doesn't panic and returns proper types
 	assert.NotNil(t, usage) // Should return empty map, not nil
-	_ = err // Error is acceptable if nvidia-smi not available
+	_ = err                 // Error is acceptable if nvidia-smi not available
 }
 
 func TestGetUnreservedGPUs(t *testing.T) {
 	// Test the threshold logic that determines unreserved usage
 	usage := map[int]*types.GPUUsage{
 		0: {GPUID: 0, MemoryMB: 512},  // Below threshold - authorized
-		1: {GPUID: 1, MemoryMB: 1536}, // Above threshold - unreserved  
+		1: {GPUID: 1, MemoryMB: 1536}, // Above threshold - unreserved
 		2: {GPUID: 2, MemoryMB: 1024}, // At threshold - authorized (uses > not >=)
 		3: {GPUID: 3, MemoryMB: 0},    // No usage - authorized
 	}
-	
+
 	unreserved := GetUnreservedGPUs(context.Background(), usage, types.MemoryThresholdMB)
-	
+
 	// Should find only GPU 1 (>1024MB threshold, not >=
 	expected := []int{1}
 	assert.ElementsMatch(t, expected, unreserved)
@@ -140,7 +140,7 @@ func TestIsGPUInUnreservedUse(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "At threshold", 
+			name:     "At threshold",
 			usage:    &types.GPUUsage{MemoryMB: types.MemoryThresholdMB},
 			expected: false, // Uses > not >=, so exactly 1024MB is authorized
 		},
@@ -150,7 +150,7 @@ func TestIsGPUInUnreservedUse(t *testing.T) {
 			expected: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := IsGPUInUnreservedUse(tt.usage, types.MemoryThresholdMB)

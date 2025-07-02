@@ -94,15 +94,15 @@ func (ar *AllocationRequest) Validate() error {
 	if ar.GPUCount <= 0 {
 		return fmt.Errorf("gpu count must be positive, got %d", ar.GPUCount)
 	}
-	
+
 	if ar.User == "" {
 		return fmt.Errorf("user cannot be empty")
 	}
-	
+
 	if ar.ReservationType != ReservationTypeRun && ar.ReservationType != ReservationTypeManual {
 		return fmt.Errorf("invalid reservation type: %s", ar.ReservationType)
 	}
-	
+
 	return nil
 }
 
@@ -114,12 +114,12 @@ type AllocationResult struct {
 
 // UsageRecord represents a historical GPU usage record
 type UsageRecord struct {
-	User          string       `json:"user"`
-	GPUID         int          `json:"gpu_id"`
-	StartTime     FlexibleTime `json:"start_time"`
-	EndTime       FlexibleTime `json:"end_time"`
-	Duration      float64      `json:"duration_seconds"`
-	ReservationType string     `json:"reservation_type"`
+	User            string       `json:"user"`
+	GPUID           int          `json:"gpu_id"`
+	StartTime       FlexibleTime `json:"start_time"`
+	EndTime         FlexibleTime `json:"end_time"`
+	Duration        float64      `json:"duration_seconds"`
+	ReservationType string       `json:"reservation_type"`
 }
 
 // Config represents the application configuration

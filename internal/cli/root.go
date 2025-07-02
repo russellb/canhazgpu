@@ -112,7 +112,7 @@ func bindAllFlags() {
 			if cmd.Name() != "canhazgpu" { // Don't prefix root command flags
 				viperKey = cmd.Name() + "." + flag.Name
 			}
-			
+
 			// Bind flag to viper
 			viper.BindPFlag(viperKey, flag)
 		})

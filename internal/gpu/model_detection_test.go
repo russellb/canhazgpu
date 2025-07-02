@@ -203,7 +203,6 @@ func TestExtractProviderFromModel(t *testing.T) {
 	}
 }
 
-
 func TestGetParentPID(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -10,15 +10,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
 	"github.com/russellb/canhazgpu/internal/types"
+	"github.com/spf13/cobra"
 )
 
 var (
-	webPort   int
-	webHost   string
+	webPort int
+	webHost string
 )
 
 //go:embed static/*
@@ -39,7 +39,7 @@ func init() {
 
 func runWeb(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-	
+
 	// Initialize Redis client
 	config := getConfig()
 	client := redis_client.NewClient(config)
@@ -959,36 +959,36 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 
 	// Convert to JSON-friendly format
 	type jsonGPUStatus struct {
-		GPUID             int               `json:"gpu_id"`
-		Status            string            `json:"status"`
-		User              string            `json:"user,omitempty"`
-		ReservationType   string            `json:"reservation_type,omitempty"`
-		Duration          int64             `json:"duration,omitempty"`
-		LastHeartbeat     *time.Time        `json:"last_heartbeat,omitempty"`
-		ExpiryTime        *time.Time        `json:"expiry_time,omitempty"`
-		LastReleased      *time.Time        `json:"last_released,omitempty"`
-		ValidationInfo    string            `json:"validation_info,omitempty"`
-		UnreservedUsers   []string          `json:"unreserved_users,omitempty"`
-		ProcessInfo       string            `json:"process_info,omitempty"`
-		Error             string            `json:"error,omitempty"`
-		ModelInfo         *gpu.ModelInfo    `json:"model_info,omitempty"`
+		GPUID           int            `json:"gpu_id"`
+		Status          string         `json:"status"`
+		User            string         `json:"user,omitempty"`
+		ReservationType string         `json:"reservation_type,omitempty"`
+		Duration        int64          `json:"duration,omitempty"`
+		LastHeartbeat   *time.Time     `json:"last_heartbeat,omitempty"`
+		ExpiryTime      *time.Time     `json:"expiry_time,omitempty"`
+		LastReleased    *time.Time     `json:"last_released,omitempty"`
+		ValidationInfo  string         `json:"validation_info,omitempty"`
+		UnreservedUsers []string       `json:"unreserved_users,omitempty"`
+		ProcessInfo     string         `json:"process_info,omitempty"`
+		Error           string         `json:"error,omitempty"`
+		ModelInfo       *gpu.ModelInfo `json:"model_info,omitempty"`
 	}
 
 	jsonStatuses := make([]jsonGPUStatus, len(statuses))
 	for i, status := range statuses {
 		js := jsonGPUStatus{
-			GPUID:             status.GPUID,
-			Status:            status.Status,
-			User:              status.User,
-			ReservationType:   status.ReservationType,
-			Duration:          int64(status.Duration),
-			ValidationInfo:    status.ValidationInfo,
-			UnreservedUsers:   status.UnreservedUsers,
-			ProcessInfo:       status.ProcessInfo,
-			Error:             status.Error,
-			ModelInfo:         status.ModelInfo,
+			GPUID:           status.GPUID,
+			Status:          status.Status,
+			User:            status.User,
+			ReservationType: status.ReservationType,
+			Duration:        int64(status.Duration),
+			ValidationInfo:  status.ValidationInfo,
+			UnreservedUsers: status.UnreservedUsers,
+			ProcessInfo:     status.ProcessInfo,
+			Error:           status.Error,
+			ModelInfo:       status.ModelInfo,
 		}
-		
+
 		if !status.LastHeartbeat.IsZero() {
 			js.LastHeartbeat = &status.LastHeartbeat
 		}
@@ -998,7 +998,7 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		if !status.LastReleased.IsZero() {
 			js.LastReleased = &status.LastReleased
 		}
-		
+
 		jsonStatuses[i] = js
 	}
 
@@ -1048,13 +1048,13 @@ func (ws *webServer) handleAPIReport(w http.ResponseWriter, r *http.Request) {
 }
 
 type reportData struct {
-	Users            []userReport `json:"users"`
-	TotalGPUHours    float64     `json:"total_gpu_hours"`
-	TotalReservations int        `json:"total_reservations"`
-	UniqueUsers      int         `json:"unique_users"`
-	StartDate        string      `json:"start_date"`
-	EndDate          string      `json:"end_date"`
-	Days             int         `json:"days"`
+	Users             []userReport `json:"users"`
+	TotalGPUHours     float64      `json:"total_gpu_hours"`
+	TotalReservations int          `json:"total_reservations"`
+	UniqueUsers       int          `json:"unique_users"`
+	StartDate         string       `json:"start_date"`
+	EndDate           string       `json:"end_date"`
+	Days              int          `json:"days"`
 }
 
 type userReport struct {

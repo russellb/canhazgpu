@@ -147,7 +147,7 @@ func TestClient_AllocationLock_Concurrency(t *testing.T) {
 	ctx := context.Background()
 
 	t.Log("Starting concurrency test - testing lock contention (may take up to 5 seconds)")
-	
+
 	// Acquire lock
 	err := client.AcquireAllocationLock(ctx)
 	assert.NoError(t, err)

@@ -77,11 +77,11 @@ func runRun(ctx context.Context, gpuCount int, timeoutStr string, command []stri
 	}
 
 	config := getConfig()
-	
+
 	// Parse timeout if provided
 	var timeout time.Duration
 	var hasTimeout bool
-	
+
 	if timeoutStr != "" {
 		var err error
 		timeout, err = utils.ParseDuration(timeoutStr)
@@ -167,12 +167,12 @@ func runRun(ctx context.Context, gpuCount int, timeoutStr string, command []stri
 			heartbeat.Stop()
 			os.Exit(124) // Standard timeout exit code
 		}
-		
+
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 				// Stop heartbeat and clean up GPUs before exiting
 				heartbeat.Stop()
-				
+
 				// Exit with the same code as the failed command
 				os.Exit(status.ExitStatus())
 			}

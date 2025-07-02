@@ -34,7 +34,7 @@ func TestHeartbeatManager_StartStop(t *testing.T) {
 	}
 
 	t.Log("Starting heartbeat manager integration test - involves goroutines and timing")
-	
+
 	config := &types.Config{
 		RedisHost: "localhost",
 		RedisPort: 6379,
@@ -45,21 +45,21 @@ func TestHeartbeatManager_StartStop(t *testing.T) {
 	// Test starting heartbeat
 	gpuIDs := []int{0, 1}
 	user := "testuser"
-	
+
 	manager := NewHeartbeatManager(redisClient, gpuIDs, user)
-	
+
 	t.Log("Starting heartbeat manager (launches background goroutines)")
 	// Test starting (should not panic)
 	manager.Start()
-	
+
 	t.Log("Waiting 100ms for heartbeat to initialize")
 	// Brief delay to let heartbeat start
 	time.Sleep(100 * time.Millisecond)
-	
+
 	t.Log("Stopping heartbeat manager and waiting for cleanup")
 	// Test stopping (should not panic)
 	manager.Stop()
-	
+
 	// Verify manager is stopped
 	select {
 	case <-manager.done:
@@ -75,7 +75,7 @@ func TestHeartbeatManager_Wait(t *testing.T) {
 	}
 
 	t.Log("Starting heartbeat Wait() test - tests blocking behavior")
-	
+
 	config := &types.Config{
 		RedisHost: "localhost",
 		RedisPort: 6379,
@@ -85,12 +85,12 @@ func TestHeartbeatManager_Wait(t *testing.T) {
 
 	gpuIDs := []int{0}
 	user := "testuser"
-	
+
 	manager := NewHeartbeatManager(redisClient, gpuIDs, user)
-	
+
 	t.Log("Starting heartbeat manager first")
 	manager.Start()
-	
+
 	t.Log("Setting up goroutine to stop manager after 100ms")
 	// Test Wait method with timeout
 	go func() {
@@ -98,14 +98,14 @@ func TestHeartbeatManager_Wait(t *testing.T) {
 		t.Log("Goroutine stopping manager now")
 		manager.Stop()
 	}()
-	
+
 	t.Log("Calling Wait() - should block for ~100ms")
 	// Wait should block until Stop is called
 	start := time.Now()
 	manager.Wait()
 	elapsed := time.Since(start)
 	t.Logf("Wait() completed after %v", elapsed)
-	
+
 	// Should have waited at least 100ms
 	assert.GreaterOrEqual(t, elapsed, 100*time.Millisecond)
 	assert.Less(t, elapsed, 1*time.Second) // But not too long
@@ -121,19 +121,19 @@ func TestHeartbeatManager_SendHeartbeat(t *testing.T) {
 
 	gpuIDs := []int{0}
 	user := "testuser"
-	
+
 	manager := NewHeartbeatManager(redisClient, gpuIDs, user)
-	
+
 	// Test sendHeartbeat method (may fail if GPUs not initialized)
 	err := manager.sendHeartbeat()
-	
+
 	// Should not panic, may return error if Redis not initialized
 	_ = err
 }
 
 func TestHeartbeatManager_DoubleStop(t *testing.T) {
 	t.Log("Testing double-stop behavior (should handle gracefully)")
-	
+
 	config := &types.Config{
 		RedisHost: "localhost",
 		RedisPort: 6379,
@@ -143,21 +143,21 @@ func TestHeartbeatManager_DoubleStop(t *testing.T) {
 
 	gpuIDs := []int{0}
 	user := "testuser"
-	
+
 	manager := NewHeartbeatManager(redisClient, gpuIDs, user)
-	
+
 	t.Log("Starting heartbeat manager")
 	// Start heartbeat
 	manager.Start()
-	
+
 	t.Log("Waiting 50ms then testing double-stop")
 	// Brief delay
 	time.Sleep(50 * time.Millisecond)
-	
+
 	t.Log("First stop call")
 	// Stop twice (should not panic)
 	manager.Stop()
-	
+
 	t.Log("Setting up safety goroutine in case second stop hangs")
 	// Second stop should not hang or panic
 	go func() {
@@ -166,7 +166,7 @@ func TestHeartbeatManager_DoubleStop(t *testing.T) {
 		// Force context cancellation if second stop hangs
 		manager.cancel()
 	}()
-	
+
 	t.Log("Second stop call (should return immediately)")
 	manager.Stop() // This should return immediately
 	t.Log("Double-stop test completed successfully")
@@ -182,36 +182,36 @@ func TestHeartbeatManager_ReleaseGPUs(t *testing.T) {
 
 	gpuIDs := []int{0}
 	user := "testuser"
-	
+
 	manager := NewHeartbeatManager(redisClient, gpuIDs, user)
-	
+
 	// Test releaseGPUs method (should not panic)
 	manager.releaseGPUs()
-	
+
 	// Should complete without error even if GPUs not initialized
 	assert.True(t, true) // Test completed without panic
 }
 
 func TestHeartbeatTiming_Concepts(t *testing.T) {
 	// Test heartbeat timing concepts without actual Redis
-	
+
 	// Constants from heartbeat implementation
 	heartbeatInterval := 60 * time.Second
 	heartbeatTimeout := 15 * time.Minute
-	
+
 	// Verify timing relationships
-	assert.True(t, heartbeatTimeout > heartbeatInterval, 
+	assert.True(t, heartbeatTimeout > heartbeatInterval,
 		"Heartbeat timeout should be longer than interval")
-	
+
 	// Calculate how many heartbeats can be missed before timeout
 	missedBeatsBeforeTimeout := heartbeatTimeout / heartbeatInterval
-	assert.GreaterOrEqual(t, float64(missedBeatsBeforeTimeout), 10.0, 
+	assert.GreaterOrEqual(t, float64(missedBeatsBeforeTimeout), 10.0,
 		"Should allow at least 10 missed heartbeats before timeout")
-	
+
 	// Verify reasonable intervals
-	assert.LessOrEqual(t, heartbeatInterval, 2*time.Minute, 
+	assert.LessOrEqual(t, heartbeatInterval, 2*time.Minute,
 		"Heartbeat interval should be reasonable (≤2min)")
-	assert.GreaterOrEqual(t, heartbeatInterval, 30*time.Second, 
+	assert.GreaterOrEqual(t, heartbeatInterval, 30*time.Second,
 		"Heartbeat interval should not be too frequent (≥30s)")
 }
 
@@ -247,7 +247,7 @@ func TestHeartbeatManager_ReservationLoss(t *testing.T) {
 	// Simulate successful allocation
 	user := "testuser"
 	allocatedGPUs := []int{0}
-	
+
 	now := time.Now()
 	reservedState := &types.GPUState{
 		User:          user,
@@ -255,7 +255,7 @@ func TestHeartbeatManager_ReservationLoss(t *testing.T) {
 		LastHeartbeat: types.FlexibleTime{Time: now},
 		Type:          types.ReservationTypeRun,
 	}
-	
+
 	err := client.SetGPUState(ctx, 0, reservedState)
 	assert.NoError(t, err)
 
@@ -289,7 +289,7 @@ func TestHeartbeatManager_ReservationLoss(t *testing.T) {
 	// Now the next heartbeat should detect the problem and return an error
 	t.Log("🔍 Testing heartbeat after reservation loss...")
 	err = manager.sendHeartbeat()
-	
+
 	if err != nil {
 		t.Logf("✅ Heartbeat correctly detected reservation loss: %v", err)
 		assert.Contains(t, err.Error(), "reservation lost")

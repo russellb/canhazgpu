@@ -310,14 +310,14 @@ func (c *Client) ClearAllGPUStates(ctx context.Context) error {
 // RecordUsageHistory records a GPU usage entry when a reservation is released
 func (c *Client) RecordUsageHistory(ctx context.Context, record *types.UsageRecord) error {
 	// Create a unique key based on timestamp and user
-	key := fmt.Sprintf("%s%d:%s:%d", types.RedisKeyUsageHistory, 
+	key := fmt.Sprintf("%s%d:%s:%d", types.RedisKeyUsageHistory,
 		record.EndTime.ToTime().Unix(), record.User, record.GPUID)
-	
+
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}
-	
+
 	// Store with 90 day expiration to prevent unbounded growth
 	return c.rdb.Set(ctx, key, data, 90*24*time.Hour).Err()
 }
@@ -330,24 +330,24 @@ func (c *Client) GetUsageHistory(ctx context.Context, startTime, endTime time.Ti
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var records []*types.UsageRecord
 	for _, key := range keys {
 		data, err := c.rdb.Get(ctx, key).Result()
 		if err != nil {
 			continue
 		}
-		
+
 		var record types.UsageRecord
 		if err := json.Unmarshal([]byte(data), &record); err != nil {
 			continue
 		}
-		
+
 		// Filter by time range
 		if record.EndTime.ToTime().After(startTime) && record.EndTime.ToTime().Before(endTime) {
 			records = append(records, &record)
 		}
 	}
-	
+
 	return records, nil
 }
