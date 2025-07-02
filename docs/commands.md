@@ -20,21 +20,69 @@ Commands:
 
 All commands support these global configuration flags:
 
+- `--config`: Path to configuration file (default: `$HOME/.canhazgpu.yaml`)
 - `--redis-host`: Redis server hostname (default: localhost)
 - `--redis-port`: Redis server port (default: 6379)
 - `--redis-db`: Redis database number (default: 0)
 - `--memory-threshold`: Memory threshold in MB to consider a GPU as "in use" (default: 1024)
 
+**Configuration Methods:**
+
+1. **Command-line flags** (highest priority)
+2. **Environment variables** with `CANHAZGPU_` prefix
+3. **Configuration files** in YAML, JSON, or TOML format
+4. **Built-in defaults** (lowest priority)
+
 **Examples:**
 ```bash
-# Use a different Redis server
+# Use command-line flags
 canhazgpu status --redis-host redis.example.com --redis-port 6380
 
-# Set a lower memory threshold (512 MB instead of 1024 MB)
-canhazgpu status --memory-threshold 512
+# Use environment variables
+export CANHAZGPU_MEMORY_THRESHOLD=512
+export CANHAZGPU_REDIS_HOST=redis.example.com
+canhazgpu status
 
-# Combine flags
-canhazgpu run --memory-threshold 2048 --gpus 1 -- python train.py
+# Use a configuration file
+canhazgpu --config /path/to/config.yaml status
+canhazgpu --config config.json run --gpus 2 -- python train.py
+```
+
+**Configuration File Examples:**
+
+YAML format (`~/.canhazgpu.yaml`):
+```yaml
+redis:
+  host: redis.example.com
+  port: 6379
+  db: 0
+memory:
+  threshold: 512
+```
+
+JSON format:
+```json
+{
+  "redis": {
+    "host": "redis.example.com",
+    "port": 6379,
+    "db": 0
+  },
+  "memory": {
+    "threshold": 512
+  }
+}
+```
+
+TOML format:
+```toml
+[redis]
+host = "redis.example.com"
+port = 6379
+db = 0
+
+[memory]
+threshold = 512
 ```
 
 The `--memory-threshold` flag controls when a GPU is considered "in use without reservation". GPUs using more than this amount of memory will be excluded from allocation and flagged as unreserved usage.

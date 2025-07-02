@@ -11,8 +11,9 @@ import (
 )
 
 var (
-	config  *types.Config
-	rootCmd = &cobra.Command{
+	config     *types.Config
+	configFile string
+	rootCmd    = &cobra.Command{
 		Use:   "canhazgpu",
 		Short: "A GPU reservation tool for single host shared development systems",
 		Long: `canhazgpu provides a simple reservation system that coordinates GPU access 
@@ -28,6 +29,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is $HOME/.canhazgpu.yaml)")
 	rootCmd.PersistentFlags().String("redis-host", "localhost", "Redis host")
 	rootCmd.PersistentFlags().Int("redis-port", 6379, "Redis port")
 	rootCmd.PersistentFlags().Int("redis-db", 0, "Redis database")
@@ -46,6 +48,32 @@ func init() {
 }
 
 func initConfig() {
+	if configFile != "" {
+		// Use config file from the flag
+		viper.SetConfigFile(configFile)
+	} else {
+		// Find home directory
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Could not find home directory: %v\n", err)
+		} else {
+			// Search config in home directory with name ".canhazgpu" (without extension)
+			viper.AddConfigPath(home)
+			viper.AddConfigPath(".")
+			viper.SetConfigType("yaml")
+			viper.SetConfigName(".canhazgpu")
+		}
+	}
+
+	// Enable reading from environment variables
+	viper.SetEnvPrefix("CANHAZGPU")
+	viper.AutomaticEnv()
+
+	// If a config file is found, read it in
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Fprintf(os.Stderr, "Using config file: %s\n", viper.ConfigFileUsed())
+	}
+
 	config = &types.Config{
 		RedisHost:       viper.GetString("redis.host"),
 		RedisPort:       viper.GetInt("redis.port"),

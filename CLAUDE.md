@@ -71,6 +71,10 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 # Customize memory threshold for GPU usage detection (default: 1024 MB)
 ./build/canhazgpu status --memory-threshold 512
 ./build/canhazgpu run --memory-threshold 2048 --gpus 1 -- python train.py
+
+# Use a configuration file
+./build/canhazgpu --config /path/to/config.yaml status
+./build/canhazgpu --config config.json run --gpus 2 -- python train.py
 ```
 
 ## Dependencies
@@ -150,6 +154,14 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 
 - `FlexibleTime` type in `internal/types/types.go` handles both Unix timestamps (Python compatibility) and RFC3339 strings (Go native)
 - Ensures backward compatibility with existing Python-created Redis data
+
+### Configuration Management
+
+- Configuration via command-line flags, configuration files, and environment variables
+- Supports YAML, JSON, and TOML configuration file formats
+- Default config file location: `$HOME/.canhazgpu.yaml`
+- Environment variables with `CANHAZGPU_` prefix (e.g., `CANHAZGPU_MEMORY_THRESHOLD=512`)
+- Priority order: CLI flags > environment variables > config file > defaults
 
 ## Redis Schema
 

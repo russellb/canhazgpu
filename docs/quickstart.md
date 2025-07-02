@@ -126,6 +126,50 @@ Then open http://localhost:8080 in your browser to see:
 
 ![Web Dashboard](images/web-screenshot.png)
 
+## Configuration
+
+### Using Configuration Files
+
+Create a configuration file to avoid specifying common options repeatedly:
+
+```bash
+# Create configuration file
+cat > ~/.canhazgpu.yaml <<EOF
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+memory:
+  threshold: 512
+EOF
+
+# Commands will now use these defaults
+canhazgpu status  # Uses threshold of 512 MB
+```
+
+### Environment Variables
+
+Set configuration via environment variables:
+
+```bash
+export CANHAZGPU_MEMORY_THRESHOLD=512
+export CANHAZGPU_REDIS_HOST=redis.example.com
+
+canhazgpu status  # Uses environment variables
+```
+
+### Custom Memory Threshold
+
+Adjust when a GPU is considered "in use":
+
+```bash
+# Lower threshold - detect lighter GPU usage
+canhazgpu status --memory-threshold 256
+
+# Higher threshold - ignore small allocations  
+canhazgpu run --memory-threshold 2048 --gpus 1 -- python train.py
+```
+
 ## Common Patterns
 
 ### Long-Running Training
