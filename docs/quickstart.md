@@ -92,6 +92,9 @@ GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python
 GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s)
 ```
 
+!!! info "Understanding the Output"
+    The status shows [validated GPU usage](features-validation.md) and can detect [unreserved usage](features-unreserved.md). GPUs are allocated using the [LRU strategy](features-lru.md) for fair distribution.
+
 ## 7. Generate GPU Reservation Reports
 
 View GPU reservation patterns over time:
@@ -236,8 +239,11 @@ If you get permission errors, ensure:
 - You have access to `/proc` filesystem
 - nvidia-smi is available
 
+For more detailed troubleshooting, see the [Troubleshooting Guide](admin-troubleshooting.md).
+
 ## Next Steps
 
+- **[Configuration](configuration.md)** - Set up defaults and customize behavior
 - **[Commands Overview](commands.md)** - Learn all available commands in detail
 - **[Usage Patterns](usage-run.md)** - Advanced usage patterns and examples
 - **[Administration](admin-setup.md)** - Configure for production use

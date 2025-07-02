@@ -119,6 +119,8 @@ Show current GPU allocation status with automatic validation.
 canhazgpu status
 ```
 
+**[→ Detailed Status Guide](usage-status.md)**
+
 **Examples:**
 ```bash
 # Standard status check
@@ -159,6 +161,8 @@ Reserve GPUs and run a command with automatic cleanup.
 ```bash
 canhazgpu run [--gpus <count>] [--timeout <duration>] -- <command>
 ```
+
+**[→ Detailed Run Guide](usage-run.md)**
 
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)
@@ -211,6 +215,8 @@ Manually reserve GPUs for a specified duration.
 ```bash
 canhazgpu reserve [--gpus <count>] [--duration <time>]
 ```
+
+**[→ Detailed Reserve Guide](usage-reserve.md)**
 
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)

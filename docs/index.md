@@ -56,9 +56,10 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 ## Getting Started
 
 1. **[Install dependencies](installation.md)** - Redis server and Go
-2. **[Quick start guide](quickstart.md)** - Get up and running in minutes
-3. **[Commands overview](commands.md)** - Learn all available commands
-4. **[Administration setup](admin-setup.md)** - Configure for your environment
+2. **[Quick start guide](quickstart.md)** - Get up and running in minutes  
+3. **[Configuration](configuration.md)** - Set defaults and customize behavior
+4. **[Commands overview](commands.md)** - Learn all available commands
+5. **[Administration setup](admin-setup.md)** - Configure for your environment
 
 ## Use Cases
 
@@ -66,3 +67,31 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 - **Shared Workstations**: Prevent conflicts on multi-GPU development machines  
 - **Training Pipelines**: Ensure exclusive GPU access for long-running jobs
 - **Resource Monitoring**: Track unreserved GPU usage and enforce policies
+
+## Documentation
+
+### User Guides
+- **[Installation](installation.md)** - Install dependencies
+- **[Quick Start](quickstart.md)** - Get started in minutes
+- **[Configuration](configuration.md)** - Configure defaults and customize behavior
+- **[Commands Overview](commands.md)** - All available commands
+
+### Detailed Usage
+- **[Running Jobs](usage-run.md)** - GPU reservation with run command
+- **[Manual Reservations](usage-reserve.md)** - Reserve GPUs manually  
+- **[Status Monitoring](usage-status.md)** - Monitor GPU usage and reservations
+
+### Key Features
+- **[GPU Validation](features-validation.md)** - Real-time usage validation
+- **[Unreserved Detection](features-unreserved.md)** - Find unauthorized GPU usage
+- **[LRU Allocation](features-lru.md)** - Fair GPU distribution strategy
+
+### Administration
+- **[Setup Guide](admin-setup.md)** - Production deployment
+- **[Troubleshooting](admin-troubleshooting.md)** - Common issues and solutions
+
+### Development
+- **[Architecture](dev-architecture.md)** - System design overview
+- **[Contributing](dev-contributing.md)** - Contribution guidelines
+- **[Testing](dev-testing.md)** - Testing procedures
+- **[Release Process](dev-release.md)** - Release management

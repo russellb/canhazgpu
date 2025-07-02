@@ -175,4 +175,5 @@ Should show available commands.
 
 ## Next Steps
 
-Continue to the [Quick Start Guide](quickstart.md) to initialize and start using canhazgpu.
+- **[Quick Start Guide](quickstart.md)** - Initialize and start using canhazgpu
+- **[Configuration](configuration.md)** - Set up defaults and customize behavior

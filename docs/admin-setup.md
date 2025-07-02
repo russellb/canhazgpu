@@ -19,25 +19,10 @@ sudo dnf install redis
 brew install redis
 ```
 
-**Go installation:**
-```bash
-# Download and install Go 1.23+ from https://golang.org/dl/
-# Or use package manager:
-
-# Ubuntu (via snap)
-sudo snap install go --classic
-
-# macOS
-brew install go
-```
-
-**NVIDIA drivers:**
+**Verify NVIDIA tools:**
 ```bash
 # Verify nvidia-smi is available
 nvidia-smi
-
-# If not installed, install appropriate NVIDIA drivers
-sudo apt install nvidia-driver-470  # Ubuntu example
 ```
 
 ### 2. Redis Configuration
@@ -53,47 +38,28 @@ redis-cli ping
 # Should return: PONG
 ```
 
-**Production Redis configuration** (`/etc/redis/redis.conf`):
-```ini
-# Basic security
-bind 127.0.0.1
-protected-mode yes
-port 6379
-
-# Memory management
-maxmemory 256mb
-maxmemory-policy allkeys-lru
-
-# Persistence (optional - GPU state can be rebuilt)
-save 900 1
-save 300 10
-save 60 10000
-
-# Logging
-loglevel notice
-logfile /var/log/redis/redis-server.log
-```
-
-**Restart Redis after configuration changes:**
-```bash
-sudo systemctl restart redis-server
-```
+For Redis security and production configuration, refer to the official Redis documentation.
 
 ### 3. Install canhazgpu
 
 **System-wide installation:**
 ```bash
-# Download and install canhazgpu
-wget https://raw.githubusercontent.com/russellb/canhazgpu/main/canhazgpu
-chmod +x canhazgpu
-sudo cp canhazgpu /usr/local/bin/
+# Download the latest release
+wget https://github.com/russellb/canhazgpu/releases/latest/download/canhazgpu-linux-amd64.tar.gz
 
-# Download and install bash completion (required for 'canhazgpu run' completion)
-wget https://raw.githubusercontent.com/russellb/canhazgpu/main/autocomplete_canhazgpu.sh
+# Extract the archive
+tar -xzf canhazgpu-linux-amd64.tar.gz
+
+# Install the binary and bash completion
+sudo cp canhazgpu /usr/local/bin/
 sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
 
-# Ensure proper permissions for bash completion
+# Ensure proper permissions
+sudo chmod 755 /usr/local/bin/canhazgpu
 sudo chmod 644 /etc/bash_completion.d/autocomplete_canhazgpu.sh
+
+# Clean up
+rm canhazgpu-linux-amd64.tar.gz
 ```
 
 **Verify installation:**
@@ -105,6 +71,51 @@ canhazgpu --help
 # canhazgpu <TAB><TAB>
 # Should show available commands
 ```
+
+### 4. Application Configuration
+
+Set up a default configuration for your team:
+
+```bash
+# Create a shared configuration file
+sudo tee /usr/local/share/canhazgpu-default.yaml > /dev/null << 'EOF'
+# Team default canhazgpu configuration
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+
+# Conservative memory threshold for shared systems  
+memory:
+  threshold: 512
+
+# Default settings to encourage resource sharing
+run:
+  timeout: "4h"  # Prevent runaway processes
+
+reserve:
+  duration: "4h"  # Shorter default reservations
+
+report:
+  days: 30
+EOF
+
+# Make it readable by all users
+sudo chmod 644 /usr/local/share/canhazgpu-default.yaml
+```
+
+**Usage:**
+```bash
+# Users can copy the default config to their home directory
+cp /usr/local/share/canhazgpu-default.yaml ~/.canhazgpu.yaml
+
+# Or use a specific config file for shared usage
+canhazgpu --config /usr/local/share/canhazgpu-default.yaml status
+
+# Users can customize their personal ~/.canhazgpu.yaml as needed
+```
+
+For detailed configuration options, see the [Configuration Guide](configuration.md).
 
 ## GPU Pool Initialization
 
@@ -139,218 +150,6 @@ canhazgpu run --gpus 1 -- nvidia-smi
 # Release manual reservations
 canhazgpu release
 ```
-
-## User Management
-
-### 1. User Access
-All users who need GPU access should:
-- Have the `canhazgpu` command available in their PATH
-- Be able to run `nvidia-smi`
-- Have access to the Redis server (localhost:6379)
-- Have bash completion available (if installed system-wide)
-
-### 2. Group-Based Permissions (Optional)
-```bash
-# Create a GPU users group
-sudo groupadd gpuusers
-
-# Add users to the group
-sudo usermod -a -G gpuusers alice
-sudo usermod -a -G gpuusers bob
-
-# Create a wrapper script for group enforcement (optional)
-sudo tee /usr/local/bin/canhazgpu-wrapper << 'EOF'
-#!/bin/bash
-if ! groups | grep -q gpuusers; then
-    echo "Error: You must be in the 'gpuusers' group to use GPU resources"
-    exit 1
-fi
-exec /usr/local/bin/canhazgpu "$@"
-EOF
-
-sudo chmod +x /usr/local/bin/canhazgpu-wrapper
-```
-
-## Monitoring and Maintenance
-
-### 1. System Health Checks
-
-**Daily health check script:**
-```bash
-#!/bin/bash
-# /usr/local/bin/canhazgpu-healthcheck.sh
-
-set -e
-
-echo "=== canhazgpu Health Check $(date) ==="
-
-# Check Redis connectivity
-echo "Checking Redis..."
-redis-cli ping > /dev/null || {
-    echo "ERROR: Redis is not responding"
-    exit 1
-}
-
-# Check nvidia-smi
-echo "Checking NVIDIA drivers..."
-nvidia-smi > /dev/null || {
-    echo "ERROR: nvidia-smi is not working"
-    exit 1
-}
-
-# Check canhazgpu basic functionality
-echo "Checking canhazgpu status..."
-canhazgpu status > /dev/null || {
-    echo "ERROR: canhazgpu status failed"
-    exit 1
-}
-
-# Check for unreserved usage
-UNAUTHORIZED=$(canhazgpu status | grep "WITHOUT RESERVATION" || true)
-if [ -n "$UNAUTHORIZED" ]; then
-    echo "WARNING: Unreserved GPU usage detected:"
-    echo "$UNAUTHORIZED"
-fi
-
-# Check for stale reservations
-STALE=$(canhazgpu status | grep "no actual usage detected" || true)
-if [ -n "$STALE" ]; then
-    echo "INFO: Potential stale reservations:"
-    echo "$STALE"
-fi
-
-echo "Health check completed successfully"
-```
-
-**Schedule health checks:**
-```bash
-# Add to crontab
-sudo crontab -e
-
-# Run health check daily at 9 AM
-0 9 * * * /usr/local/bin/canhazgpu-healthcheck.sh >> /var/log/canhazgpu-health.log 2>&1
-```
-
-### 2. Usage Monitoring
-
-**Option 1: Using the built-in report command:**
-```bash
-# Generate weekly usage report
-canhazgpu report --days 7
-
-# Generate monthly report
-canhazgpu report --days 30
-
-# Add to crontab for automated reports
-0 8 * * 1 /usr/local/bin/canhazgpu report --days 7 | mail -s "Weekly GPU Report" admin@example.com
-```
-
-**Option 2: Web dashboard for continuous monitoring:**
-```bash
-# Start web dashboard as a systemd service
-sudo tee /etc/systemd/system/canhazgpu-web.service << EOF
-[Unit]
-Description=canhazgpu Web Dashboard
-After=network.target redis.service
-
-[Service]
-Type=simple
-User=canhazgpu
-ExecStart=/usr/local/bin/canhazgpu web --port 8080
-Restart=always
-RestartSec=5
-Environment="PATH=/usr/local/bin:/usr/bin:/bin"
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl enable canhazgpu-web
-sudo systemctl start canhazgpu-web
-```
-
-**Option 3: Legacy statistics script:**
-```bash
-#!/bin/bash
-# /usr/local/bin/canhazgpu-stats.sh
-
-echo "=== GPU Usage Statistics $(date) ==="
-
-STATUS=$(canhazgpu status)
-
-# Count different states
-TOTAL=$(echo "$STATUS" | wc -l)
-AVAILABLE=$(echo "$STATUS" | grep "AVAILABLE" | wc -l)
-IN_USE=$(echo "$STATUS" | grep "IN USE by" | wc -l)
-UNAUTHORIZED=$(echo "$STATUS" | grep "WITHOUT RESERVATION" | wc -l)
-
-echo "Total GPUs: $TOTAL"
-echo "Available: $AVAILABLE"
-echo "In Use (Reserved): $IN_USE"
-echo "Unreserved Usage: $UNAUTHORIZED"
-echo "Utilization: $(( 100 * (IN_USE + UNAUTHORIZED) / TOTAL ))%"
-
-if [ $UNAUTHORIZED -gt 0 ]; then
-    echo ""
-    echo "Unreserved Usage Details:"
-    echo "$STATUS" | grep "WITHOUT RESERVATION"
-fi
-```
-
-### 3. Automated Cleanup
-
-**Stale reservation cleanup:**
-```bash
-#!/bin/bash
-# /usr/local/bin/canhazgpu-cleanup.sh
-
-# Find manual reservations with no actual usage for >1 hour
-STATUS=$(canhazgpu status)
-STALE=$(echo "$STATUS" | grep "manual.*no actual usage detected" | grep -E "[2-9][0-9]h|[0-9]{3,}h")
-
-if [ -n "$STALE" ]; then
-    echo "Found stale reservations (>1h with no usage):"
-    echo "$STALE"
-    
-    # Log for manual review - don't auto-release without admin approval
-    echo "$(date): $STALE" >> /var/log/canhazgpu-stale.log
-    
-    # Optional: Send notification to admin
-    echo "$STALE" | mail -s "Stale GPU Reservations Detected" admin@company.com
-fi
-```
-
-## Security Configuration
-
-### 1. Redis Security
-```bash
-# /etc/redis/redis.conf
-bind 127.0.0.1                    # Only localhost access
-protected-mode yes                # Enable protected mode
-# requirepass your_password_here  # Optional password protection
-
-# Disable dangerous commands
-rename-command FLUSHDB ""
-rename-command FLUSHALL ""
-rename-command CONFIG ""
-```
-
-### 2. File Permissions
-```bash
-# Ensure proper permissions
-sudo chown root:root /usr/local/bin/canhazgpu
-sudo chmod 755 /usr/local/bin/canhazgpu
-
-# Protect Redis data directory
-sudo chown redis:redis /var/lib/redis
-sudo chmod 700 /var/lib/redis
-```
-
-### 3. Network Security
-Since canhazgpu uses local Redis, ensure:
-- Redis is bound only to localhost (127.0.0.1)
-- Firewall blocks external access to port 6379
-- No Redis AUTH if not needed (localhost only)
 
 ## Configuration Changes
 
@@ -413,18 +212,6 @@ ls -la /usr/local/bin/canhazgpu
 sudo -u redis redis-cli ping
 ```
 
-**NVIDIA driver issues:**
-```bash
-# Check driver status
-nvidia-smi
-
-# Check driver version
-cat /proc/driver/nvidia/version
-
-# Restart nvidia services if needed
-sudo systemctl restart nvidia-persistenced
-```
-
 ### Log Analysis
 ```bash
 # System logs
@@ -444,44 +231,14 @@ tail -f /var/log/canhazgpu-stale.log
 - [ ] canhazgpu installed system-wide
 - [ ] Bash completion script installed
 - [ ] GPU pool initialized with correct count
+- [ ] Application configuration set up (see [Configuration Guide](configuration.md))
 - [ ] Basic functionality tested
 - [ ] Bash completion verified for users
-- [ ] Health check script configured
-- [ ] Monitoring script set up
-- [ ] User access verified
 - [ ] Security configuration applied
 - [ ] Backup/recovery procedures documented
 - [ ] User training materials prepared
 
-## Performance Optimization
+## Next Steps
 
-### 1. Redis Performance
-```bash
-# Redis performance tuning in /etc/redis/redis.conf
-tcp-keepalive 60
-timeout 0
-tcp-backlog 511
-
-# Disable unused features for better performance
-save ""  # Disable RDB snapshots if persistence not needed
-```
-
-### 2. System Performance
-```bash
-# Optimize for rapid GPU queries
-echo 'vm.swappiness=1' >> /etc/sysctl.conf
-echo 'vm.dirty_ratio=5' >> /etc/sysctl.conf
-sysctl -p
-```
-
-### 3. Monitoring Performance
-```bash
-# Monitor Redis performance
-redis-cli --latency -i 1
-
-# Monitor system resources
-htop
-iostat -x 1
-```
-
-With proper administration setup, canhazgpu provides reliable, secure, and efficient GPU resource management for your entire development team.
+- **[Troubleshooting Guide](admin-troubleshooting.md)** - Common issues and solutions
+- **[Architecture Overview](dev-architecture.md)** - Understand the system design
