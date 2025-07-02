@@ -162,31 +162,6 @@ canhazgpu admin --gpus 12 --force
 # Notify users before making this change
 ```
 
-### 2. Redis Migration
-```bash
-# Backup current state
-redis-cli --rdb /backup/canhazgpu-backup.rdb
-
-# After Redis migration/reinstall
-redis-cli --rdb /backup/canhazgpu-backup.rdb | redis-cli --pipe
-
-# Verify data integrity
-canhazgpu status
-```
-
-### 3. System Upgrades
-Before system upgrades:
-```bash
-# Warn users
-wall "System maintenance in 15 minutes - GPU reservations will be cleared"
-
-# Export current state for reference
-canhazgpu status > /tmp/gpu-state-before-upgrade.txt
-
-# After upgrade, reinitialize if needed
-canhazgpu admin --gpus 8 --force
-```
-
 ## Troubleshooting
 
 ### Common Issues
@@ -227,16 +202,11 @@ tail -f /var/log/canhazgpu-stale.log
 
 - [ ] Redis server installed and configured
 - [ ] NVIDIA drivers working (`nvidia-smi` functional)
-- [ ] Go 1.23+ installed
 - [ ] canhazgpu installed system-wide
 - [ ] Bash completion script installed
 - [ ] GPU pool initialized with correct count
-- [ ] Application configuration set up (see [Configuration Guide](configuration.md))
 - [ ] Basic functionality tested
 - [ ] Bash completion verified for users
-- [ ] Security configuration applied
-- [ ] Backup/recovery procedures documented
-- [ ] User training materials prepared
 
 ## Next Steps
 
