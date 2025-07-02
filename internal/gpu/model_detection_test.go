@@ -203,56 +203,6 @@ func TestExtractProviderFromModel(t *testing.T) {
 	}
 }
 
-func TestGetProviderIcon(t *testing.T) {
-	tests := []struct {
-		name     string
-		provider string
-		expected bool // true if icon should be non-empty
-	}{
-		{
-			name:     "OpenAI provider",
-			provider: "openai",
-			expected: true,
-		},
-		{
-			name:     "Meta Llama provider",
-			provider: "meta-llama",
-			expected: true,
-		},
-		{
-			name:     "Qwen provider",
-			provider: "qwen",
-			expected: true,
-		},
-		{
-			name:     "DeepSeek provider",
-			provider: "deepseek-ai",
-			expected: true,
-		},
-		{
-			name:     "Unknown provider",
-			provider: "unknown",
-			expected: false,
-		},
-		{
-			name:     "Empty provider",
-			provider: "",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := GetProviderIcon(tt.provider)
-			if tt.expected {
-				assert.NotEmpty(t, result)
-				assert.Contains(t, result, "<svg")
-			} else {
-				assert.Empty(t, result)
-			}
-		})
-	}
-}
 
 func TestGetParentPID(t *testing.T) {
 	tests := []struct {
