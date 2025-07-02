@@ -184,12 +184,25 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             justify-content: space-between;
             align-items: center;
             position: relative;
+            min-height: 40px;
         }
         .gpu-header-left {
             display: flex;
             align-items: center;
             gap: 15px;
-            flex: 1;
+            z-index: 2;
+        }
+        .gpu-header-center {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 1;
+            pointer-events: none;
+        }
+        .status-badge {
+            z-index: 2;
         }
         .model-icon {
             display: flex;
@@ -218,11 +231,13 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .gpu-id {
             font-size: 1.2em;
             font-weight: bold;
+            text-align: center;
         }
         .gpu-summary {
             font-size: 0.9em;
             color: #888;
             margin-left: 5px;
+            text-align: center;
         }
         .status-badge {
             padding: 5px 12px;
@@ -231,6 +246,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             font-weight: 600;
             text-transform: uppercase;
             flex-shrink: 0;
+            position: relative;
+            z-index: 2;
         }
         .status-available { background: #2e7d32; color: white; }
         .status-in-use { background: #1976d2; color: white; }
@@ -504,14 +521,15 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                     html += getProviderIcon(gpu.model_info.provider);
                     html += '</div>';
                 }
+                html += '</div>';
                 
-                html += '<div>';
+                html += '<div class="gpu-header-center">';
                 html += '<div class="gpu-id">GPU ' + gpu.gpu_id + '</div>';
                 if (summary) {
                     html += '<div class="gpu-summary">' + summary + '</div>';
                 }
                 html += '</div>';
-                html += '</div>';
+                
                 html += '<span class="status-badge status-' + statusClass + '">' + statusText + '</span>';
                 html += '</div>';
                 html += '<div class="gpu-details">';
