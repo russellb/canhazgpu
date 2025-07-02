@@ -88,11 +88,35 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
     <title>canhazgpu Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #252525;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --border-color: #333;
+            --accent-color: #4CAF50;
+            --card-hover: rgba(76, 175, 80, 0.2);
+        }
+        
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f5;
+            --bg-tertiary: #e0e0e0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --border-color: #d0d0d0;
+            --accent-color: #2E7D32;
+            --card-hover: rgba(46, 125, 50, 0.1);
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f0f0f;
-            color: #e0e0e0;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         .container {
             max-width: 1400px;
@@ -100,10 +124,10 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             padding: 20px;
         }
         header {
-            background: #1a1a1a;
+            background: var(--bg-secondary);
             padding: 20px 0;
             margin-bottom: 30px;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--border-color);
         }
         .header-content {
             display: flex;
@@ -118,8 +142,22 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             gap: 15px;
             align-items: center;
         }
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.9em;
+        }
+        .theme-toggle:hover {
+            background: var(--accent-color);
+            color: white;
+        }
         .header-icons a {
-            color: #888;
+            color: var(--text-secondary);
             text-decoration: none;
             padding: 8px;
             border-radius: 4px;
@@ -129,8 +167,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             justify-content: center;
         }
         .header-icons a:hover {
-            color: #4CAF50;
-            background: #2a2a2a;
+            color: var(--accent-color);
+            background: var(--bg-tertiary);
         }
         .header-icons svg {
             width: 24px;
@@ -138,23 +176,23 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             fill: currentColor;
         }
         h1 {
-            color: #4CAF50;
+            color: var(--accent-color);
             font-size: 2.5em;
             margin-bottom: 10px;
         }
         .subtitle {
-            color: #888;
+            color: var(--text-secondary);
             font-size: 1.2em;
         }
         .section {
-            background: #1a1a1a;
+            background: var(--bg-secondary);
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 30px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
         h2 {
-            color: #4CAF50;
+            color: var(--accent-color);
             margin-bottom: 20px;
             font-size: 1.8em;
         }
@@ -165,16 +203,16 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             margin-bottom: 20px;
         }
         .gpu-card {
-            background: #252525;
+            background: var(--bg-tertiary);
             border-radius: 6px;
             padding: 12px;
-            border: 1px solid #333;
+            border: 1px solid var(--border-color);
             transition: all 0.3s ease;
             cursor: pointer;
         }
         .gpu-card:hover {
-            border-color: #4CAF50;
-            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+            border-color: var(--accent-color);
+            box-shadow: 0 4px 12px var(--card-hover);
         }
         .gpu-card.expanded {
             padding: 15px;
@@ -215,13 +253,13 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .model-icon svg {
             width: 20px;
             height: 20px;
-            fill: #4CAF50;
+            fill: var(--accent-color);
             opacity: 0.8;
         }
         .expand-icon {
             width: 20px;
             height: 20px;
-            fill: #666;
+            fill: var(--text-secondary);
             transition: transform 0.3s ease;
             flex-shrink: 0;
         }
@@ -235,7 +273,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         }
         .gpu-summary {
             font-size: 0.9em;
-            color: #888;
+            color: var(--text-secondary);
             margin-left: 5px;
             text-align: center;
         }
@@ -254,11 +292,40 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .status-unreserved { background: #d32f2f; color: white; }
         .gpu-details {
             font-size: 0.9em;
-            color: #aaa;
+            color: var(--text-secondary);
             margin-top: 12px;
             padding-top: 12px;
-            border-top: 1px solid #333;
+            border-top: 1px solid var(--border-color);
             display: none;
+        }
+        .memory-usage {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0;
+        }
+        .memory-bar {
+            flex: 1;
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+        .memory-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+            border-radius: 3px;
+        }
+        .memory-low { background: var(--accent-color); }
+        .memory-medium { background: #FF9800; }
+        .memory-high { background: #f44336; }
+        .memory-text {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.8em;
+            color: var(--text-secondary);
+            min-width: 80px;
+            text-align: right;
         }
         .gpu-card.expanded .gpu-details {
             display: block;
@@ -279,13 +346,13 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             gap: 10px;
         }
         label {
-            color: #888;
+            color: var(--text-secondary);
             font-weight: 500;
         }
         select, button {
-            background: #252525;
-            color: #e0e0e0;
-            border: 1px solid #444;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
             padding: 8px 15px;
             border-radius: 4px;
             font-size: 14px;
@@ -293,8 +360,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             transition: all 0.2s ease;
         }
         select:hover, button:hover {
-            border-color: #4CAF50;
-            background: #2a2a2a;
+            border-color: var(--accent-color);
+            background: var(--bg-secondary);
         }
         button:active {
             transform: translateY(1px);
@@ -307,20 +374,20 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .usage-table th, .usage-table td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--border-color);
         }
         .usage-table th {
-            background: #252525;
-            color: #4CAF50;
+            background: var(--bg-tertiary);
+            color: var(--accent-color);
             font-weight: 600;
         }
         .usage-table tr:hover {
-            background: #252525;
+            background: var(--bg-tertiary);
         }
         .usage-bar {
             display: inline-block;
             height: 20px;
-            background: #4CAF50;
+            background: var(--accent-color);
             border-radius: 3px;
             margin-right: 10px;
             vertical-align: middle;
@@ -328,7 +395,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .loading {
             text-align: center;
             padding: 40px;
-            color: #888;
+            color: var(--text-secondary);
         }
         .error {
             background: #d32f2f;
@@ -338,7 +405,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             margin: 20px 0;
         }
         .timestamp {
-            color: #666;
+            color: var(--text-secondary);
             font-size: 0.85em;
             margin-top: 10px;
         }
@@ -349,6 +416,15 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         }
         .refreshing {
             animation: pulse 1s infinite;
+        }
+        @keyframes skeleton-pulse {
+            0% { background-color: var(--bg-tertiary); }
+            50% { background-color: var(--border-color); }
+            100% { background-color: var(--bg-tertiary); }
+        }
+        .skeleton-pulse {
+            animation: skeleton-pulse 1.5s ease-in-out infinite;
+            border-radius: 6px;
         }
     </style>
 </head>
@@ -361,6 +437,9 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                     <div class="subtitle">GPU Reservation System Monitor - {{.Hostname}}</div>
                 </div>
                 <div class="header-icons">
+                    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light mode">
+                        <span id="theme-icon">🌙</span>
+                    </button>
                     <a href="https://blog.russellbryant.net/canhazgpu/" target="_blank" title="Documentation">
                         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
@@ -484,6 +563,16 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 return;
             }
 
+            // Save current expanded state before re-rendering
+            const expandedStates = {};
+            const existingCards = container.querySelectorAll('.gpu-card');
+            existingCards.forEach(card => {
+                const gpuId = card.getAttribute('data-gpu-id');
+                if (gpuId) {
+                    expandedStates[gpuId] = card.classList.contains('expanded');
+                }
+            });
+
             let html = '<div class="gpu-grid">';
             
             data.forEach(gpu => {
@@ -508,7 +597,11 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                     summary = 'Last released ' + formatTimestamp(gpu.last_released);
                 }
                 
-                html += '<div class="gpu-card" onclick="toggleCard(this)">';
+                // Check if this GPU was previously expanded
+                const isExpanded = expandedStates[gpu.gpu_id] || false;
+                const expandedClass = isExpanded ? ' expanded' : '';
+                
+                html += '<div class="gpu-card' + expandedClass + '" data-gpu-id="' + gpu.gpu_id + '" onclick="toggleCard(this)">';
                 html += '<div class="gpu-header">';
                 html += '<div class="gpu-header-left">';
                 html += '<svg class="expand-icon" viewBox="0 0 24 24">';
@@ -553,6 +646,35 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 
                 if (gpu.validation_info) {
                     html += '<div><strong>Validation:</strong> ' + gpu.validation_info + '</div>';
+                    
+                    // Add memory usage bar if validation info contains memory data
+                    const memoryMatch = gpu.validation_info.match(/(\d+)MB/);
+                    if (memoryMatch) {
+                        const memoryMB = parseInt(memoryMatch[1]);
+                        const maxMemoryMB = 80000; // Rough estimate for H100
+                        const percentage = Math.min((memoryMB / maxMemoryMB) * 100, 100);
+                        let memoryClass = 'memory-low';
+                        if (percentage > 70) memoryClass = 'memory-high';
+                        else if (percentage > 40) memoryClass = 'memory-medium';
+                        
+                        html += '<div class="memory-usage">';
+                        html += '<div class="memory-bar">';
+                        html += '<div class="memory-fill ' + memoryClass + '" style="width: ' + percentage + '%"></div>';
+                        html += '</div>';
+                        html += '<div class="memory-text">' + percentage.toFixed(1) + '%</div>';
+                        html += '</div>';
+                    }
+                }
+                
+                // Show 0% memory usage for GPUs that are in use but have no detected usage
+                if (gpu.status === 'IN_USE' && (!gpu.validation_info || 
+                    (gpu.validation_info && gpu.validation_info.includes('no actual usage detected')))) {
+                    html += '<div class="memory-usage">';
+                    html += '<div class="memory-bar">';
+                    html += '<div class="memory-fill memory-low" style="width: 0%"></div>';
+                    html += '</div>';
+                    html += '<div class="memory-text">0.0%</div>';
+                    html += '</div>';
                 }
                 
                 if (gpu.model_info && gpu.model_info.model) {
@@ -709,6 +831,71 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 button.textContent = '⤴ Collapse All';
             }
         }
+
+        // Theme toggle functionality
+        function toggleTheme() {
+            const body = document.body;
+            const themeIcon = document.getElementById('theme-icon');
+            const currentTheme = body.getAttribute('data-theme');
+            
+            if (currentTheme === 'light') {
+                body.setAttribute('data-theme', 'dark');
+                themeIcon.textContent = '🌙';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                body.setAttribute('data-theme', 'light');
+                themeIcon.textContent = '☀️';
+                localStorage.setItem('theme', 'light');
+            }
+        }
+
+        // Initialize theme from localStorage
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+            
+            document.body.setAttribute('data-theme', theme);
+            document.getElementById('theme-icon').textContent = theme === 'light' ? '☀️' : '🌙';
+        }
+
+        // Progressive enhancement: Skeleton loading states
+        function showSkeletonLoader() {
+            return '<div class="gpu-grid">' + 
+                   Array(8).fill('<div class="gpu-card skeleton-pulse"><div style="height:60px;"></div></div>').join('') +
+                   '</div>';
+        }
+
+        // Progressive enhancement: Graceful error recovery
+        function showRetryableError(message, retryCallback) {
+            return '<div class="error">' + message + 
+                   '<br><button onclick="' + retryCallback + '" style="margin-top:10px;background:var(--accent-color);border:none;">↻ Retry</button>' +
+                   '</div>';
+        }
+
+        // Enhanced refresh with skeleton states
+        async function refreshStatusWithSkeleton() {
+            const container = document.getElementById('gpu-status');
+            container.innerHTML = showSkeletonLoader();
+            
+            try {
+                const data = await fetchStatus();
+                renderStatus(data);
+            } catch (error) {
+                container.innerHTML = showRetryableError('Failed to load GPU status: ' + error.message, 'refreshStatus()');
+            }
+        }
+
+        // Initialize theme on page load
+        initTheme();
+
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (!localStorage.getItem('theme')) {
+                document.body.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+                document.getElementById('theme-icon').textContent = e.matches ? '🌙' : '☀️';
+            }
+        });
     </script>
 </body>
 </html>`
