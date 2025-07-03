@@ -48,3 +48,26 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.1
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check Go formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not formatted correctly:"
+            echo "$unformatted"
+            echo ""
+            echo "Please run 'make fmt' or 'gofmt -w .' to fix formatting"
+            exit 1
+          fi
+          echo "All Go files are properly formatted"
