@@ -93,6 +93,9 @@ wget https://raw.githubusercontent.com/russellb/canhazgpu/main/autocomplete_canh
 # Install system-wide
 sudo cp canhazgpu /usr/local/bin/
 sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
+
+# Optional: Create short alias symlink
+sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 ```
 
 ### Option 4: Local Installation
@@ -103,7 +106,7 @@ export PATH="$PWD:$PATH"
 
 ## Bash Completion
 
-The bash completion script provides tab completion for canhazgpu commands and options.
+The bash completion script provides tab completion for canhazgpu commands and options. It also supports the short alias `chg` if you've created the symlink.
 
 !!! important "Required for `canhazgpu run` Commands"
     Installing bash completion is required for proper tab completion when using commands with `canhazgpu run`. Without it, bash completion won't work for the commands you run after the `--` separator.
@@ -127,6 +130,10 @@ With bash completion enabled, you can use tab completion:
 ```bash
 # Complete commands
 canhazgpu <TAB>
+# Shows: admin  release  report  reserve  run  status  web
+
+# Complete commands (works with chg alias too)
+chg <TAB>
 # Shows: admin  release  report  reserve  run  status  web
 
 # Complete options

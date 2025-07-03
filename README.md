@@ -111,6 +111,9 @@ sudo cp canhazgpu /usr/local/bin/
 wget https://raw.githubusercontent.com/russellb/canhazgpu/main/autocomplete_canhazgpu.sh
 sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
 
+# Optional: Create short alias symlink (after installing to /usr/local/bin)
+sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
+
 # Initialize GPU pool
 canhazgpu admin --gpus $(nvidia-smi -L | wc -l)
 ```

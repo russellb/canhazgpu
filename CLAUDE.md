@@ -43,6 +43,9 @@ make test             # Run Go tests (when implemented)
 
 # Option 3: Install from local source
 go install .          # Installs to $GOPATH/bin or $HOME/go/bin
+
+# Optional: Create short alias symlink (after installing to /usr/local/bin)
+sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 ```
 
 ### Usage Examples

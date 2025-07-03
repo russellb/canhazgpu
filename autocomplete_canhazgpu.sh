@@ -36,7 +36,7 @@ _canhazgpu_complete() {
 
     # Before '--', provide completion for canhazgpu itself
     case "$prev" in
-        canhazgpu)
+        canhazgpu|chg)
             COMPREPLY=( $(compgen -W "admin reserve release run status report web help --help --redis-host --redis-port --redis-db" -- "$cur") )
             ;;
         admin)
@@ -72,3 +72,4 @@ _canhazgpu_complete() {
     esac
 }
 complete -F _canhazgpu_complete -o default -o bashdefault canhazgpu
+complete -F _canhazgpu_complete -o default -o bashdefault chg
