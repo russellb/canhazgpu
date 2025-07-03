@@ -81,7 +81,7 @@ and your command begins.`,
 
 func init() {
 	runCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
-	runCmd.Flags().IntSliceP("gpu-ids", "", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
+	runCmd.Flags().IntSliceP("gpu-ids", "G", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
 	runCmd.Flags().StringP("timeout", "t", "", "Timeout duration for graceful command termination (e.g., 30m, 2h, 1d). Disabled by default.")
 
 	// Allow passing through arbitrary arguments after --

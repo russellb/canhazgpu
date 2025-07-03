@@ -57,7 +57,7 @@ automatically expire after the specified duration.`,
 
 func init() {
 	reserveCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
-	reserveCmd.Flags().IntSliceP("gpu-ids", "", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
+	reserveCmd.Flags().IntSliceP("gpu-ids", "G", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
 	reserveCmd.Flags().StringP("duration", "d", "8h", "Duration to reserve GPUs (e.g., 30m, 2h, 1d)")
 
 	rootCmd.AddCommand(reserveCmd)
