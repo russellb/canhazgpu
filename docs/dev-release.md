@@ -77,7 +77,7 @@ After goreleaser completes:
 
 The release process uses `.goreleaser.yml` in the repository root. Key features:
 
-- **Multi-platform builds**: Linux, macOS, Windows (amd64, arm64)
+- **Multi-platform builds**: Linux (amd64, arm64)
 - **Archive creation**: Compressed binaries for each platform
 - **Checksums**: SHA256 checksums for verification
 - **GitHub Release**: Automatic release creation with artifacts
