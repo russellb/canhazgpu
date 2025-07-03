@@ -144,16 +144,23 @@ func detectModelFromParentProcess(pid int) *ModelInfo {
 // parseVLLMCommand extracts model information from vllm commands
 // Examples:
 // - "vllm serve openai/whisper-large-v3 --port 8000" (positional model)
+// - "vllm serve --model openai/whisper-large-v3 --port 8000" (--model flag with serve)
 // - "python -m vllm.entrypoints.openai.api_server --model openai/whisper-large-v3 --port 8000" (--model flag)
 func parseVLLMCommand(command string) *ModelInfo {
 	parts := strings.Fields(command)
 
 	model := ""
 
-	// Check for --model flag anywhere in the command (used with Python module)
-	for i := 0; i < len(parts)-1; i++ {
+	// Check for --model flag anywhere in the command (works with both direct vllm serve and Python module)
+	for i := 0; i < len(parts); i++ {
+		// Handle --model value format
 		if parts[i] == "--model" && i+1 < len(parts) {
 			model = parts[i+1]
+			break
+		}
+		// Handle --model=value format
+		if strings.HasPrefix(parts[i], "--model=") {
+			model = strings.TrimPrefix(parts[i], "--model=")
 			break
 		}
 	}

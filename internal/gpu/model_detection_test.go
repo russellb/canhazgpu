@@ -63,6 +63,13 @@ func TestDetectModelFromProcesses(t *testing.T) {
 			expected: &ModelInfo{Provider: "openai", Model: "openai/whisper-large-v3"},
 		},
 		{
+			name: "vLLM serve with --model flag",
+			processes: []types.GPUProcessInfo{
+				{PID: 1234, ProcessName: "vllm serve --model mistralai/Mistral-7B-Instruct-v0.1 --port 8000", User: "user1"},
+			},
+			expected: &ModelInfo{Provider: "mistralai", Model: "mistralai/Mistral-7B-Instruct-v0.1"},
+		},
+		{
 			name: "vLLM serve with absolute path",
 			processes: []types.GPUProcessInfo{
 				{PID: 1234, ProcessName: "/usr/local/bin/vllm serve meta-llama/Llama-2-7b-chat-hf --port 8080", User: "user1"},
@@ -146,6 +153,26 @@ func TestParseVLLMCommand(t *testing.T) {
 			name:     "vllm as relative path",
 			command:  "./venv/bin/vllm serve deepseek-ai/deepseek-coder-6.7b-instruct",
 			expected: &ModelInfo{Provider: "deepseek-ai", Model: "deepseek-ai/deepseek-coder-6.7b-instruct"},
+		},
+		{
+			name:     "vllm serve with --model flag",
+			command:  "vllm serve --model openai/whisper-large-v3 --port 8000",
+			expected: &ModelInfo{Provider: "openai", Model: "openai/whisper-large-v3"},
+		},
+		{
+			name:     "vllm serve with --model flag and other arguments",
+			command:  "vllm serve --host 0.0.0.0 --model meta-llama/Llama-2-7b-chat-hf --port 8080 --enforce-eager",
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Llama-2-7b-chat-hf"},
+		},
+		{
+			name:     "vllm serve with --model=value format",
+			command:  "vllm serve --model=meta-llama/Llama-3.2-1B-Instruct --port 8000",
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Llama-3.2-1B-Instruct"},
+		},
+		{
+			name:     "python module with --model=value format",
+			command:  "python -m vllm.entrypoints.openai.api_server --host 0.0.0.0 --model=qwen/Qwen2-7B-Instruct --port 8080",
+			expected: &ModelInfo{Provider: "qwen", Model: "qwen/Qwen2-7B-Instruct"},
 		},
 	}
 
