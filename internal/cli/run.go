@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -30,6 +31,7 @@ The command will:
 3. Run your command
 4. Automatically release GPUs when the command finishes
 5. Maintain a heartbeat while running to keep the reservation active
+6. Forward signals (Ctrl-C/SIGINT) to the child process for graceful shutdown
 
 Optionally, you can set a timeout to automatically terminate the command and release
 GPUs after a specified duration. When the timeout is reached, SIGINT will be sent to
@@ -182,6 +184,27 @@ func runRun(ctx context.Context, gpuCount int, timeoutStr string, command []stri
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start command: %v", err)
 	}
+
+	// Set up signal handling to forward SIGINT to child process
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		for sig := range sigChan {
+			// Forward the signal to the child process
+			if cmd.Process != nil {
+				// Send signal directly to the process we created
+				if err := cmd.Process.Signal(sig.(syscall.Signal)); err != nil {
+					// Log error but don't fail - process might have already exited
+					fmt.Fprintf(os.Stderr, "Failed to forward signal to child process: %v\n", err)
+				}
+			}
+		}
+	}()
+	defer func() {
+		signal.Stop(sigChan)
+		close(sigChan)
+	}()
 
 	// Handle timeout with graceful shutdown if specified
 	var timeoutKilled int32 // Use atomic operations for thread safety
