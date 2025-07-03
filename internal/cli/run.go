@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -30,9 +31,12 @@ The command will:
 4. Automatically release GPUs when the command finishes
 5. Maintain a heartbeat while running to keep the reservation active
 
-Optionally, you can set a timeout to automatically kill the command and release
-GPUs after a specified duration. This is useful for preventing runaway processes
-from holding GPUs indefinitely.
+Optionally, you can set a timeout to automatically terminate the command and release
+GPUs after a specified duration. When the timeout is reached, SIGINT will be sent to
+the entire process group (including all child processes) for graceful shutdown, 
+followed by a 30-second grace period. If any processes haven't exited after the 
+grace period, the entire process group will be force-killed with SIGKILL.
+This is useful for preventing runaway processes from holding GPUs indefinitely.
 
 Example usage:
   canhazgpu run --gpus 1 -- python train.py
@@ -63,12 +67,34 @@ and your command begins.`,
 
 func init() {
 	runCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
-	runCmd.Flags().StringP("timeout", "t", "", "Timeout duration to kill command (e.g., 30m, 2h, 1d). Disabled by default.")
+	runCmd.Flags().StringP("timeout", "t", "", "Timeout duration for graceful command termination (e.g., 30m, 2h, 1d). Disabled by default.")
 
 	// Allow passing through arbitrary arguments after --
 	runCmd.Flags().SetInterspersed(false)
 
 	rootCmd.AddCommand(runCmd)
+}
+
+// killProcessGroup kills the entire process group (parent and all children)
+func killProcessGroup(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return fmt.Errorf("process not started")
+	}
+
+	// Kill the entire process group by using negative PID
+	pgid, err := syscall.Getpgid(cmd.Process.Pid)
+	if err != nil {
+		// If we can't get the process group, just kill the process itself
+		return cmd.Process.Kill()
+	}
+
+	// Send SIGKILL to the entire process group
+	if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil {
+		// If group kill fails, try to kill just the process
+		return cmd.Process.Kill()
+	}
+
+	return nil
 }
 
 func runRun(ctx context.Context, gpuCount int, timeoutStr string, command []string) error {
@@ -135,18 +161,8 @@ func runRun(ctx context.Context, gpuCount int, timeoutStr string, command []stri
 		cudaDevices[i] = strconv.Itoa(gpuID)
 	}
 
-	// Create context with timeout if specified
-	var cmdCtx context.Context
-	var cancelFunc context.CancelFunc
-	if hasTimeout {
-		cmdCtx, cancelFunc = context.WithTimeout(ctx, timeout)
-		defer cancelFunc()
-	} else {
-		cmdCtx = ctx
-	}
-
-	// Prepare command
-	cmd := exec.CommandContext(cmdCtx, command[0], command[1:]...)
+	// Prepare command (don't use CommandContext to avoid abrupt killing)
+	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -155,14 +171,86 @@ func runRun(ctx context.Context, gpuCount int, timeoutStr string, command []stri
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, fmt.Sprintf("CUDA_VISIBLE_DEVICES=%s", strings.Join(cudaDevices, ",")))
 
-	// Run command
-	err = cmd.Run()
+	// Create a new process group so we can kill all child processes if needed.
+	// This ensures that when we send signals (SIGINT or SIGKILL), they reach
+	// all child processes spawned by the command, not just the parent.
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+
+	// Start command
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start command: %v", err)
+	}
+
+	// Handle timeout with graceful shutdown if specified
+	var timeoutKilled int32 // Use atomic operations for thread safety
+	if hasTimeout {
+		go func() {
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+
+			select {
+			case <-timer.C:
+				fmt.Printf("Command timeout reached after %s. Attempting graceful shutdown...\n", utils.FormatDuration(timeout))
+
+				// Send SIGINT to the process group for graceful shutdown
+				if cmd.Process != nil {
+					pgid, err := syscall.Getpgid(cmd.Process.Pid)
+					if err == nil {
+						// Send SIGINT to the entire process group
+						if err := syscall.Kill(-pgid, syscall.SIGINT); err != nil {
+							fmt.Printf("Failed to send SIGINT to process group: %v\n", err)
+							// If SIGINT fails, kill immediately
+							killProcessGroup(cmd)
+							atomic.StoreInt32(&timeoutKilled, 1)
+							return
+						}
+					} else {
+						// Fallback to sending signal to just the process
+						if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
+							fmt.Printf("Failed to send SIGINT: %v\n", err)
+							// If SIGINT fails, kill immediately
+							killProcessGroup(cmd)
+							atomic.StoreInt32(&timeoutKilled, 1)
+							return
+						}
+					}
+				}
+
+				// Wait 30 seconds for graceful shutdown
+				gracePeriod := 30 * time.Second
+				fmt.Printf("Waiting %s for graceful shutdown...\n", gracePeriod)
+
+				graceTimer := time.NewTimer(gracePeriod)
+				defer graceTimer.Stop()
+
+				select {
+				case <-graceTimer.C:
+					// Grace period expired, force kill
+					fmt.Printf("Grace period expired. Force killing process group...\n")
+					if err := killProcessGroup(cmd); err != nil {
+						fmt.Printf("Error killing process group: %v\n", err)
+					}
+					atomic.StoreInt32(&timeoutKilled, 1)
+				case <-ctx.Done():
+					// Parent context cancelled, don't force kill
+					return
+				}
+			case <-ctx.Done():
+				// Parent context cancelled, don't timeout
+				return
+			}
+		}()
+	}
+
+	// Wait for command to complete
+	err = cmd.Wait()
 
 	// Handle exit code properly - ensure cleanup happens before exiting
 	if err != nil {
-		// Check if error was due to timeout
-		if hasTimeout && cmdCtx.Err() == context.DeadlineExceeded {
-			fmt.Printf("Command timed out after %s and was killed\n", utils.FormatDuration(timeout))
+		if atomic.LoadInt32(&timeoutKilled) == 1 {
+			fmt.Printf("Command was terminated due to timeout\n")
 			// Stop heartbeat and clean up GPUs before exiting
 			heartbeat.Stop()
 			os.Exit(124) // Standard timeout exit code
