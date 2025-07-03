@@ -26,6 +26,7 @@ The tool is a Go application structured as a CLI with internal packages that imp
 - **Unreserved Usage Detection**: nvidia-smi integration detects GPUs in use without proper reservations
 - **User Accountability**: Process ownership detection identifies which users are running unreserved processes
 - **LRU Allocation**: Least Recently Used strategy ensures fair GPU distribution over time
+- **Specific GPU Reservation**: Users can reserve exact GPU IDs (e.g., --gpu-ids 1,3) when specific hardware is needed
 - **Race Condition Protection**: Redis-based distributed locking prevents allocation conflicts
 
 ## Development Commands
@@ -59,14 +60,20 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 # Check status with automatic validation
 ./build/canhazgpu status
 
-# Run command with GPU reservation
+# Run command with GPU reservation (by count)
 ./build/canhazgpu run --gpus 1 -- python train.py
+
+# Run command with specific GPU IDs
+./build/canhazgpu run --gpu-ids 1,3 -- python train.py
 
 # Run command with timeout to prevent runaway processes
 ./build/canhazgpu run --gpus 1 --timeout 2h -- python train.py
 
-# Manual GPU reservation
+# Manual GPU reservation (by count)
 ./build/canhazgpu reserve --gpus 2 --duration 4h
+
+# Manual reservation of specific GPU IDs
+./build/canhazgpu reserve --gpu-ids 0,2,4 --duration 2h
 
 # Release manual reservations
 ./build/canhazgpu release

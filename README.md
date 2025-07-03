@@ -36,8 +36,14 @@ canhazgpu status
 # - CUDA_VISIBLE_DEVICES is set in the environment before running the command.
 canhazgpu run --gpus 2 -- vllm serve my/model --tensor-parallel-size 2
 
+# Reserve specific GPUs by ID
+canhazgpu run --gpu-ids 1,3 -- python train.py
+
 # Reserve a single GPU manually for development
 canhazgpu reserve --gpus 1 --duration 4h
+
+# Reserve specific GPU IDs manually
+canhazgpu reserve --gpu-ids 0,2 --duration 2h
 
 # Release manual reservations when done
 canhazgpu release
@@ -54,6 +60,7 @@ canhazgpu web --port 8080
 - **Race condition protection**: Uses Redis-based distributed locking
 - **Automatic cleanup**: GPUs auto-released when processes end or reservations expire
 - **LRU allocation**: Fair distribution using least recently used strategy
+- **Specific GPU reservation**: Reserve exact GPU IDs when needed (e.g., --gpu-ids 1,3)
 - **Unreserved usage detection**: Identifies GPUs in use without proper reservations
 - **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
 - **Flexible reservations**: Support for both command execution and manual reservations

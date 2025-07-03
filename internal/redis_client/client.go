@@ -121,6 +121,12 @@ func (c *Client) ReleaseAllocationLock(ctx context.Context) error {
 
 // Atomic GPU Allocation using Lua script
 func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.AllocationRequest, unreservedGPUs []int) ([]int, error) {
+	// Check if specific GPU IDs are requested
+	if len(request.GPUIDs) > 0 {
+		return c.atomicReserveSpecificGPUs(ctx, request, unreservedGPUs)
+	}
+	
+	// Original logic for allocating by count
 	luaScript := `
 		local gpu_count = tonumber(ARGV[1])
 		local requested = tonumber(ARGV[2])
@@ -281,6 +287,172 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 			}
 		}
 		return allocated, nil
+	case map[string]interface{}:
+		// Handle error result directly as a map
+		if errorMsg, hasError := v["error"]; hasError {
+			return nil, fmt.Errorf("%v", errorMsg)
+		}
+		return nil, fmt.Errorf("unexpected map result from Lua script: %v", v)
+	default:
+		return nil, fmt.Errorf("unexpected result type from Lua script: %T", result)
+	}
+}
+
+// atomicReserveSpecificGPUs reserves specific GPU IDs if they are available
+func (c *Client) atomicReserveSpecificGPUs(ctx context.Context, request *types.AllocationRequest, unreservedGPUs []int) ([]int, error) {
+	luaScript := `
+		local requested_gpus_json = ARGV[1]
+		local user = ARGV[2]
+		local reservation_type = ARGV[3]
+		local current_time = tonumber(ARGV[4])
+		local expiry_time = ARGV[5]
+		local unreserved_gpus_json = ARGV[6]
+		local gpu_count = tonumber(ARGV[7])
+		
+		-- Parse requested GPU IDs
+		local requested_gpus = {}
+		if requested_gpus_json and requested_gpus_json ~= "" and requested_gpus_json ~= "[]" and requested_gpus_json ~= "null" then
+			local success, gpu_list = pcall(cjson.decode, requested_gpus_json)
+			if not success or not gpu_list or type(gpu_list) ~= "table" then
+				return redis.error_reply("Invalid GPU IDs format")
+			end
+			requested_gpus = gpu_list
+		else
+			return redis.error_reply("No GPU IDs specified")
+		end
+		
+		-- Parse unreserved GPUs (GPUs in use without reservation)
+		local unreserved_gpus = {}
+		if unreserved_gpus_json and unreserved_gpus_json ~= "" and unreserved_gpus_json ~= "[]" and unreserved_gpus_json ~= "null" then
+			local success, unreserved_list = pcall(cjson.decode, unreserved_gpus_json)
+			if success and unreserved_list and type(unreserved_list) == "table" then
+				for _, gpu_id in ipairs(unreserved_list) do
+					unreserved_gpus[tonumber(gpu_id)] = true
+				end
+			end
+		end
+		
+		-- Validate all requested GPUs
+		for _, gpu_id in ipairs(requested_gpus) do
+			local gpu_id_num = tonumber(gpu_id)
+			
+			-- Check if GPU ID is valid (within range)
+			if gpu_id_num < 0 or gpu_id_num >= gpu_count then
+				return redis.error_reply("GPU ID " .. gpu_id .. " is out of range (0-" .. (gpu_count-1) .. ")")
+			end
+			
+			-- Check if GPU is unreserved (in use without reservation)
+			if unreserved_gpus[gpu_id_num] then
+				return redis.error_reply("GPU " .. gpu_id .. " is in use without reservation")
+			end
+			
+			-- Check if GPU is already reserved
+			local key = "canhazgpu:gpu:" .. gpu_id
+			local gpu_data = redis.call('GET', key)
+			
+			if gpu_data then
+				local state = cjson.decode(gpu_data)
+				if state.user then
+					-- GPU is already reserved
+					if state.type == "manual" and state.expiry_time and tonumber(state.expiry_time) < current_time then
+						-- Manual reservation has expired, continue
+					elseif state.type == "run" and state.last_heartbeat and (current_time - tonumber(state.last_heartbeat)) > 900 then
+						-- Run reservation heartbeat timeout (15 minutes), continue
+					else
+						-- GPU is actively reserved
+						return redis.error_reply("GPU " .. gpu_id .. " is already reserved by user '" .. state.user .. "'")
+					end
+				end
+			end
+		end
+		
+		-- All GPUs are available, reserve them
+		local allocated = {}
+		for _, gpu_id in ipairs(requested_gpus) do
+			local gpu_id_num = tonumber(gpu_id)
+			table.insert(allocated, gpu_id_num)
+			
+			-- Create reservation state
+			local state = {
+				user = user,
+				start_time = current_time,
+				type = reservation_type
+			}
+			
+			if reservation_type == "run" then
+				state.last_heartbeat = current_time
+			elseif reservation_type == "manual" and expiry_time ~= "nil" then
+				state.expiry_time = tonumber(expiry_time)
+			end
+			
+			-- Set GPU state
+			local key = "canhazgpu:gpu:" .. gpu_id
+			redis.call('SET', key, cjson.encode(state))
+		end
+		
+		return allocated
+	`
+
+	// Convert requested GPU IDs to JSON
+	requestedGPUsJSON, err := json.Marshal(request.GPUIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert unreserved GPUs to JSON
+	unreservedJSON, err := json.Marshal(unreservedGPUs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get GPU count for validation
+	gpuCount, err := c.GetGPUCount(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prepare arguments
+	currentTime := time.Now().Unix()
+	expiryTime := "nil"
+	if request.ExpiryTime != nil {
+		expiryTime = fmt.Sprintf("%d", request.ExpiryTime.Unix())
+	}
+
+	// Execute Lua script
+	result, err := c.rdb.Eval(ctx, luaScript, []string{},
+		string(requestedGPUsJSON),
+		request.User,
+		request.ReservationType,
+		currentTime,
+		expiryTime,
+		string(unreservedJSON),
+		gpuCount,
+	).Result()
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse result
+	switch v := result.(type) {
+	case []interface{}:
+		// Check if first element is an error map
+		if len(v) > 0 {
+			if errorMap, ok := v[0].(map[string]interface{}); ok {
+				if errorMsg, hasError := errorMap["error"]; hasError {
+					return nil, fmt.Errorf("%v", errorMsg)
+				}
+			}
+		}
+
+		// Convert to int slice
+		var allocatedGPUs []int
+		for _, id := range v {
+			if gpuID, ok := id.(int64); ok {
+				allocatedGPUs = append(allocatedGPUs, int(gpuID))
+			}
+		}
+		return allocatedGPUs, nil
 	case map[string]interface{}:
 		// Handle error result directly as a map
 		if errorMsg, hasError := v["error"]; hasError {

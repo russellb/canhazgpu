@@ -85,10 +85,10 @@ func TestRunRun_Validation(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "Zero GPU count",
+			name:     "Zero GPU count (defaults to 1)",
 			gpuCount: 0,
 			command:  []string{"echo", "test"},
-			wantErr:  true,
+			wantErr:  false,
 		},
 		{
 			name:     "Negative GPU count",
@@ -103,7 +103,7 @@ func TestRunRun_Validation(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err := runRun(ctx, tt.gpuCount, tt.command)
+			err := runRun(ctx, tt.gpuCount, nil, "", tt.command)
 
 			if tt.wantErr {
 				assert.Error(t, err)

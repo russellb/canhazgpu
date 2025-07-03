@@ -83,7 +83,8 @@ type GPUProcessInfo struct {
 
 // AllocationRequest represents a request to allocate GPUs
 type AllocationRequest struct {
-	GPUCount        int
+	GPUCount        int      // Number of GPUs to allocate (ignored if GPUIDs is specified)
+	GPUIDs          []int    // Specific GPU IDs to allocate (mutually exclusive with GPUCount)
 	User            string
 	ReservationType string
 	ExpiryTime      *time.Time
@@ -91,8 +92,41 @@ type AllocationRequest struct {
 
 // Validate checks if the allocation request is valid
 func (ar *AllocationRequest) Validate() error {
-	if ar.GPUCount <= 0 {
+	// Check that either GPUCount or GPUIDs is specified, but not both
+	hasGPUCount := ar.GPUCount > 0
+	hasGPUIDs := len(ar.GPUIDs) > 0
+	
+	if !hasGPUCount && !hasGPUIDs {
+		return fmt.Errorf("either gpu count or specific gpu ids must be specified")
+	}
+	
+	if hasGPUCount && hasGPUIDs {
+		// Allow if GPUCount matches the number of GPU IDs
+		if ar.GPUCount == len(ar.GPUIDs) {
+			// This is fine - user specified matching count and IDs
+		} else if ar.GPUCount == 1 {
+			// Allow if GPUCount is 1 (likely the default) regardless of GPU ID count
+		} else {
+			return fmt.Errorf("conflicting gpu count (%d) and gpu ids (count: %d)", ar.GPUCount, len(ar.GPUIDs))
+		}
+	}
+	
+	if hasGPUCount && ar.GPUCount <= 0 {
 		return fmt.Errorf("gpu count must be positive, got %d", ar.GPUCount)
+	}
+	
+	if hasGPUIDs {
+		// Check for duplicate GPU IDs
+		seen := make(map[int]bool)
+		for _, id := range ar.GPUIDs {
+			if id < 0 {
+				return fmt.Errorf("gpu id must be non-negative, got %d", id)
+			}
+			if seen[id] {
+				return fmt.Errorf("duplicate gpu id: %d", id)
+			}
+			seen[id] = true
+		}
 	}
 
 	if ar.User == "" {

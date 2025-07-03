@@ -138,6 +138,71 @@ func TestAllocationRequest_Validation(t *testing.T) {
 			valid: true,
 		},
 		{
+			name: "Valid request with GPU IDs",
+			request: &AllocationRequest{
+				GPUIDs:          []int{1, 3, 5},
+				User:            "testuser",
+				ReservationType: "run",
+			},
+			valid: true,
+		},
+		{
+			name: "Valid - matching GPUCount and GPUIDs",
+			request: &AllocationRequest{
+				GPUCount:        2,
+				GPUIDs:          []int{1, 3},
+				User:            "testuser",
+				ReservationType: "run",
+			},
+			valid: true,
+		},
+		{
+			name: "Valid - GPUCount 1 (default) with multiple GPUIDs",
+			request: &AllocationRequest{
+				GPUCount:        1,
+				GPUIDs:          []int{1, 3, 5},
+				User:            "testuser",
+				ReservationType: "run",
+			},
+			valid: true,
+		},
+		{
+			name: "Invalid - conflicting GPUCount and GPUIDs",
+			request: &AllocationRequest{
+				GPUCount:        3,
+				GPUIDs:          []int{1, 3},
+				User:            "testuser",
+				ReservationType: "run",
+			},
+			valid: false,
+		},
+		{
+			name: "Invalid - neither GPUCount nor GPUIDs",
+			request: &AllocationRequest{
+				User:            "testuser",
+				ReservationType: "run",
+			},
+			valid: false,
+		},
+		{
+			name: "Invalid - duplicate GPU IDs",
+			request: &AllocationRequest{
+				GPUIDs:          []int{1, 3, 1},
+				User:            "testuser",
+				ReservationType: "run",
+			},
+			valid: false,
+		},
+		{
+			name: "Invalid - negative GPU ID",
+			request: &AllocationRequest{
+				GPUIDs:          []int{1, -1, 3},
+				User:            "testuser",
+				ReservationType: "run",
+			},
+			valid: false,
+		},
+		{
 			name: "Invalid GPU count",
 			request: &AllocationRequest{
 				GPUCount:        0,

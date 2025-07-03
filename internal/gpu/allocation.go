@@ -25,6 +25,11 @@ func NewAllocationEngine(client *redis_client.Client, config *types.Config) *All
 
 // AllocateGPUs allocates GPUs using LRU strategy with race condition protection
 func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.AllocationRequest) ([]int, error) {
+	// Validate the allocation request first
+	if err := request.Validate(); err != nil {
+		return nil, err
+	}
+	
 	// Validate GPU availability using nvidia-smi
 	usage, err := DetectGPUUsage(ctx)
 	if err != nil {
@@ -56,6 +61,7 @@ func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.All
 			return nil, fmt.Errorf("not enough GPUs available. Requested: %d, Available: %d%s",
 				request.GPUCount, available, unreservedMsg)
 		}
+		// For specific GPU ID errors, pass through the detailed error message
 		return nil, err
 	}
 

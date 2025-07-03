@@ -17,7 +17,6 @@ import (
 	"github.com/russellb/canhazgpu/internal/types"
 	"github.com/russellb/canhazgpu/internal/utils"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var runCmd = &cobra.Command{
@@ -26,12 +25,23 @@ var runCmd = &cobra.Command{
 	Long: `Reserve GPUs and run a command with CUDA_VISIBLE_DEVICES automatically set.
 
 The command will:
-1. Reserve the requested number of GPUs
+1. Reserve the requested number of GPUs (or specific GPU IDs)
 2. Set CUDA_VISIBLE_DEVICES to the allocated GPU IDs  
 3. Run your command
 4. Automatically release GPUs when the command finishes
 5. Maintain a heartbeat while running to keep the reservation active
 6. Forward signals (Ctrl-C/SIGINT) to the child process for graceful shutdown
+
+You can reserve GPUs in two ways:
+- By count: --gpus N (allocates N GPUs using LRU strategy)
+- By specific IDs: --gpu-ids 1,3,5 (reserves exactly those GPU IDs)
+
+When using --gpu-ids, the --gpus flag is optional if:
+- It matches the number of GPU IDs specified, or
+- It is 1 (the default value)
+
+If specific GPU IDs are requested and any are not available, the entire
+reservation will fail.
 
 Optionally, you can set a timeout to automatically terminate the command and release
 GPUs after a specified duration. When the timeout is reached, SIGINT will be sent to
@@ -43,6 +53,7 @@ This is useful for preventing runaway processes from holding GPUs indefinitely.
 Example usage:
   canhazgpu run --gpus 1 -- python train.py
   canhazgpu run --gpus 2 -- python -m torch.distributed.launch train.py
+  canhazgpu run --gpu-ids 1,3 -- python train.py
   canhazgpu run --gpus 1 --timeout 2h -- python long_training.py
 
 Timeout formats supported:
@@ -55,20 +66,22 @@ Timeout formats supported:
 The '--' separator is important - it tells canhazgpu where its options end
 and your command begins.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		gpuCount := viper.GetInt("run.gpus")
-		timeoutStr := viper.GetString("run.timeout")
+		gpuCount, _ := cmd.Flags().GetInt("gpus")
+		gpuIDs, _ := cmd.Flags().GetIntSlice("gpu-ids")
+		timeoutStr, _ := cmd.Flags().GetString("timeout")
 
 		if len(args) == 0 {
 			return fmt.Errorf("no command specified. Use: canhazgpu run --gpus N -- <command>")
 		}
 
-		return runRun(cmd.Context(), gpuCount, timeoutStr, args)
+		return runRun(cmd.Context(), gpuCount, gpuIDs, timeoutStr, args)
 	},
 	DisableFlagsInUseLine: true,
 }
 
 func init() {
 	runCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
+	runCmd.Flags().IntSliceP("gpu-ids", "", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
 	runCmd.Flags().StringP("timeout", "t", "", "Timeout duration for graceful command termination (e.g., 30m, 2h, 1d). Disabled by default.")
 
 	// Allow passing through arbitrary arguments after --
@@ -99,9 +112,10 @@ func killProcessGroup(cmd *exec.Cmd) error {
 	return nil
 }
 
-func runRun(ctx context.Context, gpuCount int, timeoutStr string, command []string) error {
-	if gpuCount <= 0 {
-		return fmt.Errorf("GPU count must be greater than 0")
+func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, command []string) error {
+	// If neither is specified, default to 1 GPU
+	if gpuCount == 0 && len(gpuIDs) == 0 {
+		gpuCount = 1
 	}
 
 	config := getConfig()
@@ -133,6 +147,7 @@ func runRun(ctx context.Context, gpuCount int, timeoutStr string, command []stri
 	user := getCurrentUser()
 	request := &types.AllocationRequest{
 		GPUCount:        gpuCount,
+		GPUIDs:          gpuIDs,
 		User:            user,
 		ReservationType: types.ReservationTypeRun,
 		ExpiryTime:      nil, // No expiry for run-type reservations
