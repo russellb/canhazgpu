@@ -229,7 +229,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             justify-content: space-between;
             align-items: center;
             position: relative;
-            min-height: 40px;
+            min-height: 60px;
+            padding: 5px 0;
         }
         .gpu-header-left {
             display: flex;
@@ -245,6 +246,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             text-align: center;
             z-index: 1;
             pointer-events: none;
+            max-width: 40%;
+            line-height: 1.3;
         }
         .status-badge {
             z-index: 2;
