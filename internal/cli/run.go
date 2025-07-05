@@ -133,7 +133,11 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 		hasTimeout = true
 	}
 	client := redis_client.NewClient(config)
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			fmt.Printf("Warning: failed to close Redis client: %v\n", err)
+		}
+	}()
 
 	// Test Redis connection
 	if err := client.Ping(ctx); err != nil {

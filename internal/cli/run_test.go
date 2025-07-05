@@ -42,7 +42,11 @@ func TestRunCommand_FailureCleanup(t *testing.T) {
 			t.Logf("Warning: failed to clear GPU states in defer: %v", err)
 		}
 	}()
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
+	}()
 
 	// Initialize GPU pool
 	err := client.SetGPUCount(ctx, 4)
@@ -175,7 +179,11 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 			t.Logf("Warning: failed to clear GPU states in defer: %v", err)
 		}
 	}()
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
+	}()
 
 	// Initialize GPU pool
 	err := client.SetGPUCount(ctx, 4)
@@ -222,7 +230,7 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 	state, err = client.GetGPUState(ctx, 0)
 	assert.NoError(t, err)
 	assert.Empty(t, state.User, "GPU should be released")
-	assert.False(t, state.LastReleased.Time.IsZero(), "Should have release timestamp")
+	assert.False(t, state.LastReleased.IsZero(), "Should have release timestamp")
 
 	t.Log("GPU cleanup verified - this simulates the fixed behavior")
 }

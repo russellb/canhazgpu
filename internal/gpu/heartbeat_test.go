@@ -243,7 +243,11 @@ func TestHeartbeatManager_ReservationLoss(t *testing.T) {
 			t.Logf("Warning: failed to clear GPU states in defer: %v", err)
 		}
 	}()
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
+	}()
 
 	// Initialize GPU pool
 	if err := client.SetGPUCount(ctx, 4); err != nil {
@@ -279,7 +283,7 @@ func TestHeartbeatManager_ReservationLoss(t *testing.T) {
 	state, err := client.GetGPUState(ctx, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, user, state.User)
-	assert.True(t, state.LastHeartbeat.Time.After(now))
+	assert.True(t, state.LastHeartbeat.ToTime().After(now))
 
 	t.Log("🔥 Simulating reservation loss...")
 

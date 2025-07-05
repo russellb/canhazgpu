@@ -41,7 +41,11 @@ func init() {
 func runAdmin(ctx context.Context, gpuCount int, force bool) error {
 	config := getConfig()
 	client := redis_client.NewClient(config)
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			fmt.Printf("Warning: failed to close Redis client: %v\n", err)
+		}
+	}()
 
 	// Test Redis connection
 	if err := client.Ping(ctx); err != nil {

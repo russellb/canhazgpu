@@ -49,7 +49,7 @@ clean:
 .PHONY: lint
 lint:
 	@echo "Running lint"
-	@command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@if ! command -v golangci-lint >/dev/null 2>&1 ; then curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(shell go env GOPATH)/bin v2.2.1 ; fi
 	@echo "Using golangci-lint version: $$(golangci-lint --version | head -n 1)"
 	@golangci-lint run
 
