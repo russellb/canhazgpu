@@ -30,6 +30,10 @@ func TestAllocationEngine_GetGPUStatus_Structure(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	if !isNvidiaSmiAvailable() {
+		t.Skip("Skipping test: nvidia-smi command not available")
+	}
+
 	t.Log("Starting integration test - this may take time if Redis is not available")
 
 	// Test Redis client setup
@@ -63,6 +67,10 @@ func TestAllocationEngine_GetGPUStatus_Structure(t *testing.T) {
 func TestAllocationEngine_AllocateGPUs_Structure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
+	}
+
+	if !isNvidiaSmiAvailable() {
+		t.Skip("Skipping test: nvidia-smi command not available")
 	}
 
 	t.Log("Starting GPU allocation integration test - may take 10+ seconds")

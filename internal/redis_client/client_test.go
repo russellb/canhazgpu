@@ -32,7 +32,9 @@ func setupTestRedis(t *testing.T) *Client {
 	// Cleanup after test
 	t.Cleanup(func() {
 		client.rdb.FlushDB(ctx)
-		client.Close()
+		if err := client.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
 	})
 
 	return client
@@ -119,7 +121,7 @@ func TestClient_GPUState(t *testing.T) {
 	retrievedState, err = client.GetGPUState(ctx, gpuID)
 	assert.NoError(t, err)
 	assert.Equal(t, "", retrievedState.User)
-	assert.True(t, retrievedState.LastReleased.Time.IsZero())
+	assert.True(t, retrievedState.LastReleased.IsZero())
 }
 
 func TestClient_AllocationLock(t *testing.T) {
@@ -139,7 +141,9 @@ func TestClient_AllocationLock(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Cleanup
-	client.ReleaseAllocationLock(ctx)
+	if err := client.ReleaseAllocationLock(ctx); err != nil {
+		t.Logf("Warning: failed to release allocation lock: %v", err)
+	}
 }
 
 func TestClient_AllocationLock_Concurrency(t *testing.T) {
@@ -160,7 +164,11 @@ func TestClient_AllocationLock_Concurrency(t *testing.T) {
 		RedisDB:   15, // Same test database
 	}
 	client2 := NewClient(config2)
-	defer client2.Close()
+	defer func() {
+		if err := client2.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client2: %v", err)
+		}
+	}()
 
 	// Use a timeout context for the second lock attempt
 	timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -189,7 +197,9 @@ func TestClient_AllocationLock_Concurrency(t *testing.T) {
 	t.Log("Concurrency test completed successfully")
 
 	// Cleanup
-	client2.ReleaseAllocationLock(ctx)
+	if err := client2.ReleaseAllocationLock(ctx); err != nil {
+		t.Logf("Warning: failed to release allocation lock: %v", err)
+	}
 }
 
 func TestClient_AtomicReserveGPUs_SimpleCase(t *testing.T) {
@@ -295,7 +305,7 @@ func TestClient_AtomicReserveGPUs_ManualReservation(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "testuser", state.User)
 	assert.Equal(t, types.ReservationTypeManual, state.Type)
-	assert.False(t, state.ExpiryTime.Time.IsZero())
+	assert.False(t, state.ExpiryTime.IsZero())
 }
 
 func TestClient_ClearAllGPUStates(t *testing.T) {
@@ -336,7 +346,7 @@ func TestClient_NewClient(t *testing.T) {
 	config := &types.Config{
 		RedisHost: "localhost",
 		RedisPort: 6379,
-		RedisDB:   0,
+		RedisDB:   15,
 	}
 
 	client := NewClient(config)
@@ -432,7 +442,7 @@ func TestClient_AtomicReserveSpecificGPUs(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "user5", state2.User)
 	assert.Equal(t, types.ReservationTypeManual, state2.Type)
-	assert.False(t, state2.ExpiryTime.Time.IsZero())
+	assert.False(t, state2.ExpiryTime.IsZero())
 }
 
 func TestClient_AtomicReserveGPUs_MixedMode(t *testing.T) {

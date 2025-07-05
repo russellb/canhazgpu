@@ -12,6 +12,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// isNvidiaSmiAvailable checks if nvidia-smi command is available
+func isNvidiaSmiAvailable() bool {
+	_, err := exec.LookPath("nvidia-smi")
+	return err == nil
+}
+
+// TestIsNvidiaSmiAvailable tests the helper function itself
+func TestIsNvidiaSmiAvailable(t *testing.T) {
+	available := isNvidiaSmiAvailable()
+	t.Logf("nvidia-smi availability: %v", available)
+	
+	// This test just documents the current state, doesn't assert a specific value
+	// since it depends on the test environment
+}
+
 func TestRunCommand_FailureCleanup(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
@@ -34,9 +49,19 @@ func TestRunCommand_FailureCleanup(t *testing.T) {
 	}
 
 	// Clean state
-	client.ClearAllGPUStates(ctx)
-	defer client.ClearAllGPUStates(ctx)
-	defer client.Close()
+	if err := client.ClearAllGPUStates(ctx); err != nil {
+		t.Logf("Warning: failed to clear GPU states: %v", err)
+	}
+	defer func() {
+		if err := client.ClearAllGPUStates(ctx); err != nil {
+			t.Logf("Warning: failed to clear GPU states in defer: %v", err)
+		}
+	}()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
+	}()
 
 	// Initialize GPU pool
 	err := client.SetGPUCount(ctx, 4)
@@ -78,6 +103,10 @@ func TestRunCommand_Structure(t *testing.T) {
 }
 
 func TestRunRun_Validation(t *testing.T) {
+	if !isNvidiaSmiAvailable() {
+		t.Skip("Skipping test: nvidia-smi command not available")
+	}
+
 	tests := []struct {
 		name     string
 		gpuCount int
@@ -161,9 +190,19 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 	}
 
 	// Clean state
-	client.ClearAllGPUStates(ctx)
-	defer client.ClearAllGPUStates(ctx)
-	defer client.Close()
+	if err := client.ClearAllGPUStates(ctx); err != nil {
+		t.Logf("Warning: failed to clear GPU states: %v", err)
+	}
+	defer func() {
+		if err := client.ClearAllGPUStates(ctx); err != nil {
+			t.Logf("Warning: failed to clear GPU states in defer: %v", err)
+		}
+	}()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
+	}()
 
 	// Initialize GPU pool
 	err := client.SetGPUCount(ctx, 4)
@@ -210,7 +249,7 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 	state, err = client.GetGPUState(ctx, 0)
 	assert.NoError(t, err)
 	assert.Empty(t, state.User, "GPU should be released")
-	assert.False(t, state.LastReleased.Time.IsZero(), "Should have release timestamp")
+	assert.False(t, state.LastReleased.IsZero(), "Should have release timestamp")
 
 	t.Log("GPU cleanup verified - this simulates the fixed behavior")
 }

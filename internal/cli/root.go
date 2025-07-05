@@ -36,10 +36,18 @@ func init() {
 	rootCmd.PersistentFlags().Int("redis-db", 0, "Redis database")
 	rootCmd.PersistentFlags().Int("memory-threshold", types.MemoryThresholdMB, "Memory threshold in MB to consider a GPU as 'in use' (default: 1024)")
 
-	viper.BindPFlag("redis.host", rootCmd.PersistentFlags().Lookup("redis-host"))
-	viper.BindPFlag("redis.port", rootCmd.PersistentFlags().Lookup("redis-port"))
-	viper.BindPFlag("redis.db", rootCmd.PersistentFlags().Lookup("redis-db"))
-	viper.BindPFlag("memory.threshold", rootCmd.PersistentFlags().Lookup("memory-threshold"))
+	if err := viper.BindPFlag("redis.host", rootCmd.PersistentFlags().Lookup("redis-host")); err != nil {
+		panic(fmt.Sprintf("Failed to bind redis-host flag: %v", err))
+	}
+	if err := viper.BindPFlag("redis.port", rootCmd.PersistentFlags().Lookup("redis-port")); err != nil {
+		panic(fmt.Sprintf("Failed to bind redis-port flag: %v", err))
+	}
+	if err := viper.BindPFlag("redis.db", rootCmd.PersistentFlags().Lookup("redis-db")); err != nil {
+		panic(fmt.Sprintf("Failed to bind redis-db flag: %v", err))
+	}
+	if err := viper.BindPFlag("memory.threshold", rootCmd.PersistentFlags().Lookup("memory-threshold")); err != nil {
+		panic(fmt.Sprintf("Failed to bind memory-threshold flag: %v", err))
+	}
 
 	// Set defaults
 	viper.SetDefault("redis.host", "localhost")
@@ -114,7 +122,9 @@ func bindAllFlags() {
 			}
 
 			// Bind flag to viper
-			viper.BindPFlag(viperKey, flag)
+			if err := viper.BindPFlag(viperKey, flag); err != nil {
+				panic(fmt.Sprintf("Failed to bind flag %s: %v", viperKey, err))
+			}
 		})
 	})
 }
@@ -135,8 +145,4 @@ func getCurrentUser() string {
 		return user
 	}
 	return "unknown"
-}
-
-func formatError(err error) error {
-	return fmt.Errorf("%v", err)
 }
