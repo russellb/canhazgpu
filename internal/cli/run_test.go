@@ -12,6 +12,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// isNvidiaSmiAvailable checks if nvidia-smi command is available
+func isNvidiaSmiAvailable() bool {
+	_, err := exec.LookPath("nvidia-smi")
+	return err == nil
+}
+
+// TestIsNvidiaSmiAvailable tests the helper function itself
+func TestIsNvidiaSmiAvailable(t *testing.T) {
+	available := isNvidiaSmiAvailable()
+	t.Logf("nvidia-smi availability: %v", available)
+	
+	// This test just documents the current state, doesn't assert a specific value
+	// since it depends on the test environment
+}
+
 func TestRunCommand_FailureCleanup(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
@@ -88,6 +103,10 @@ func TestRunCommand_Structure(t *testing.T) {
 }
 
 func TestRunRun_Validation(t *testing.T) {
+	if !isNvidiaSmiAvailable() {
+		t.Skip("Skipping test: nvidia-smi command not available")
+	}
+
 	tests := []struct {
 		name     string
 		gpuCount int
