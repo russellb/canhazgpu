@@ -119,6 +119,7 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 │   ├── gpu/                        # GPU management logic
 │   │   ├── allocation.go           # LRU allocation and coordination
 │   │   ├── validation.go           # nvidia-smi integration and usage detection
+│   │   ├── model_detection.go      # AI model detection from process commands
 │   │   └── heartbeat.go            # Background heartbeat system
 │   ├── redis_client/               # Redis operations
 │   │   └── client.go               # Redis client with Lua scripts
@@ -134,6 +135,11 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 - `GetProcessOwner()` in `internal/gpu/validation.go`: Identifies process owners via /proc filesystem or ps command
 - Unreserved usage detection excludes GPUs from allocation pool automatically
 - Configurable memory threshold (default: 1024 MB) determines if GPU is considered "in use" via --memory-threshold flag
+- **Model Detection**: `DetectModelFromProcesses()` in `internal/gpu/model_detection.go` identifies running AI models:
+  - **vLLM-specific detection**: Recognizes vLLM serve commands with positional or --model arguments
+  - **Generic --model detection**: Detects `--model value` or `--model=value` patterns in any command
+  - **Examples**: Supports `python train.py --model openai/whisper-large-v3`, `inference-server --model=meta-llama/Llama-2-7b-chat-hf`
+  - **Provider extraction**: Automatically extracts provider names (e.g., "openai", "meta-llama") from model identifiers
 
 ### Allocation Strategy
 

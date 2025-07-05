@@ -125,7 +125,7 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 	if len(request.GPUIDs) > 0 {
 		return c.atomicReserveSpecificGPUs(ctx, request, unreservedGPUs)
 	}
-	
+
 	// Original logic for allocating by count
 	luaScript := `
 		local gpu_count = tonumber(ARGV[1])

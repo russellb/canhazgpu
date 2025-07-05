@@ -83,6 +83,27 @@ func TestDetectModelFromProcesses(t *testing.T) {
 			},
 			expected: nil, // Parent process detection will be tested separately
 		},
+		{
+			name: "Generic command with --model flag",
+			processes: []types.GPUProcessInfo{
+				{PID: 1234, ProcessName: "python train.py --model openai/whisper-large-v3 --epochs 10", User: "user1"},
+			},
+			expected: &ModelInfo{Provider: "openai", Model: "openai/whisper-large-v3"},
+		},
+		{
+			name: "Generic command with --model=value format",
+			processes: []types.GPUProcessInfo{
+				{PID: 1234, ProcessName: "some-inference-server --model=meta-llama/Llama-2-7b-chat-hf --port 8080", User: "user1"},
+			},
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Llama-2-7b-chat-hf"},
+		},
+		{
+			name: "Generic command with --model in middle of arguments",
+			processes: []types.GPUProcessInfo{
+				{PID: 1234, ProcessName: "custom-tool --batch-size 32 --model qwen/Qwen2-7B-Instruct --output ./results", User: "user1"},
+			},
+			expected: &ModelInfo{Provider: "qwen", Model: "qwen/Qwen2-7B-Instruct"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -300,6 +321,67 @@ func TestGetProcessCommandLine(t *testing.T) {
 			} else {
 				assert.Error(t, err)
 			}
+		})
+	}
+}
+
+func TestParseGenericModelCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		command  string
+		expected *ModelInfo
+	}{
+		{
+			name:     "Python training script with --model flag",
+			command:  "python train.py --model openai/whisper-large-v3 --epochs 10",
+			expected: &ModelInfo{Provider: "openai", Model: "openai/whisper-large-v3"},
+		},
+		{
+			name:     "Inference server with --model=value format",
+			command:  "some-inference-server --model=meta-llama/Llama-2-7b-chat-hf --port 8080",
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Llama-2-7b-chat-hf"},
+		},
+		{
+			name:     "Custom tool with --model in middle of arguments",
+			command:  "custom-tool --batch-size 32 --model qwen/Qwen2-7B-Instruct --output ./results",
+			expected: &ModelInfo{Provider: "qwen", Model: "qwen/Qwen2-7B-Instruct"},
+		},
+		{
+			name:     "Command with --model flag but no value",
+			command:  "python script.py --model",
+			expected: nil,
+		},
+		{
+			name:     "Command without --model flag",
+			command:  "python script.py --epochs 10 --batch-size 32",
+			expected: nil,
+		},
+		{
+			name:     "Command with --model=empty value",
+			command:  "tool --model= --other-flag",
+			expected: nil,
+		},
+		{
+			name:     "Model without provider (no slash)",
+			command:  "tool --model llama-2-7b --port 8080",
+			expected: &ModelInfo{Provider: "", Model: "llama-2-7b"},
+		},
+		{
+			name:     "Complex model path with multiple slashes",
+			command:  "tool --model huggingface/transformers/bert-base-uncased --task classification",
+			expected: &ModelInfo{Provider: "huggingface", Model: "huggingface/transformers/bert-base-uncased"},
+		},
+		{
+			name:     "Environment variables and complex command",
+			command:  "CUDA_VISIBLE_DEVICES=0,1 python -m some.module --config config.json --model=deepseek-ai/deepseek-coder-6.7b-instruct --verbose",
+			expected: &ModelInfo{Provider: "deepseek-ai", Model: "deepseek-ai/deepseek-coder-6.7b-instruct"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseGenericModelCommand(tt.command)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

@@ -57,6 +57,11 @@ func detectModelFromProcessName(processName string) *ModelInfo {
 		return parseVLLMCommand(processName)
 	}
 
+	// Try generic model detection for any command with --model arguments
+	if modelInfo := parseGenericModelCommand(processName); modelInfo != nil {
+		return modelInfo
+	}
+
 	// Add more model detection patterns here as needed
 	// Could extend to detect other inference engines like TGI, SGLang, etc.
 
@@ -207,4 +212,41 @@ func extractProviderFromModel(model string) string {
 		return model[:slashIndex]
 	}
 	return ""
+}
+
+// parseGenericModelCommand extracts model information from any command with --model arguments
+// Examples:
+// - "python train.py --model openai/whisper-large-v3 --epochs 10"
+// - "some-inference-server --model=meta-llama/Llama-2-7b-chat-hf --port 8080"
+// - "custom-tool --batch-size 32 --model qwen/Qwen2-7B-Instruct --output ./results"
+func parseGenericModelCommand(command string) *ModelInfo {
+	parts := strings.Fields(command)
+
+	model := ""
+
+	// Check for --model flag anywhere in the command
+	for i := 0; i < len(parts); i++ {
+		// Handle --model value format
+		if parts[i] == "--model" && i+1 < len(parts) {
+			model = parts[i+1]
+			break
+		}
+		// Handle --model=value format
+		if strings.HasPrefix(parts[i], "--model=") {
+			model = strings.TrimPrefix(parts[i], "--model=")
+			break
+		}
+	}
+
+	if model == "" {
+		return nil
+	}
+
+	// Extract provider from model name (part before the first /)
+	provider := extractProviderFromModel(model)
+
+	return &ModelInfo{
+		Provider: provider,
+		Model:    model,
+	}
 }

@@ -29,7 +29,7 @@ func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.All
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
-	
+
 	// Validate GPU availability using nvidia-smi
 	usage, err := DetectGPUUsage(ctx)
 	if err != nil {

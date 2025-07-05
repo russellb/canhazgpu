@@ -461,18 +461,18 @@ func TestClient_AtomicReserveGPUs_MixedMode(t *testing.T) {
 	for _, gpu := range allocatedGPUs1 {
 		allocatedMap[gpu] = true
 	}
-	
+
 	var availableGPUs []int
 	for i := 0; i < 8; i++ {
 		if !allocatedMap[i] {
 			availableGPUs = append(availableGPUs, i)
 		}
 	}
-	
+
 	// Pick 3 available GPUs
 	require.True(t, len(availableGPUs) >= 3, "Need at least 3 available GPUs")
 	selectedGPUs := availableGPUs[:3]
-	
+
 	request2 := &types.AllocationRequest{
 		GPUIDs:          selectedGPUs,
 		User:            "user2",
