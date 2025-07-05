@@ -41,7 +41,7 @@ jobs:
         run: make build
 
       - name: Test
-        uses: robherley/go-test-action@v0
+        run: make test
 
   lint:
     runs-on: ubuntu-latest
