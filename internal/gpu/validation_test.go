@@ -61,6 +61,10 @@ func TestDetectGPUUsage_Integration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	if !isNvidiaSmiAvailable() {
+		t.Skip("Skipping test: nvidia-smi command not available")
+	}
+
 	t.Log("Starting nvidia-smi integration test - may take 5-10 seconds or timeout")
 	t.Log("This test requires nvidia-smi command to be available on the system")
 
