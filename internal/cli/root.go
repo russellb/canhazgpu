@@ -146,4 +146,3 @@ func getCurrentUser() string {
 	}
 	return "unknown"
 }
-
