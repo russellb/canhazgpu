@@ -139,7 +139,9 @@ func TestClient_AllocationLock(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Cleanup
-	client.ReleaseAllocationLock(ctx)
+	if err := client.ReleaseAllocationLock(ctx); err != nil {
+		t.Logf("Warning: failed to release allocation lock: %v", err)
+	}
 }
 
 func TestClient_AllocationLock_Concurrency(t *testing.T) {
@@ -189,7 +191,9 @@ func TestClient_AllocationLock_Concurrency(t *testing.T) {
 	t.Log("Concurrency test completed successfully")
 
 	// Cleanup
-	client2.ReleaseAllocationLock(ctx)
+	if err := client2.ReleaseAllocationLock(ctx); err != nil {
+		t.Logf("Warning: failed to release allocation lock: %v", err)
+	}
 }
 
 func TestClient_AtomicReserveGPUs_SimpleCase(t *testing.T) {

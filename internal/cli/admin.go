@@ -30,7 +30,10 @@ Use --force to reinitialize an existing pool (this will clear all reservations).
 func init() {
 	adminCmd.Flags().IntP("gpus", "g", 0, "Number of GPUs available on this machine (required)")
 	adminCmd.Flags().Bool("force", false, "Force reinitialization even if already initialized")
-	adminCmd.MarkFlagRequired("gpus")
+	if err := adminCmd.MarkFlagRequired("gpus"); err != nil {
+		// This should not happen in practice, but handle it
+		panic(fmt.Sprintf("Failed to mark gpus flag as required: %v", err))
+	}
 
 	rootCmd.AddCommand(adminCmd)
 }

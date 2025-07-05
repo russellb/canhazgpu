@@ -49,7 +49,9 @@ clean:
 .PHONY: lint
 lint:
 	@echo "Running lint"
-	@go run github.com/golangci/golangci-lint/cmd/golangci-lint run
+	@command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "Using golangci-lint version: $$(golangci-lint --version | head -n 1)"
+	@golangci-lint run
 
 .PHONY: fmt
 fmt:

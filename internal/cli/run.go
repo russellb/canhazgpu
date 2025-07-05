@@ -240,7 +240,9 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 						if err := syscall.Kill(-pgid, syscall.SIGINT); err != nil {
 							fmt.Printf("Failed to send SIGINT to process group: %v\n", err)
 							// If SIGINT fails, kill immediately
-							killProcessGroup(cmd)
+							if err := killProcessGroup(cmd); err != nil {
+								fmt.Printf("Failed to kill process group: %v\n", err)
+							}
 							atomic.StoreInt32(&timeoutKilled, 1)
 							return
 						}
@@ -249,7 +251,9 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 						if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
 							fmt.Printf("Failed to send SIGINT: %v\n", err)
 							// If SIGINT fails, kill immediately
-							killProcessGroup(cmd)
+							if err := killProcessGroup(cmd); err != nil {
+								fmt.Printf("Failed to kill process group: %v\n", err)
+							}
 							atomic.StoreInt32(&timeoutKilled, 1)
 							return
 						}

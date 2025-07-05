@@ -43,7 +43,12 @@ func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.All
 	if err := ae.client.AcquireAllocationLock(ctx); err != nil {
 		return nil, err
 	}
-	defer ae.client.ReleaseAllocationLock(ctx)
+	defer func() {
+		if err := ae.client.ReleaseAllocationLock(ctx); err != nil {
+			// Log error but don't fail the operation
+			fmt.Printf("Warning: failed to release allocation lock: %v\n", err)
+		}
+	}()
 
 	// Perform atomic allocation
 	allocatedGPUs, err := ae.client.AtomicReserveGPUs(ctx, request, unreservedGPUs)
@@ -92,7 +97,7 @@ func (ae *AllocationEngine) ReleaseGPUs(ctx context.Context, user string) ([]int
 				User:            state.User,
 				GPUID:           gpuID,
 				StartTime:       state.StartTime,
-				EndTime:         types.FlexibleTime{now},
+				EndTime:         types.FlexibleTime{Time: now},
 				Duration:        duration,
 				ReservationType: state.Type,
 			}
@@ -104,7 +109,7 @@ func (ae *AllocationEngine) ReleaseGPUs(ctx context.Context, user string) ([]int
 
 			// Mark as available with last_released timestamp
 			availableState := &types.GPUState{
-				LastReleased: types.FlexibleTime{now},
+				LastReleased: types.FlexibleTime{Time: now},
 			}
 
 			if err := ae.client.SetGPUState(ctx, gpuID, availableState); err != nil {
@@ -275,7 +280,7 @@ func (ae *AllocationEngine) CleanupExpiredReservations(ctx context.Context) erro
 				User:            state.User,
 				GPUID:           gpuID,
 				StartTime:       state.StartTime,
-				EndTime:         types.FlexibleTime{now},
+				EndTime:         types.FlexibleTime{Time: now},
 				Duration:        duration,
 				ReservationType: state.Type,
 			}
@@ -287,9 +292,11 @@ func (ae *AllocationEngine) CleanupExpiredReservations(ctx context.Context) erro
 
 			// Release reservation
 			availableState := &types.GPUState{
-				LastReleased: types.FlexibleTime{now},
+				LastReleased: types.FlexibleTime{Time: now},
 			}
-			ae.client.SetGPUState(ctx, gpuID, availableState)
+			if err := ae.client.SetGPUState(ctx, gpuID, availableState); err != nil {
+				fmt.Printf("Warning: failed to set GPU %d state to available: %v\n", gpuID, err)
+			}
 		}
 	}
 

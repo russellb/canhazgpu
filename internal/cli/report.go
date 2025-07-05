@@ -83,8 +83,8 @@ func getCurrentUsageRecords(statuses []gpu.GPUStatusInfo, now time.Time) []*type
 			record := &types.UsageRecord{
 				User:            status.User,
 				GPUID:           status.GPUID,
-				StartTime:       types.FlexibleTime{status.LastHeartbeat.Add(-status.Duration)},
-				EndTime:         types.FlexibleTime{now},
+				StartTime:       types.FlexibleTime{Time: status.LastHeartbeat.Add(-status.Duration)},
+				EndTime:         types.FlexibleTime{Time: now},
 				Duration:        duration,
 				ReservationType: status.ReservationType,
 			}

@@ -969,11 +969,14 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html")
-	t.Execute(w, struct {
+	if err := t.Execute(w, struct {
 		Hostname string
 	}{
 		Hostname: hostname,
-	})
+	}); err != nil {
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
@@ -1037,7 +1040,10 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(jsonStatuses)
+	if err := json.NewEncoder(w).Encode(jsonStatuses); err != nil {
+		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (ws *webServer) handleAPIReport(w http.ResponseWriter, r *http.Request) {
@@ -1078,7 +1084,10 @@ func (ws *webServer) handleAPIReport(w http.ResponseWriter, r *http.Request) {
 	reportData := generateReportData(allRecords, startTime, endTime, days)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(reportData)
+	if err := json.NewEncoder(w).Encode(reportData); err != nil {
+		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+		return
+	}
 }
 
 type reportData struct {

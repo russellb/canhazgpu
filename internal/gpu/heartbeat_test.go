@@ -235,8 +235,14 @@ func TestHeartbeatManager_ReservationLoss(t *testing.T) {
 	}
 
 	// Clean state
-	client.ClearAllGPUStates(ctx)
-	defer client.ClearAllGPUStates(ctx)
+	if err := client.ClearAllGPUStates(ctx); err != nil {
+		t.Logf("Warning: failed to clear GPU states: %v", err)
+	}
+	defer func() {
+		if err := client.ClearAllGPUStates(ctx); err != nil {
+			t.Logf("Warning: failed to clear GPU states in defer: %v", err)
+		}
+	}()
 	defer client.Close()
 
 	// Initialize GPU pool
