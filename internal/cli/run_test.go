@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os/exec"
 	"syscall"
 	"testing"
@@ -11,6 +13,21 @@ import (
 	"github.com/russellb/canhazgpu/internal/types"
 	"github.com/stretchr/testify/assert"
 )
+
+// isNvidiaSmiAvailable checks if nvidia-smi command is available
+func isNvidiaSmiAvailable() bool {
+	_, err := exec.LookPath("nvidia-smi")
+	return err == nil
+}
+
+// TestIsNvidiaSmiAvailable tests the helper function itself
+func TestIsNvidiaSmiAvailable(t *testing.T) {
+	available := isNvidiaSmiAvailable()
+	t.Logf("nvidia-smi availability: %v", available)
+
+	// This test just documents the current state, doesn't assert a specific value
+	// since it depends on the test environment
+}
 
 func TestRunCommand_FailureCleanup(t *testing.T) {
 	if testing.Short() {
@@ -34,9 +51,19 @@ func TestRunCommand_FailureCleanup(t *testing.T) {
 	}
 
 	// Clean state
-	client.ClearAllGPUStates(ctx)
-	defer client.ClearAllGPUStates(ctx)
-	defer client.Close()
+	if err := client.ClearAllGPUStates(ctx); err != nil {
+		t.Logf("Warning: failed to clear GPU states: %v", err)
+	}
+	defer func() {
+		if err := client.ClearAllGPUStates(ctx); err != nil {
+			t.Logf("Warning: failed to clear GPU states in defer: %v", err)
+		}
+	}()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
+	}()
 
 	// Initialize GPU pool
 	err := client.SetGPUCount(ctx, 4)
@@ -78,6 +105,10 @@ func TestRunCommand_Structure(t *testing.T) {
 }
 
 func TestRunRun_Validation(t *testing.T) {
+	if !isNvidiaSmiAvailable() {
+		t.Skip("Skipping test: nvidia-smi command not available")
+	}
+
 	tests := []struct {
 		name     string
 		gpuCount int
@@ -161,9 +192,19 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 	}
 
 	// Clean state
-	client.ClearAllGPUStates(ctx)
-	defer client.ClearAllGPUStates(ctx)
-	defer client.Close()
+	if err := client.ClearAllGPUStates(ctx); err != nil {
+		t.Logf("Warning: failed to clear GPU states: %v", err)
+	}
+	defer func() {
+		if err := client.ClearAllGPUStates(ctx); err != nil {
+			t.Logf("Warning: failed to clear GPU states in defer: %v", err)
+		}
+	}()
+	defer func() {
+		if err := client.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
+	}()
 
 	// Initialize GPU pool
 	err := client.SetGPUCount(ctx, 4)
@@ -200,17 +241,110 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 
 	// Test manual cleanup (simulates heartbeat.Stop())
 	now := time.Now()
+
+	// Check what state exists before we try to change it
+	stateBefore, err := client.GetGPUState(ctx, 0)
+	if err != nil {
+		t.Logf("Failed to get state before update: %v", err)
+	} else {
+		t.Logf("State before update:")
+		t.Logf("  User: %q", stateBefore.User)
+		t.Logf("  LastReleased.IsZero(): %v", stateBefore.LastReleased.IsZero())
+	}
+
 	availableState := &types.GPUState{
 		LastReleased: types.FlexibleTime{Time: now},
 	}
+
+	// Debug what we're trying to set
+	t.Logf("Before SetGPUState:")
+	t.Logf("  availableState.User: %q", availableState.User)
+	t.Logf("  availableState.LastReleased.Time: %v", availableState.LastReleased.Time)
+	t.Logf("  availableState.LastReleased.IsZero(): %v", availableState.LastReleased.IsZero())
+	t.Logf("  availableState.LastReleased.ToTime().IsZero(): %v", availableState.LastReleased.ToTime().IsZero())
+
+	// Test what JSON marshaling produces
+	jsonData, marshalErr := json.Marshal(availableState)
+	if marshalErr != nil {
+		t.Logf("JSON marshal failed: %v", marshalErr)
+	} else {
+		t.Logf("JSON marshaled data: %s", string(jsonData))
+	}
+
+	// Test unmarshaling to verify round-trip
+	var unmarshaled types.GPUState
+	if unmarshalErr := json.Unmarshal(jsonData, &unmarshaled); unmarshalErr != nil {
+		t.Logf("JSON unmarshal failed: %v", unmarshalErr)
+	} else {
+		t.Logf("JSON unmarshaled state:")
+		t.Logf("  User: %q", unmarshaled.User)
+		t.Logf("  LastReleased.Time: %v", unmarshaled.LastReleased.Time)
+		t.Logf("  LastReleased.IsZero(): %v", unmarshaled.LastReleased.IsZero())
+		t.Logf("  LastReleased.ToTime().IsZero(): %v", unmarshaled.LastReleased.ToTime().IsZero())
+	}
+
+	// Test Redis connection before critical operation
+	pingErr := client.Ping(ctx)
+	if pingErr != nil {
+		t.Logf("Redis ping failed before SetGPUState: %v", pingErr)
+	} else {
+		t.Logf("Redis ping successful before SetGPUState")
+	}
+
+	// Test what Redis SET operation we're actually doing
+	redisKey := fmt.Sprintf("canhazgpu:gpu:%d", 0)
+	t.Logf("Redis key: %q", redisKey)
+
 	err = client.SetGPUState(ctx, 0, availableState)
+	if err != nil {
+		t.Logf("SetGPUState failed: %v", err)
+	}
 	assert.NoError(t, err)
+	t.Logf("SetGPUState completed successfully")
+
+	// Test Redis connection after critical operation
+	pingErr = client.Ping(ctx)
+	if pingErr != nil {
+		t.Logf("Redis ping failed after SetGPUState: %v", pingErr)
+	} else {
+		t.Logf("Redis ping successful after SetGPUState")
+	}
+
+	// Test what's actually stored in Redis - get the state immediately after setting
+	immediateState, getErr := client.GetGPUState(ctx, 0)
+	if getErr != nil {
+		t.Logf("Failed to get immediate Redis state: %v", getErr)
+	} else {
+		t.Logf("Immediate Redis state after SetGPUState:")
+		t.Logf("  User: %q", immediateState.User)
+		t.Logf("  LastReleased.Time: %v", immediateState.LastReleased.Time)
+		t.Logf("  LastReleased.IsZero(): %v", immediateState.LastReleased.IsZero())
+		t.Logf("  LastReleased.ToTime().IsZero(): %v", immediateState.LastReleased.ToTime().IsZero())
+	}
+
+	// Check the logic: SetGPUState should store our availableState since User is empty and LastReleased is not zero
+	// From the code: if state.User == "" && !state.LastReleased.ToTime().IsZero() then store the state
+	shouldStore := availableState.User == "" && !availableState.LastReleased.ToTime().IsZero()
+	t.Logf("Should store state based on logic: %v", shouldStore)
 
 	// Verify GPU is released
 	state, err = client.GetGPUState(ctx, 0)
 	assert.NoError(t, err)
+
+	// Debug what we actually got back
+	t.Logf("After GetGPUState:")
+	t.Logf("  state.User: %q", state.User)
+	t.Logf("  state.LastReleased.Time: %v", state.LastReleased.Time)
+	t.Logf("  state.LastReleased.IsZero(): %v", state.LastReleased.IsZero())
+	t.Logf("  state.LastReleased.ToTime(): %v", state.LastReleased.ToTime())
+	t.Logf("  state.LastReleased.ToTime().IsZero(): %v", state.LastReleased.ToTime().IsZero())
+
 	assert.Empty(t, state.User, "GPU should be released")
-	assert.False(t, state.LastReleased.Time.IsZero(), "Should have release timestamp")
+
+	// Check that the state has a release timestamp
+	// Use ToTime() to be more explicit about the check
+	releaseTime := state.LastReleased.ToTime()
+	assert.False(t, releaseTime.IsZero(), "Should have release timestamp")
 
 	t.Log("GPU cleanup verified - this simulates the fixed behavior")
 }

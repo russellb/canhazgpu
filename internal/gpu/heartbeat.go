@@ -60,7 +60,9 @@ func (hm *HeartbeatManager) heartbeatLoop() {
 	defer ticker.Stop()
 
 	// Send initial heartbeat
-	hm.sendHeartbeat()
+	if err := hm.sendHeartbeat(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to send initial heartbeat: %v\n", err)
+	}
 
 	for {
 		select {
@@ -87,7 +89,7 @@ func (hm *HeartbeatManager) sendHeartbeat() error {
 
 		// Only update if this is still our reservation
 		if state.User == hm.user && state.Type == types.ReservationTypeRun {
-			state.LastHeartbeat = types.FlexibleTime{now}
+			state.LastHeartbeat = types.FlexibleTime{Time: now}
 			if err := hm.client.SetGPUState(hm.ctx, gpuID, state); err != nil {
 				return fmt.Errorf("failed to update heartbeat for GPU %d: %v", gpuID, err)
 			}
@@ -138,7 +140,7 @@ func (hm *HeartbeatManager) releaseGPUs() {
 				User:            state.User,
 				GPUID:           gpuID,
 				StartTime:       state.StartTime,
-				EndTime:         types.FlexibleTime{now},
+				EndTime:         types.FlexibleTime{Time: now},
 				Duration:        duration,
 				ReservationType: state.Type,
 			}
@@ -150,9 +152,11 @@ func (hm *HeartbeatManager) releaseGPUs() {
 
 			// Release the GPU
 			availableState := &types.GPUState{
-				LastReleased: types.FlexibleTime{now},
+				LastReleased: types.FlexibleTime{Time: now},
 			}
-			hm.client.SetGPUState(ctx, gpuID, availableState)
+			if err := hm.client.SetGPUState(ctx, gpuID, availableState); err != nil {
+				fmt.Printf("Warning: failed to set GPU %d state to available: %v\n", gpuID, err)
+			}
 		}
 	}
 }
