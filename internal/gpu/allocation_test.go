@@ -13,9 +13,9 @@ import (
 func TestAllocationEngine_Structure(t *testing.T) {
 	// Test Redis client setup (can work without actual Redis)
 	config := &types.Config{
-		RedisHost: "localhost",
-		RedisPort: 6379,
-		RedisDB:   15,
+		RedisHost:       "localhost",
+		RedisPort:       6379,
+		RedisDB:         15,
 		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
@@ -31,22 +31,22 @@ func TestAllocationEngine_GetGPUStatus_Structure(t *testing.T) {
 	}
 
 	t.Log("Starting integration test - this may take time if Redis is not available")
-	
+
 	// Test Redis client setup
 	config := &types.Config{
-		RedisHost: "localhost",
-		RedisPort: 6379,
-		RedisDB:   15,
+		RedisHost:       "localhost",
+		RedisPort:       6379,
+		RedisDB:         15,
 		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
 
 	engine := NewAllocationEngine(redisClient, config)
-	
+
 	t.Log("Attempting to get GPU status (may timeout if Redis unavailable)")
 	// This should not panic even if Redis is empty or GPU count not set
 	statuses, err := engine.GetGPUStatus(context.Background())
-	
+
 	// Either success with valid data or controlled error
 	if err != nil {
 		// Expected if GPU pool not initialized
@@ -66,17 +66,17 @@ func TestAllocationEngine_AllocateGPUs_Structure(t *testing.T) {
 	}
 
 	t.Log("Starting GPU allocation integration test - may take 10+ seconds")
-	
+
 	config := &types.Config{
-		RedisHost: "localhost",
-		RedisPort: 6379,
-		RedisDB:   15,
+		RedisHost:       "localhost",
+		RedisPort:       6379,
+		RedisDB:         15,
 		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
 
 	engine := NewAllocationEngine(redisClient, config)
-	
+
 	// Test with valid allocation request structure
 	request := &types.AllocationRequest{
 		GPUCount:        1,
@@ -91,7 +91,7 @@ func TestAllocationEngine_AllocateGPUs_Structure(t *testing.T) {
 	t.Log("Attempting GPU allocation (requires nvidia-smi validation - may be slow)")
 	// Try to allocate (may fail if pool not initialized, but shouldn't panic)
 	gpus, err := engine.AllocateGPUs(context.Background(), request)
-	
+
 	if err != nil {
 		// Expected if GPU pool not initialized or no GPUs available
 		assert.Empty(t, gpus)
@@ -110,21 +110,21 @@ func TestAllocationEngine_ReleaseGPUs_Structure(t *testing.T) {
 	}
 
 	t.Log("Starting GPU release integration test")
-	
+
 	config := &types.Config{
-		RedisHost: "localhost",
-		RedisPort: 6379,
-		RedisDB:   15,
+		RedisHost:       "localhost",
+		RedisPort:       6379,
+		RedisDB:         15,
 		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
 
 	engine := NewAllocationEngine(redisClient, config)
-	
+
 	t.Log("Attempting to release GPUs for test user")
 	// Test releasing GPUs for a user (should not panic even if no reservations exist)
 	releasedGPUs, err := engine.ReleaseGPUs(context.Background(), "testuser")
-	
+
 	// Should either succeed or return controlled error
 	// Don't assert specific result since it depends on Redis state
 	_ = err
@@ -196,7 +196,7 @@ func TestAllocationRequest_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.request.Validate()
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -212,29 +212,29 @@ func TestLRUStrategy_Concepts(t *testing.T) {
 
 	// LRU should prioritize GPUs that were released longest ago
 	now := time.Now()
-	
+
 	// Mock GPU states with different release times
 	gpuStates := map[int]types.GPUState{
 		0: {LastReleased: types.FlexibleTime{Time: now.Add(-3 * time.Hour)}}, // Released 3h ago
-		1: {LastReleased: types.FlexibleTime{Time: now.Add(-1 * time.Hour)}}, // Released 1h ago  
+		1: {LastReleased: types.FlexibleTime{Time: now.Add(-1 * time.Hour)}}, // Released 1h ago
 		2: {LastReleased: types.FlexibleTime{Time: now.Add(-2 * time.Hour)}}, // Released 2h ago
-		3: {}, // Never used (zero time)
+		3: {},                                                                // Never used (zero time)
 	}
 
 	// LRU order should be: 3 (never used), 0 (oldest), 2, 1 (newest)
 	expectedOrder := []int{3, 0, 2, 1}
-	
+
 	// Simulate LRU sorting logic
 	type gpuWithTime struct {
 		id   int
 		time time.Time
 	}
-	
+
 	var gpus []gpuWithTime
 	for id, state := range gpuStates {
 		gpus = append(gpus, gpuWithTime{id: id, time: state.LastReleased.Time})
 	}
-	
+
 	// Sort by time (zero time first, then oldest first)
 	for i := 0; i < len(gpus)-1; i++ {
 		for j := i + 1; j < len(gpus); j++ {
@@ -246,7 +246,7 @@ func TestLRUStrategy_Concepts(t *testing.T) {
 			}
 		}
 	}
-	
+
 	// Verify LRU order
 	for i, expected := range expectedOrder {
 		assert.Equal(t, expected, gpus[i].id, "GPU %d should be at position %d in LRU order", expected, i)

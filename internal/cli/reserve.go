@@ -18,6 +18,17 @@ var reserveCmd = &cobra.Command{
 	Long: `Reserve GPUs manually for a specified duration without running a command.
 This is useful for interactive development sessions or planning work.
 
+You can reserve GPUs in two ways:
+- By count: --gpus N (allocates N GPUs using LRU strategy)
+- By specific IDs: --gpu-ids 1,3,5 (reserves exactly those GPU IDs)
+
+When using --gpu-ids, the --gpus flag is optional if:
+- It matches the number of GPU IDs specified, or
+- It is 1 (the default value)
+
+If specific GPU IDs are requested and any are not available, the entire
+reservation will fail.
+
 Duration formats supported:
 - 30m (30 minutes)
 - 2h (2 hours)  
@@ -29,26 +40,33 @@ CUDA_VISIBLE_DEVICES. After reserving, you must manually set the environment
 variable based on the GPU IDs shown in the output:
   export CUDA_VISIBLE_DEVICES=1,3
 
+Example usage:
+  canhazgpu reserve --gpus 2 --duration 4h
+  canhazgpu reserve --gpu-ids 1,3 --duration 2h
+
 The reserved GPUs must be manually released with 'canhazgpu release' or will
 automatically expire after the specified duration.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		gpuCount, _ := cmd.Flags().GetInt("gpus")
+		gpuIDs, _ := cmd.Flags().GetIntSlice("gpu-ids")
 		durationStr, _ := cmd.Flags().GetString("duration")
 
-		return runReserve(cmd.Context(), gpuCount, durationStr)
+		return runReserve(cmd.Context(), gpuCount, gpuIDs, durationStr)
 	},
 }
 
 func init() {
 	reserveCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
+	reserveCmd.Flags().IntSliceP("gpu-ids", "G", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
 	reserveCmd.Flags().StringP("duration", "d", "8h", "Duration to reserve GPUs (e.g., 30m, 2h, 1d)")
 
 	rootCmd.AddCommand(reserveCmd)
 }
 
-func runReserve(ctx context.Context, gpuCount int, durationStr string) error {
-	if gpuCount <= 0 {
-		return fmt.Errorf("GPU count must be greater than 0")
+func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr string) error {
+	// If neither is specified, default to 1 GPU
+	if gpuCount == 0 && len(gpuIDs) == 0 {
+		gpuCount = 1
 	}
 
 	// Parse duration
@@ -74,6 +92,7 @@ func runReserve(ctx context.Context, gpuCount int, durationStr string) error {
 	expiryTime := time.Now().Add(duration)
 	request := &types.AllocationRequest{
 		GPUCount:        gpuCount,
+		GPUIDs:          gpuIDs,
 		User:            user,
 		ReservationType: types.ReservationTypeManual,
 		ExpiryTime:      &expiryTime,

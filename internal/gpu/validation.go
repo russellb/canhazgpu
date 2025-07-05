@@ -258,4 +258,3 @@ func GetUnreservedGPUs(ctx context.Context, usage map[int]*types.GPUUsage, memor
 func IsGPUInUnreservedUse(usage *types.GPUUsage, memoryThreshold int) bool {
 	return usage != nil && usage.MemoryMB > memoryThreshold
 }
-

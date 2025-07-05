@@ -48,14 +48,14 @@ func TestRunCommand_FailureCleanup(t *testing.T) {
 
 	// Test that we can't easily test the actual runRun function with os.Exit()
 	// But we can test the logic leading up to it
-	
+
 	// Create a command that will fail
 	cmd := exec.Command("sh", "-c", "exit 1")
 	err = cmd.Run()
-	
+
 	// Verify the command actually fails
 	assert.Error(t, err)
-	
+
 	if exitError, ok := err.(*exec.ExitError); ok {
 		t.Logf("Command failed with exit code as expected: %v", exitError)
 		// This verifies the error handling path works
@@ -70,7 +70,7 @@ func TestRunCommand_Structure(t *testing.T) {
 	assert.NotNil(t, runCmd)
 	assert.Equal(t, "run", runCmd.Use)
 	assert.Contains(t, runCmd.Short, "Reserve GPUs and run")
-	
+
 	// Check flags
 	gpusFlag := runCmd.Flags().Lookup("gpus")
 	assert.NotNil(t, gpusFlag)
@@ -85,10 +85,10 @@ func TestRunRun_Validation(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "Zero GPU count",
+			name:     "Zero GPU count (defaults to 1)",
 			gpuCount: 0,
 			command:  []string{"echo", "test"},
-			wantErr:  true,
+			wantErr:  false,
 		},
 		{
 			name:     "Negative GPU count",
@@ -102,9 +102,9 @@ func TestRunRun_Validation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			
-			err := runRun(ctx, tt.gpuCount, tt.command)
-			
+
+			err := runRun(ctx, tt.gpuCount, nil, "", tt.command)
+
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -117,16 +117,16 @@ func TestRunRun_Validation(t *testing.T) {
 func TestExitCodeHandling(t *testing.T) {
 	// Test that we can properly detect exit codes from failed commands
 	// This tests the logic that was fixed to ensure cleanup happens
-	
+
 	cmd := exec.Command("sh", "-c", "exit 42")
 	err := cmd.Run()
-	
+
 	// Verify we get an ExitError
 	assert.Error(t, err)
-	
+
 	if exitError, ok := err.(*exec.ExitError); ok {
 		t.Log("Successfully detected exit error")
-		
+
 		// This is the same logic used in the fixed run command
 		if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 			exitCode := status.ExitStatus()
@@ -173,13 +173,13 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 
 	// Test successful command execution path
 	t.Log("Testing successful command (should clean up via defer)")
-	
+
 	// We can't easily test the full runRun with a real command due to os.Exit
 	// But we can verify the heartbeat manager cleanup logic works
-	
+
 	// Manual test of cleanup logic - this simulates what should happen
 	user := "testuser"
-	
+
 	// Reserve a GPU manually to simulate allocation
 	reservedState := &types.GPUState{
 		User:          user,
@@ -187,17 +187,17 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 		LastHeartbeat: types.FlexibleTime{Time: time.Now()},
 		Type:          types.ReservationTypeRun,
 	}
-	
+
 	err = client.SetGPUState(ctx, 0, reservedState)
 	assert.NoError(t, err)
-	
+
 	// Verify GPU is reserved
 	state, err := client.GetGPUState(ctx, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, user, state.User)
-	
+
 	t.Log("GPU successfully reserved, now testing cleanup")
-	
+
 	// Test manual cleanup (simulates heartbeat.Stop())
 	now := time.Now()
 	availableState := &types.GPUState{
@@ -205,12 +205,12 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 	}
 	err = client.SetGPUState(ctx, 0, availableState)
 	assert.NoError(t, err)
-	
+
 	// Verify GPU is released
 	state, err = client.GetGPUState(ctx, 0)
 	assert.NoError(t, err)
 	assert.Empty(t, state.User, "GPU should be released")
 	assert.False(t, state.LastReleased.Time.IsZero(), "Should have release timestamp")
-	
+
 	t.Log("GPU cleanup verified - this simulates the fixed behavior")
 }

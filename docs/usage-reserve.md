@@ -5,12 +5,22 @@ The `reserve` command allows you to manually reserve GPUs for a specific duratio
 ## Basic Usage
 
 ```bash
-canhazgpu reserve [--gpus <count>] [--duration <time>]
+canhazgpu reserve [--gpus <count> | --gpu-ids <ids>] [--duration <time>]
 ```
 
 **Defaults:**
 - `--gpus`: 1 GPU
 - `--duration`: 8 hours
+
+**Options:**
+- `--gpus, -g`: Number of GPUs to reserve
+- `--gpu-ids`: Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)
+- `--duration, -d`: How long to reserve the GPUs
+
+!!! note "GPU Selection"
+    - Use `--gpus` to let canhazgpu select GPUs using the LRU algorithm
+    - Use `--gpu-ids` when you need specific GPUs (e.g., for hardware requirements)
+    - You can use both options together if `--gpus` matches the GPU ID count or is 1 (default)
 
 ## Duration Formats
 
@@ -43,6 +53,9 @@ canhazgpu reserve --gpus 2 --duration 4h
 
 # Reserve 4 GPUs for distributed development
 canhazgpu reserve --gpus 4 --duration 6h
+
+# Reserve specific GPU IDs
+canhazgpu reserve --gpu-ids 0,2 --duration 4h
 ```
 
 ### Extended Work Sessions

@@ -11,9 +11,9 @@ import (
 // Test the basic structure and flags of all commands
 func TestCommands_Structure(t *testing.T) {
 	tests := []struct {
-		name         string
-		cmd          interface{}
-		use          string
+		name          string
+		cmd           interface{}
+		use           string
 		shortContains string
 		requiredFlags []string
 		optionalFlags []string
@@ -27,7 +27,7 @@ func TestCommands_Structure(t *testing.T) {
 			optionalFlags: []string{"force"},
 		},
 		{
-			name:          "status command", 
+			name:          "status command",
 			cmd:           statusCmd,
 			use:           "status",
 			shortContains: "Show current GPU allocation status",
@@ -92,19 +92,19 @@ func TestCommands_Structure(t *testing.T) {
 
 func TestRootCommand_Structure(t *testing.T) {
 	cmd := rootCmd
-	
+
 	assert.Equal(t, "canhazgpu", cmd.Use)
 	assert.Contains(t, cmd.Short, "GPU reservation tool")
-	
+
 	// Check global flags
 	redisHostFlag := cmd.PersistentFlags().Lookup("redis-host")
 	require.NotNil(t, redisHostFlag)
 	assert.Equal(t, "string", redisHostFlag.Value.Type())
-	
+
 	redisPortFlag := cmd.PersistentFlags().Lookup("redis-port")
 	require.NotNil(t, redisPortFlag)
 	assert.Equal(t, "int", redisPortFlag.Value.Type())
-	
+
 	redisDBFlag := cmd.PersistentFlags().Lookup("redis-db")
 	require.NotNil(t, redisDBFlag)
 	assert.Equal(t, "int", redisDBFlag.Value.Type())
@@ -118,16 +118,16 @@ func TestCommands_NoCompletion(t *testing.T) {
 func TestCommands_HasSubcommands(t *testing.T) {
 	// Verify all expected subcommands are present
 	expectedCommands := []string{"admin", "status", "run", "reserve", "release"}
-	
+
 	actualCommands := make(map[string]bool)
 	for _, cmd := range rootCmd.Commands() {
 		actualCommands[cmd.Use] = true
 	}
-	
+
 	for _, expected := range expectedCommands {
 		assert.True(t, actualCommands[expected], "Command %s should be available", expected)
 	}
-	
+
 	// Verify completion command is NOT present
 	assert.False(t, actualCommands["completion"], "Completion command should be disabled")
 }

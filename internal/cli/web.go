@@ -10,15 +10,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
 	"github.com/russellb/canhazgpu/internal/types"
+	"github.com/spf13/cobra"
 )
 
 var (
-	webPort   int
-	webHost   string
+	webPort int
+	webHost string
 )
 
 //go:embed static/*
@@ -39,7 +39,7 @@ func init() {
 
 func runWeb(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-	
+
 	// Initialize Redis client
 	config := getConfig()
 	client := redis_client.NewClient(config)
@@ -229,7 +229,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             justify-content: space-between;
             align-items: center;
             position: relative;
-            min-height: 40px;
+            min-height: 60px;
+            padding: 5px 0;
         }
         .gpu-header-left {
             display: flex;
@@ -245,6 +246,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             text-align: center;
             z-index: 1;
             pointer-events: none;
+            max-width: 40%;
+            line-height: 1.3;
         }
         .status-badge {
             z-index: 2;
@@ -543,22 +546,56 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             const now = new Date();
             const diff = now - date;
             
-            if (diff < 60000) return 'just now';
-            if (diff < 3600000) return Math.floor(diff / 60000) + ' minutes ago';
-            if (diff < 86400000) return Math.floor(diff / 3600000) + ' hours ago';
-            return Math.floor(diff / 86400000) + ' days ago';
+            // Use compact time formatting
+            if (diff < 60000) return 'now';
+            if (diff < 3600000) return Math.floor(diff / 60000) + 'm';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + 'h';
+            if (diff < 604800000) return Math.floor(diff / 86400000) + 'd';
+            
+            // For longer periods, show absolute date in compact format
+            const today = new Date();
+            const isThisYear = date.getFullYear() === today.getFullYear();
+            
+            if (isThisYear) {
+                return (date.getMonth() + 1) + '/' + date.getDate();
+            } else {
+                return (date.getMonth() + 1) + '/' + date.getDate() + '/' + date.getFullYear().toString().slice(-2);
+            }
+        }
+
+        function formatCompactTime(date) {
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
+            const seconds = date.getSeconds();
+            
+            // Format as HH:MM:SS in 24-hour format
+            return hours.toString().padStart(2, '0') + ':' + 
+                   minutes.toString().padStart(2, '0') + ':' + 
+                   seconds.toString().padStart(2, '0');
         }
 
         function getProviderIcon(provider) {
-            switch (provider) {
+            // Convert to lowercase for case-insensitive comparison
+            const providerLower = provider ? provider.toLowerCase() : '';
+            
+            switch (providerLower) {
                 case 'openai':
                     return '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z" fill="currentColor"/></svg>';
                 case 'meta-llama':
-                    return '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" fill="currentColor"/><circle cx="12" cy="8" r="1.5" fill="currentColor"/></svg>';
+                    return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 50 50" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Meta</title><path d="M47.3,21.01c-0.58-1.6-1.3-3.16-2.24-4.66c-0.93-1.49-2.11-2.93-3.63-4.13c-1.51-1.19-3.49-2.09-5.59-2.26l-0.78-0.04	c-0.27,0.01-0.57,0.01-0.85,0.04c-0.57,0.06-1.11,0.19-1.62,0.34c-1.03,0.32-1.93,0.8-2.72,1.32c-1.42,0.94-2.55,2.03-3.57,3.15	c0.01,0.02,0.03,0.03,0.04,0.05l0.22,0.28c0.51,0.67,1.62,2.21,2.61,3.87c1.23-1.2,2.83-2.65,3.49-3.07	c0.5-0.31,0.99-0.55,1.43-0.68c0.23-0.06,0.44-0.11,0.64-0.12c0.1-0.02,0.19-0.01,0.3-0.02l0.38,0.02c0.98,0.09,1.94,0.49,2.85,1.19	c1.81,1.44,3.24,3.89,4.17,6.48c0.95,2.6,1.49,5.44,1.52,8.18c0,1.31-0.17,2.57-0.57,3.61c-0.39,1.05-1.38,1.45-2.5,1.45	c-1.63,0-2.81-0.7-3.76-1.68c-1.04-1.09-2.02-2.31-2.96-3.61c-0.78-1.09-1.54-2.22-2.26-3.37c-1.27-2.06-2.97-4.67-4.15-6.85	L25,16.35c-0.31-0.39-0.61-0.78-0.94-1.17c-1.11-1.26-2.34-2.5-3.93-3.56c-0.79-0.52-1.69-1-2.72-1.32	c-0.51-0.15-1.05-0.28-1.62-0.34c-0.18-0.02-0.36-0.03-0.54-0.03c-0.11,0-0.21-0.01-0.31-0.01l-0.78,0.04	c-2.1,0.17-4.08,1.07-5.59,2.26c-1.52,1.2-2.7,2.64-3.63,4.13C4,17.85,3.28,19.41,2.7,21.01c-1.13,3.2-1.74,6.51-1.75,9.93	c0.01,1.78,0.24,3.63,0.96,5.47c0.7,1.8,2.02,3.71,4.12,4.77c1.03,0.53,2.2,0.81,3.32,0.81c1.23,0.03,2.4-0.32,3.33-0.77	c1.87-0.93,3.16-2.16,4.33-3.4c2.31-2.51,4.02-5.23,5.6-8c0.44-0.76,0.86-1.54,1.27-2.33c-0.21-0.41-0.42-0.84-0.64-1.29	c-0.62-1.03-1.39-2.25-1.95-3.1c-0.83,1.5-1.69,2.96-2.58,4.41c-1.59,2.52-3.3,4.97-5.21,6.98c-0.95,0.98-2,1.84-2.92,2.25	c-0.47,0.2-0.83,0.27-1.14,0.25c-0.43,0-0.79-0.1-1.13-0.28c-0.67-0.35-1.3-1.1-1.69-2.15c-0.4-1.04-0.57-2.3-0.57-3.61	c0.03-2.74,0.57-5.58,1.52-8.18c0.93-2.59,2.36-5.04,4.17-6.48c0.91-0.7,1.87-1.1,2.85-1.19l0.38-0.02c0.11,0.01,0.2,0,0.3,0.02	c0.2,0.01,0.41,0.06,0.64,0.12c0.26,0.08,0.54,0.19,0.83,0.34c0.2,0.1,0.4,0.21,0.6,0.34c1,0.64,1.99,1.58,2.92,2.62	c0.72,0.81,1.41,1.71,2.1,2.63L25,25.24c0.75,1.55,1.53,3.09,2.39,4.58c1.58,2.77,3.29,5.49,5.6,8c0.68,0.73,1.41,1.45,2.27,2.1	c0.61,0.48,1.28,0.91,2.06,1.3c0.93,0.45,2.1,0.8,3.33,0.77c1.12,0,2.29-0.28,3.32-0.81c2.1-1.06,3.42-2.97,4.12-4.77	c0.72-1.84,0.95-3.69,0.96-5.47C49.04,27.52,48.43,24.21,47.3,21.01z" fill="currentColor"/></svg>';
                 case 'qwen':
-                    return '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Qwen</title><defs><linearGradient id="lobe-icons-qwen-fill" x1="0%" x2="100%" y1="0%" y2="0%"><stop offset="0%" stop-color="#00055F" stop-opacity=".84"></stop><stop offset="100%" stop-color="#6F69F7" stop-opacity=".84"></stop></linearGradient></defs><path d="M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16-.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z" fill="url(#lobe-icons-qwen-fill)" fill-rule="nonzero"></path></svg>';
                 case 'deepseek-ai':
-                    return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>DeepSeek</title><path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z" fill="#4D6BFE"></path></svg>';
+                    return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>DeepSeek</title><path d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z" fill="currentColor"></path></svg>';
+                case 'redhatai':
+                    return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 32 32" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Red Hat</title><path d="M26.135 15.933c0.136 0.467 0.233 1.011 0.271 1.572l0.001 0.024c0 2.206-2.479 3.43-5.74 3.43-7.367 0.005-13.821-4.313-13.821-7.165 0-0.002 0-0.004 0-0.005 0-0.416 0.087-0.811 0.245-1.169l-0.007 0.019c-2.648 0.132-6.080 0.606-6.080 3.634 0 4.96 11.753 11.073 21.058 11.073 7.135 0 8.934-3.227 8.934-5.773 0-2.006-1.733-4.28-4.857-5.638zM21.010 17.732c1.971 0 4.824-0.407 4.824-2.752 0.001-0.020 0.001-0.043 0.001-0.067 0-0.167-0.019-0.33-0.054-0.486l0.003 0.015-1.175-5.099c-0.27-1.122-0.507-1.631-2.477-2.615-1.684-0.889-3.637-1.604-5.692-2.045l-0.151-0.027c-0.916 0-1.183 1.182-2.277 1.182-1.052 0-1.833-0.882-2.818-0.882-0.946 0-1.562 0.644-2.037 1.969 0 0-1.325 3.736-1.496 4.279-0.023 0.080-0.036 0.172-0.036 0.267 0 0.014 0 0.028 0.001 0.042l-0-0.002c0 1.452 5.72 6.216 13.384 6.216z" fill="currentColor"></path></svg>';
+                case 'ibm-granite':
+                case 'ibm-research':
+                    return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>IBM</title><path d="M23.544 15.993c.038 0 .06-.017.06-.053v-.036c0-.035-.022-.052-.06-.052h-.09v.14zm-.09.262h-.121v-.498h.225c.112 0 .169.066.169.157 0 .079-.036.129-.09.15l.111.19h-.133l-.092-.17h-.07zm.434-.222v-.062c0-.2-.157-.357-.363-.357a.355.355 0 0 0-.363.357v.062c0 .2.156.358.363.358a.355.355 0 0 0 .363-.358zm-.838-.03c0-.28.212-.492.475-.492.264 0 .475.213.475.491a.477.477 0 0 1-.475.491.477.477 0 0 1-.475-.49zM16.21 8.13l-.216-.624h-3.56v.624zm.413 1.19-.216-.623h-3.973v.624zm2.65 7.147h3.107v-.624h-3.108zm0-1.192h3.107v-.623h-3.108zm0-1.19h1.864v-.624h-1.865zm0-1.191h1.864v-.624h-1.865zm0-1.191h1.864v-.624h-3.555l-.175.504-.175-.504h-3.555v.624h1.865v-.574l.2.574h3.33l.2-.574zm1.864-1.815h-3.142l-.217.624h3.359zm-7.46 3.006h1.865v-.624h-1.865zm0 1.19h1.865v-.623h-1.865zm-1.243 1.191h3.108v-.623h-3.108zm0 1.192h3.108v-.624h-3.108zm6.386-8.961-.216.624h3.776v-.624zm-.629 1.815h4.19v-.624h-3.974zm-4.514 1.19h3.359l-.216-.623h-3.143zm2.482 2.383h2.496l.218-.624h-2.932zm.417 1.19h1.662l.218-.623h-2.098zm.416 1.191h.83l.218-.623h-1.266zm.414 1.192.217-.624h-.432zm-12.433-.006 4.578.006c.622 0 1.18-.237 1.602-.624h-6.18zm4.86-3v.624h2.092c0-.216-.03-.425-.083-.624zm-3.616.624h1.865v-.624H6.217zm3.617-3.573h2.008c.053-.199.083-.408.083-.624H9.834zm-3.617 0h1.865v-.624H6.217zM9.55 7.507H4.973v.624h6.18a2.36 2.36 0 0 0-1.602-.624zm2.056 1.191H4.973v.624h6.884a2.382 2.382 0 0 0-.25-.624zm-5.39 2.382v.624h4.87c.207-.176.382-.387.519-.624zm4.87 1.191h-4.87v.624h5.389a2.39 2.39 0 0 0-.519-.624zm-6.114 3.006h6.634c.11-.193.196-.402.25-.624H4.973zM0 8.13h4.352v-.624H0zm0 1.191h4.352v-.624H0zm1.243 1.191h1.865v-.624H1.243zm0 1.191h1.865v-.624H1.243zm0 1.19h1.865v-.623H1.243zm0 1.192h1.865v-.624H1.243zM0 15.276h4.352v-.623H0zm0 1.192h4.352v-.624H0z" fill="currentColor"/></svg>';
+                case 'google':
+                    return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 210 210" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Google</title><path d="M0,105C0,47.103,47.103,0,105,0c23.383,0,45.515,7.523,64.004,21.756l-24.4,31.696C133.172,44.652,119.477,40,105,40 c-35.841,0-65,29.159-65,65s29.159,65,65,65c28.867,0,53.398-18.913,61.852-45H105V85h105v20c0,57.897-47.103,105-105,105 S0,162.897,0,105z" fill="currentColor"/></svg>';
+                case 'mistralai':
+                    return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 129 91" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Mistral AI</title><g fill="currentColor"><rect x="18.292" y="0" width="18.293" height="18.123"/><rect x="91.473" y="0" width="18.293" height="18.123"/><rect x="18.292" y="18.121" width="36.586" height="18.123"/><rect x="73.181" y="18.121" width="36.586" height="18.123"/><rect x="18.292" y="36.243" width="91.476" height="18.122"/><rect x="18.292" y="54.37" width="18.293" height="18.123"/><rect x="54.883" y="54.37" width="18.293" height="18.123"/><rect x="91.473" y="54.37" width="18.293" height="18.123"/><rect x="0" y="72.504" width="54.89" height="18.123"/><rect x="73.181" y="72.504" width="54.89" height="18.123"/></g></svg>';
                 default:
                     return '';
             }
@@ -708,7 +745,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             html += '</div>';
             container.innerHTML = html;
             
-            document.getElementById('status-timestamp').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            document.getElementById('status-timestamp').textContent = 'Last updated: ' + formatCompactTime(new Date());
         }
 
         function renderReport(data) {
@@ -764,7 +801,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             
             container.innerHTML = html;
             
-            document.getElementById('report-timestamp').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            document.getElementById('report-timestamp').textContent = 'Last updated: ' + formatCompactTime(new Date());
         }
 
         async function refreshStatus() {
@@ -956,36 +993,36 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 
 	// Convert to JSON-friendly format
 	type jsonGPUStatus struct {
-		GPUID             int               `json:"gpu_id"`
-		Status            string            `json:"status"`
-		User              string            `json:"user,omitempty"`
-		ReservationType   string            `json:"reservation_type,omitempty"`
-		Duration          int64             `json:"duration,omitempty"`
-		LastHeartbeat     *time.Time        `json:"last_heartbeat,omitempty"`
-		ExpiryTime        *time.Time        `json:"expiry_time,omitempty"`
-		LastReleased      *time.Time        `json:"last_released,omitempty"`
-		ValidationInfo    string            `json:"validation_info,omitempty"`
-		UnreservedUsers   []string          `json:"unreserved_users,omitempty"`
-		ProcessInfo       string            `json:"process_info,omitempty"`
-		Error             string            `json:"error,omitempty"`
-		ModelInfo         *gpu.ModelInfo    `json:"model_info,omitempty"`
+		GPUID           int            `json:"gpu_id"`
+		Status          string         `json:"status"`
+		User            string         `json:"user,omitempty"`
+		ReservationType string         `json:"reservation_type,omitempty"`
+		Duration        int64          `json:"duration,omitempty"`
+		LastHeartbeat   *time.Time     `json:"last_heartbeat,omitempty"`
+		ExpiryTime      *time.Time     `json:"expiry_time,omitempty"`
+		LastReleased    *time.Time     `json:"last_released,omitempty"`
+		ValidationInfo  string         `json:"validation_info,omitempty"`
+		UnreservedUsers []string       `json:"unreserved_users,omitempty"`
+		ProcessInfo     string         `json:"process_info,omitempty"`
+		Error           string         `json:"error,omitempty"`
+		ModelInfo       *gpu.ModelInfo `json:"model_info,omitempty"`
 	}
 
 	jsonStatuses := make([]jsonGPUStatus, len(statuses))
 	for i, status := range statuses {
 		js := jsonGPUStatus{
-			GPUID:             status.GPUID,
-			Status:            status.Status,
-			User:              status.User,
-			ReservationType:   status.ReservationType,
-			Duration:          int64(status.Duration),
-			ValidationInfo:    status.ValidationInfo,
-			UnreservedUsers:   status.UnreservedUsers,
-			ProcessInfo:       status.ProcessInfo,
-			Error:             status.Error,
-			ModelInfo:         status.ModelInfo,
+			GPUID:           status.GPUID,
+			Status:          status.Status,
+			User:            status.User,
+			ReservationType: status.ReservationType,
+			Duration:        int64(status.Duration),
+			ValidationInfo:  status.ValidationInfo,
+			UnreservedUsers: status.UnreservedUsers,
+			ProcessInfo:     status.ProcessInfo,
+			Error:           status.Error,
+			ModelInfo:       status.ModelInfo,
 		}
-		
+
 		if !status.LastHeartbeat.IsZero() {
 			js.LastHeartbeat = &status.LastHeartbeat
 		}
@@ -995,7 +1032,7 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		if !status.LastReleased.IsZero() {
 			js.LastReleased = &status.LastReleased
 		}
-		
+
 		jsonStatuses[i] = js
 	}
 
@@ -1045,13 +1082,13 @@ func (ws *webServer) handleAPIReport(w http.ResponseWriter, r *http.Request) {
 }
 
 type reportData struct {
-	Users            []userReport `json:"users"`
-	TotalGPUHours    float64     `json:"total_gpu_hours"`
-	TotalReservations int        `json:"total_reservations"`
-	UniqueUsers      int         `json:"unique_users"`
-	StartDate        string      `json:"start_date"`
-	EndDate          string      `json:"end_date"`
-	Days             int         `json:"days"`
+	Users             []userReport `json:"users"`
+	TotalGPUHours     float64      `json:"total_gpu_hours"`
+	TotalReservations int          `json:"total_reservations"`
+	UniqueUsers       int          `json:"unique_users"`
+	StartDate         string       `json:"start_date"`
+	EndDate           string       `json:"end_date"`
+	Days              int          `json:"days"`
 }
 
 type userReport struct {

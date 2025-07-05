@@ -22,7 +22,7 @@ func DetectModelFromProcesses(processes []types.GPUProcessInfo) *ModelInfo {
 		if modelInfo := detectModelFromProcessName(proc.ProcessName); modelInfo != nil {
 			return modelInfo
 		}
-		
+
 		// If no model found in current process, check parent process
 		if modelInfo := detectModelFromParentProcess(proc.PID); modelInfo != nil {
 			return modelInfo
@@ -39,7 +39,7 @@ func detectModelFromProcessName(processName string) *ModelInfo {
 	// 3. /path/to/vllm serve model_name
 	// 4. VLLM_USE_V1=1 canhazgpu run -- vllm serve model_name
 	parts := strings.Fields(processName)
-	
+
 	// Check if this is a vLLM command by looking for "vllm" in the command
 	vllmFound := false
 	for _, part := range parts {
@@ -52,14 +52,19 @@ func detectModelFromProcessName(processName string) *ModelInfo {
 			}
 		}
 	}
-	
+
 	if vllmFound {
 		return parseVLLMCommand(processName)
 	}
-	
+
+	// Try generic model detection for any command with --model arguments
+	if modelInfo := parseGenericModelCommand(processName); modelInfo != nil {
+		return modelInfo
+	}
+
 	// Add more model detection patterns here as needed
 	// Could extend to detect other inference engines like TGI, SGLang, etc.
-	
+
 	return nil
 }
 
@@ -121,7 +126,7 @@ func detectModelFromParentProcess(pid int) *ModelInfo {
 			// No parent or reached init process
 			break
 		}
-		
+
 		// Get parent process command line
 		cmdline, err := getProcessCommandLine(parentPID)
 		if err != nil {
@@ -129,35 +134,42 @@ func detectModelFromParentProcess(pid int) *ModelInfo {
 			pid = parentPID
 			continue
 		}
-		
+
 		// Check if parent process contains model information
 		if modelInfo := detectModelFromProcessName(cmdline); modelInfo != nil {
 			return modelInfo
 		}
-		
+
 		pid = parentPID
 	}
-	
+
 	return nil
 }
 
 // parseVLLMCommand extracts model information from vllm commands
 // Examples:
 // - "vllm serve openai/whisper-large-v3 --port 8000" (positional model)
+// - "vllm serve --model openai/whisper-large-v3 --port 8000" (--model flag with serve)
 // - "python -m vllm.entrypoints.openai.api_server --model openai/whisper-large-v3 --port 8000" (--model flag)
 func parseVLLMCommand(command string) *ModelInfo {
 	parts := strings.Fields(command)
-	
+
 	model := ""
-	
-	// Check for --model flag anywhere in the command (used with Python module)
-	for i := 0; i < len(parts)-1; i++ {
+
+	// Check for --model flag anywhere in the command (works with both direct vllm serve and Python module)
+	for i := 0; i < len(parts); i++ {
+		// Handle --model value format
 		if parts[i] == "--model" && i+1 < len(parts) {
 			model = parts[i+1]
 			break
 		}
+		// Handle --model=value format
+		if strings.HasPrefix(parts[i], "--model=") {
+			model = strings.TrimPrefix(parts[i], "--model=")
+			break
+		}
 	}
-	
+
 	// If no --model flag found, look for "serve" with positional model
 	if model == "" {
 		serveIndex := -1
@@ -167,7 +179,7 @@ func parseVLLMCommand(command string) *ModelInfo {
 				break
 			}
 		}
-		
+
 		if serveIndex != -1 && serveIndex+1 < len(parts) {
 			candidate := parts[serveIndex+1]
 			if !strings.HasPrefix(candidate, "--") {
@@ -175,14 +187,14 @@ func parseVLLMCommand(command string) *ModelInfo {
 			}
 		}
 	}
-	
+
 	if model == "" {
 		return nil
 	}
-	
+
 	// Extract provider from model name (part before the first /)
 	provider := extractProviderFromModel(model)
-	
+
 	return &ModelInfo{
 		Provider: provider,
 		Model:    model,
@@ -202,3 +214,39 @@ func extractProviderFromModel(model string) string {
 	return ""
 }
 
+// parseGenericModelCommand extracts model information from any command with --model arguments
+// Examples:
+// - "python train.py --model openai/whisper-large-v3 --epochs 10"
+// - "some-inference-server --model=meta-llama/Llama-2-7b-chat-hf --port 8080"
+// - "custom-tool --batch-size 32 --model qwen/Qwen2-7B-Instruct --output ./results"
+func parseGenericModelCommand(command string) *ModelInfo {
+	parts := strings.Fields(command)
+
+	model := ""
+
+	// Check for --model flag anywhere in the command
+	for i := 0; i < len(parts); i++ {
+		// Handle --model value format
+		if parts[i] == "--model" && i+1 < len(parts) {
+			model = parts[i+1]
+			break
+		}
+		// Handle --model=value format
+		if strings.HasPrefix(parts[i], "--model=") {
+			model = strings.TrimPrefix(parts[i], "--model=")
+			break
+		}
+	}
+
+	if model == "" {
+		return nil
+	}
+
+	// Extract provider from model name (part before the first /)
+	provider := extractProviderFromModel(model)
+
+	return &ModelInfo{
+		Provider: provider,
+		Model:    model,
+	}
+}

@@ -26,6 +26,7 @@ The tool is a Go application structured as a CLI with internal packages that imp
 - **Unreserved Usage Detection**: nvidia-smi integration detects GPUs in use without proper reservations
 - **User Accountability**: Process ownership detection identifies which users are running unreserved processes
 - **LRU Allocation**: Least Recently Used strategy ensures fair GPU distribution over time
+- **Specific GPU Reservation**: Users can reserve exact GPU IDs (e.g., --gpu-ids 1,3) when specific hardware is needed
 - **Race Condition Protection**: Redis-based distributed locking prevents allocation conflicts
 
 ## Development Commands
@@ -43,6 +44,9 @@ make test             # Run Go tests (when implemented)
 
 # Option 3: Install from local source
 go install .          # Installs to $GOPATH/bin or $HOME/go/bin
+
+# Optional: Create short alias symlink (after installing to /usr/local/bin)
+sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 ```
 
 ### Usage Examples
@@ -56,14 +60,20 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 # Check status with automatic validation
 ./build/canhazgpu status
 
-# Run command with GPU reservation
+# Run command with GPU reservation (by count)
 ./build/canhazgpu run --gpus 1 -- python train.py
+
+# Run command with specific GPU IDs
+./build/canhazgpu run --gpu-ids 1,3 -- python train.py
 
 # Run command with timeout to prevent runaway processes
 ./build/canhazgpu run --gpus 1 --timeout 2h -- python train.py
 
-# Manual GPU reservation
+# Manual GPU reservation (by count)
 ./build/canhazgpu reserve --gpus 2 --duration 4h
+
+# Manual reservation of specific GPU IDs
+./build/canhazgpu reserve --gpu-ids 0,2,4 --duration 2h
 
 # Release manual reservations
 ./build/canhazgpu release
@@ -109,6 +119,7 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 │   ├── gpu/                        # GPU management logic
 │   │   ├── allocation.go           # LRU allocation and coordination
 │   │   ├── validation.go           # nvidia-smi integration and usage detection
+│   │   ├── model_detection.go      # AI model detection from process commands
 │   │   └── heartbeat.go            # Background heartbeat system
 │   ├── redis_client/               # Redis operations
 │   │   └── client.go               # Redis client with Lua scripts
@@ -124,6 +135,11 @@ go install .          # Installs to $GOPATH/bin or $HOME/go/bin
 - `GetProcessOwner()` in `internal/gpu/validation.go`: Identifies process owners via /proc filesystem or ps command
 - Unreserved usage detection excludes GPUs from allocation pool automatically
 - Configurable memory threshold (default: 1024 MB) determines if GPU is considered "in use" via --memory-threshold flag
+- **Model Detection**: `DetectModelFromProcesses()` in `internal/gpu/model_detection.go` identifies running AI models:
+  - **vLLM-specific detection**: Recognizes vLLM serve commands with positional or --model arguments
+  - **Generic --model detection**: Detects `--model value` or `--model=value` patterns in any command
+  - **Examples**: Supports `python train.py --model openai/whisper-large-v3`, `inference-server --model=meta-llama/Llama-2-7b-chat-hf`
+  - **Provider extraction**: Automatically extracts provider names (e.g., "openai", "meta-llama") from model identifiers
 
 ### Allocation Strategy
 

@@ -5,15 +5,21 @@ The `run` command is the most common way to use canhazgpu. It reserves GPUs, run
 ## Basic Usage
 
 ```bash
-canhazgpu run --gpus <count> [--timeout <duration>] -- <command>
+canhazgpu run [--gpus <count> | --gpu-ids <ids>] [--timeout <duration>] -- <command>
 ```
 
 The `--` separator is important - it tells canhazgpu where its options end and your command begins.
 
 ### Options
 
-- `--gpus, -g`: Number of GPUs to reserve (required)
+- `--gpus, -g`: Number of GPUs to reserve (default: 1)
+- `--gpu-ids`: Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)
 - `--timeout, -t`: Maximum time to run command before killing it (optional)
+
+!!! note "GPU Selection"
+    - Use `--gpus` to let canhazgpu select GPUs using the LRU algorithm
+    - Use `--gpu-ids` when you need specific GPUs (e.g., for hardware requirements)
+    - You can use both options together if `--gpus` matches the GPU ID count or is 1 (default)
 
 Timeout formats supported:
 - `30s` (30 seconds)
@@ -34,6 +40,15 @@ canhazgpu run --gpus 1 -- python train.py
 
 # With additional arguments
 canhazgpu run --gpus 1 -- python train.py --batch-size 32 --epochs 100 --lr 0.001
+
+# Reserve specific GPUs by ID
+canhazgpu run --gpu-ids 2,3 -- python train.py
+
+# Reserve specific GPUs with matching count (allowed)
+canhazgpu run --gpus 2 --gpu-ids 2,3 -- python train.py
+
+# Reserve specific GPUs with default --gpus (allowed)
+canhazgpu run --gpu-ids 1,3,5 -- python train.py  # --gpus defaults to 1
 ```
 
 ### Multi-GPU Training

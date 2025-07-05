@@ -159,14 +159,22 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validate
 Reserve GPUs and run a command with automatic cleanup.
 
 ```bash
-canhazgpu run [--gpus <count>] [--timeout <duration>] -- <command>
+canhazgpu run [--gpus <count> | --gpu-ids <ids>] [--timeout <duration>] -- <command>
 ```
 
 **[→ Detailed Run Guide](usage-run.md)**
 
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)
+- `--gpu-ids`: Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)
 - `--timeout`: Maximum time to run command before killing it (default: none)
+
+!!! note "GPU Selection Options"
+    You can use `--gpus` alone, `--gpu-ids` alone, or both together if:
+    - `--gpus` matches the number of GPU IDs specified, or
+    - `--gpus` is 1 (the default value)
+    
+    If specific GPU IDs are requested and any are not available, the entire reservation will fail.
 
 **Timeout formats:**
 - `30s` (30 seconds)
@@ -182,6 +190,9 @@ canhazgpu run --gpus 1 -- python train.py
 
 # Multi-GPU distributed training
 canhazgpu run --gpus 2 -- python -m torch.distributed.launch train.py
+
+# Reserve specific GPU IDs
+canhazgpu run --gpu-ids 1,3 -- python train.py
 
 # Complex command with arguments
 canhazgpu run --gpus 1 -- python train.py --batch-size 32 --epochs 100
@@ -213,14 +224,22 @@ Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use with
 Manually reserve GPUs for a specified duration.
 
 ```bash
-canhazgpu reserve [--gpus <count>] [--duration <time>]
+canhazgpu reserve [--gpus <count> | --gpu-ids <ids>] [--duration <time>]
 ```
 
 **[→ Detailed Reserve Guide](usage-reserve.md)**
 
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)
+- `--gpu-ids`: Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)
 - `--duration`: Duration to reserve GPUs (default: 8h)
+
+!!! note "GPU Selection Options"
+    You can use `--gpus` alone, `--gpu-ids` alone, or both together if:
+    - `--gpus` matches the number of GPU IDs specified, or
+    - `--gpus` is 1 (the default value)
+    
+    If specific GPU IDs are requested and any are not available, the entire reservation will fail.
 
 **Duration Formats:**
 - `30m`: 30 minutes
@@ -235,6 +254,9 @@ canhazgpu reserve
 
 # Reserve 2 GPUs for 4 hours
 canhazgpu reserve --gpus 2 --duration 4h
+
+# Reserve specific GPU IDs
+canhazgpu reserve --gpu-ids 0,2 --duration 2h
 
 # Reserve 1 GPU for 30 minutes
 canhazgpu reserve --duration 30m

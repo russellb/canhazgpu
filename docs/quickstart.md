@@ -37,6 +37,9 @@ Use the `run` command to reserve GPUs and execute a command:
 # Reserve 1 GPU and run a Python script
 canhazgpu run --gpus 1 -- python train.py
 
+# Reserve specific GPUs by ID
+canhazgpu run --gpu-ids 1,3 -- python train.py
+
 # Reserve 2 GPUs for distributed training
 canhazgpu run --gpus 2 -- python -m torch.distributed.launch train.py
 ```
@@ -58,6 +61,9 @@ canhazgpu reserve
 
 # Reserve 2 GPUs for 4 hours
 canhazgpu reserve --gpus 2 --duration 4h
+
+# Reserve specific GPU IDs
+canhazgpu reserve --gpu-ids 0,2 --duration 2h
 
 # Reserve for different time periods
 canhazgpu reserve --duration 30m    # 30 minutes
