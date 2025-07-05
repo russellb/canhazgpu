@@ -30,7 +30,11 @@ func init() {
 func runStatus(ctx context.Context) error {
 	config := getConfig()
 	client := redis_client.NewClient(config)
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			fmt.Printf("Warning: failed to close Redis client: %v\n", err)
+		}
+	}()
 
 	// Test Redis connection
 	if err := client.Ping(ctx); err != nil {
@@ -76,14 +80,15 @@ func displayGPUStatus(status gpu.GPUStatusInfo) {
 		fmt.Printf("GPU %d: IN USE by %s for %s",
 			status.GPUID, status.User, utils.FormatDuration(status.Duration))
 
-		if status.ReservationType == "run" {
+		switch status.ReservationType {
+		case "run":
 			if !status.LastHeartbeat.IsZero() {
 				fmt.Printf(" (run, last heartbeat %s)",
 					utils.FormatTimeAgo(status.LastHeartbeat))
 			} else {
 				fmt.Printf(" (run)")
 			}
-		} else if status.ReservationType == "manual" {
+		case "manual":
 			if !status.ExpiryTime.IsZero() {
 				fmt.Printf(" (manual, expires %s)",
 					utils.FormatTimeUntil(status.ExpiryTime))

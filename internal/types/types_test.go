@@ -106,10 +106,10 @@ func TestGPUState_JSONSerialization(t *testing.T) {
 	// Verify all fields
 	assert.Equal(t, state.User, restored.User)
 	assert.Equal(t, state.Type, restored.Type)
-	assert.True(t, state.StartTime.Time.Equal(restored.StartTime.Time))
-	assert.True(t, state.LastHeartbeat.Time.Equal(restored.LastHeartbeat.Time))
-	assert.True(t, state.LastReleased.Time.Equal(restored.LastReleased.Time))
-	assert.True(t, state.ExpiryTime.Time.Equal(restored.ExpiryTime.Time))
+	assert.True(t, state.StartTime.ToTime().Equal(restored.StartTime.ToTime()))
+	assert.True(t, state.LastHeartbeat.ToTime().Equal(restored.LastHeartbeat.ToTime()))
+	assert.True(t, state.LastReleased.ToTime().Equal(restored.LastReleased.ToTime()))
+	assert.True(t, state.ExpiryTime.ToTime().Equal(restored.ExpiryTime.ToTime()))
 }
 
 func TestAllocationRequest_Validation(t *testing.T) {

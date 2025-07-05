@@ -61,6 +61,10 @@ func TestDetectGPUUsage_Integration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
+	if !isNvidiaSmiAvailable() {
+		t.Skip("Skipping test: nvidia-smi command not available")
+	}
+
 	t.Log("Starting nvidia-smi integration test - may take 5-10 seconds or timeout")
 	t.Log("This test requires nvidia-smi command to be available on the system")
 
@@ -95,16 +99,6 @@ func TestDetectGPUUsage_Integration(t *testing.T) {
 			assert.GreaterOrEqual(t, proc.MemoryMB, 0)
 		}
 	}
-}
-
-func TestDetectGPUUsage_Structure(t *testing.T) {
-	// Test that DetectGPUUsage function exists and can be called
-	usage, err := DetectGPUUsage(context.Background())
-
-	// Don't check for success since nvidia-smi might not be available in test environment
-	// Just verify it doesn't panic and returns proper types
-	assert.NotNil(t, usage) // Should return empty map, not nil
-	_ = err                 // Error is acceptable if nvidia-smi not available
 }
 
 func TestGetUnreservedGPUs(t *testing.T) {

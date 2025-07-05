@@ -133,7 +133,11 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 		hasTimeout = true
 	}
 	client := redis_client.NewClient(config)
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			fmt.Printf("Warning: failed to close Redis client: %v\n", err)
+		}
+	}()
 
 	// Test Redis connection
 	if err := client.Ping(ctx); err != nil {
@@ -240,7 +244,9 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 						if err := syscall.Kill(-pgid, syscall.SIGINT); err != nil {
 							fmt.Printf("Failed to send SIGINT to process group: %v\n", err)
 							// If SIGINT fails, kill immediately
-							killProcessGroup(cmd)
+							if err := killProcessGroup(cmd); err != nil {
+								fmt.Printf("Failed to kill process group: %v\n", err)
+							}
 							atomic.StoreInt32(&timeoutKilled, 1)
 							return
 						}
@@ -249,7 +255,9 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 						if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
 							fmt.Printf("Failed to send SIGINT: %v\n", err)
 							// If SIGINT fails, kill immediately
-							killProcessGroup(cmd)
+							if err := killProcessGroup(cmd); err != nil {
+								fmt.Printf("Failed to kill process group: %v\n", err)
+							}
 							atomic.StoreInt32(&timeoutKilled, 1)
 							return
 						}

@@ -76,7 +76,11 @@ func getParentPID(pid int) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Printf("Warning: failed to close file: %v\n", err)
+		}
+	}()
 
 	scanner := bufio.NewScanner(file)
 	if !scanner.Scan() {

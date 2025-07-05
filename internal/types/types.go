@@ -54,7 +54,7 @@ func (ft *FlexibleTime) UnmarshalJSON(data []byte) error {
 }
 
 func (ft FlexibleTime) MarshalJSON() ([]byte, error) {
-	if ft.Time.IsZero() {
+	if ft.IsZero() {
 		return []byte("null"), nil
 	}
 	return ft.Time.MarshalJSON()

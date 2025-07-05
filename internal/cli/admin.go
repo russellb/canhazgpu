@@ -30,7 +30,10 @@ Use --force to reinitialize an existing pool (this will clear all reservations).
 func init() {
 	adminCmd.Flags().IntP("gpus", "g", 0, "Number of GPUs available on this machine (required)")
 	adminCmd.Flags().Bool("force", false, "Force reinitialization even if already initialized")
-	adminCmd.MarkFlagRequired("gpus")
+	if err := adminCmd.MarkFlagRequired("gpus"); err != nil {
+		// This should not happen in practice, but handle it
+		panic(fmt.Sprintf("Failed to mark gpus flag as required: %v", err))
+	}
 
 	rootCmd.AddCommand(adminCmd)
 }
@@ -38,7 +41,11 @@ func init() {
 func runAdmin(ctx context.Context, gpuCount int, force bool) error {
 	config := getConfig()
 	client := redis_client.NewClient(config)
-	defer client.Close()
+	defer func() {
+		if err := client.Close(); err != nil {
+			fmt.Printf("Warning: failed to close Redis client: %v\n", err)
+		}
+	}()
 
 	// Test Redis connection
 	if err := client.Ping(ctx); err != nil {
