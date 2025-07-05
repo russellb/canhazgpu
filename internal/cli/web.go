@@ -546,10 +546,32 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             const now = new Date();
             const diff = now - date;
             
-            if (diff < 60000) return 'just now';
-            if (diff < 3600000) return Math.floor(diff / 60000) + ' minutes ago';
-            if (diff < 86400000) return Math.floor(diff / 3600000) + ' hours ago';
-            return Math.floor(diff / 86400000) + ' days ago';
+            // Use compact time formatting
+            if (diff < 60000) return 'now';
+            if (diff < 3600000) return Math.floor(diff / 60000) + 'm';
+            if (diff < 86400000) return Math.floor(diff / 3600000) + 'h';
+            if (diff < 604800000) return Math.floor(diff / 86400000) + 'd';
+            
+            // For longer periods, show absolute date in compact format
+            const today = new Date();
+            const isThisYear = date.getFullYear() === today.getFullYear();
+            
+            if (isThisYear) {
+                return (date.getMonth() + 1) + '/' + date.getDate();
+            } else {
+                return (date.getMonth() + 1) + '/' + date.getDate() + '/' + date.getFullYear().toString().slice(-2);
+            }
+        }
+
+        function formatCompactTime(date) {
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
+            const seconds = date.getSeconds();
+            
+            // Format as HH:MM:SS in 24-hour format
+            return hours.toString().padStart(2, '0') + ':' + 
+                   minutes.toString().padStart(2, '0') + ':' + 
+                   seconds.toString().padStart(2, '0');
         }
 
         function getProviderIcon(provider) {
@@ -723,7 +745,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             html += '</div>';
             container.innerHTML = html;
             
-            document.getElementById('status-timestamp').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            document.getElementById('status-timestamp').textContent = 'Last updated: ' + formatCompactTime(new Date());
         }
 
         function renderReport(data) {
@@ -779,7 +801,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             
             container.innerHTML = html;
             
-            document.getElementById('report-timestamp').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            document.getElementById('report-timestamp').textContent = 'Last updated: ' + formatCompactTime(new Date());
         }
 
         async function refreshStatus() {
