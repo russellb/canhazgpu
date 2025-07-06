@@ -19,6 +19,7 @@ import (
 var (
 	webPort int
 	webHost string
+	webDemo bool
 )
 
 //go:embed static/*
@@ -34,30 +35,44 @@ var webCmd = &cobra.Command{
 func init() {
 	webCmd.Flags().IntVarP(&webPort, "port", "p", 8080, "Port to run the web server on")
 	webCmd.Flags().StringVar(&webHost, "host", "0.0.0.0", "Host to bind the web server to")
+	webCmd.Flags().BoolVar(&webDemo, "demo", false, "Run in demo mode with simulated data")
 	rootCmd.AddCommand(webCmd)
 }
 
 func runWeb(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
-	// Initialize Redis client
-	config := getConfig()
-	client := redis_client.NewClient(config)
-	defer func() {
-		if err := client.Close(); err != nil {
-			fmt.Printf("Warning: failed to close Redis client: %v\n", err)
+	var server *webServer
+
+	if webDemo {
+		// Demo mode - no Redis connection needed
+		fmt.Println("Starting web server in DEMO mode")
+		server = &webServer{
+			client: nil,
+			engine: nil,
+			demo:   true,
 		}
-	}()
+	} else {
+		// Initialize Redis client
+		config := getConfig()
+		client := redis_client.NewClient(config)
+		defer func() {
+			if err := client.Close(); err != nil {
+				fmt.Printf("Warning: failed to close Redis client: %v\n", err)
+			}
+		}()
 
-	// Test connection
-	if err := client.Ping(ctx); err != nil {
-		return fmt.Errorf("failed to connect to Redis: %v", err)
-	}
+		// Test connection
+		if err := client.Ping(ctx); err != nil {
+			return fmt.Errorf("failed to connect to Redis: %v", err)
+		}
 
-	// Create server
-	server := &webServer{
-		client: client,
-		engine: gpu.NewAllocationEngine(client, config),
+		// Create server
+		server = &webServer{
+			client: client,
+			engine: gpu.NewAllocationEngine(client, config),
+			demo:   false,
+		}
 	}
 
 	// Set up routes
@@ -75,6 +90,7 @@ func runWeb(cmd *cobra.Command, args []string) error {
 type webServer struct {
 	client *redis_client.Client
 	engine *gpu.AllocationEngine
+	demo   bool
 }
 
 func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -447,7 +463,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         <div class="container">
             <div class="header-content">
                 <div class="header-text">
-                    <h1>canhazgpu Dashboard</h1>
+                    <h1>canhazgpu Dashboard{{if .Demo}} (DEMO){{end}}</h1>
                     <div class="subtitle">GPU Reservation System Monitor - {{.Hostname}}</div>
                 </div>
                 <div class="header-icons">
@@ -975,8 +991,10 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	if err := t.Execute(w, struct {
 		Hostname string
+		Demo     bool
 	}{
 		Hostname: hostname,
+		Demo:     ws.demo,
 	}); err != nil {
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
@@ -986,16 +1004,24 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Clean up expired reservations first
-	if err := ws.engine.CleanupExpiredReservations(ctx); err != nil {
-		// Log but don't fail
-		fmt.Printf("Warning: Failed to cleanup expired reservations: %v\n", err)
-	}
+	var statuses []gpu.GPUStatusInfo
+	var err error
 
-	statuses, err := ws.engine.GetGPUStatus(ctx)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get GPU status: %v", err), http.StatusInternalServerError)
-		return
+	if ws.demo {
+		// Use demo data
+		statuses = ws.generateDemoStatus()
+	} else {
+		// Clean up expired reservations first
+		if err := ws.engine.CleanupExpiredReservations(ctx); err != nil {
+			// Log but don't fail
+			fmt.Printf("Warning: Failed to cleanup expired reservations: %v\n", err)
+		}
+
+		statuses, err = ws.engine.GetGPUStatus(ctx)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get GPU status: %v", err), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// Convert to JSON-friendly format
@@ -1062,30 +1088,37 @@ func (ws *webServer) handleAPIReport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Calculate time range
-	endTime := time.Now()
-	startTime := endTime.AddDate(0, 0, -days)
+	var reportData reportData
 
-	// Get historical usage data
-	historicalRecords, err := ws.client.GetUsageHistory(ctx, startTime, endTime)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get usage history: %v", err), http.StatusInternalServerError)
-		return
+	if ws.demo {
+		// Use demo data
+		reportData = ws.generateDemoReport(days)
+	} else {
+		// Calculate time range
+		endTime := time.Now()
+		startTime := endTime.AddDate(0, 0, -days)
+
+		// Get historical usage data
+		historicalRecords, err := ws.client.GetUsageHistory(ctx, startTime, endTime)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get usage history: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Get current GPU states for in-progress usage
+		currentStatuses, err := ws.engine.GetGPUStatus(ctx)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get current GPU status: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Add current usage to records
+		currentRecords := getCurrentUsageRecordsWeb(currentStatuses, endTime)
+		allRecords := append(historicalRecords, currentRecords...)
+
+		// Generate report data
+		reportData = generateReportData(allRecords, startTime, endTime, days)
 	}
-
-	// Get current GPU states for in-progress usage
-	currentStatuses, err := ws.engine.GetGPUStatus(ctx)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get current GPU status: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Add current usage to records
-	currentRecords := getCurrentUsageRecords(currentStatuses, endTime)
-	allRecords := append(historicalRecords, currentRecords...)
-
-	// Generate report data
-	reportData := generateReportData(allRecords, startTime, endTime, days)
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(reportData); err != nil {
@@ -1157,6 +1190,210 @@ func generateReportData(records []*types.UsageRecord, startTime, endTime time.Ti
 		TotalGPUHours:     totalDuration / 3600.0,
 		TotalReservations: len(records),
 		UniqueUsers:       len(userUsage),
+		StartDate:         startTime.Format("2006-01-02"),
+		EndDate:           endTime.Format("2006-01-02"),
+		Days:              days,
+	}
+}
+
+func getCurrentUsageRecordsWeb(statuses []gpu.GPUStatusInfo, endTime time.Time) []*types.UsageRecord {
+	var records []*types.UsageRecord
+
+	for _, status := range statuses {
+		if status.User != "" {
+			duration := status.Duration.Seconds()
+			startTime := endTime.Add(-status.Duration)
+			records = append(records, &types.UsageRecord{
+				User:            status.User,
+				GPUID:           status.GPUID,
+				StartTime:       types.FlexibleTime{Time: startTime},
+				EndTime:         types.FlexibleTime{Time: endTime},
+				Duration:        duration,
+				ReservationType: status.ReservationType,
+			})
+		}
+	}
+
+	return records
+}
+
+// Demo mode data generation
+func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
+	now := time.Now()
+	statuses := make([]gpu.GPUStatusInfo, 8)
+
+	// GPU 0: Available, last released 2 hours ago
+	statuses[0] = gpu.GPUStatusInfo{
+		GPUID:          0,
+		Status:         "AVAILABLE",
+		LastReleased:   now.Add(-2 * time.Hour),
+		ValidationInfo: "[validated: 45MB used]",
+	}
+
+	// GPU 1: alice running meta-llama/Llama-3.1-8B-Instruct for 1h 15m
+	statuses[1] = gpu.GPUStatusInfo{
+		GPUID:           1,
+		Status:          "IN_USE",
+		User:            "alice",
+		ReservationType: types.ReservationTypeRun,
+		LastHeartbeat:   now.Add(-30 * time.Second),
+		Duration:        75 * time.Minute,
+		ValidationInfo:  "[validated: 8452MB, 2 processes]",
+		ModelInfo: &gpu.ModelInfo{
+			Model:    "meta-llama/Llama-3.1-8B-Instruct",
+			Provider: "meta-llama",
+		},
+	}
+
+	// GPU 2: bob running deepseek-ai/deepseek-v2 (part 1 of 2)
+	statuses[2] = gpu.GPUStatusInfo{
+		GPUID:           2,
+		Status:          "IN_USE",
+		User:            "bob",
+		ReservationType: types.ReservationTypeRun,
+		LastHeartbeat:   now.Add(-15 * time.Second),
+		Duration:        45 * time.Minute,
+		ValidationInfo:  "[validated: 15234MB, 1 processes]",
+		ModelInfo: &gpu.ModelInfo{
+			Model:    "deepseek-ai/deepseek-v2",
+			Provider: "deepseek-ai",
+		},
+	}
+
+	// GPU 3: bob running deepseek-ai/deepseek-v2 (part 2 of 2)
+	statuses[3] = gpu.GPUStatusInfo{
+		GPUID:           3,
+		Status:          "IN_USE",
+		User:            "bob",
+		ReservationType: types.ReservationTypeRun,
+		LastHeartbeat:   now.Add(-15 * time.Second),
+		Duration:        45 * time.Minute,
+		ValidationInfo:  "[validated: 15234MB, 1 processes]",
+		ModelInfo: &gpu.ModelInfo{
+			Model:    "deepseek-ai/deepseek-v2",
+			Provider: "deepseek-ai",
+		},
+	}
+
+	// GPU 4: charlie running qwen/Qwen2.5-72B-Instruct manually
+	statuses[4] = gpu.GPUStatusInfo{
+		GPUID:           4,
+		Status:          "IN_USE",
+		User:            "charlie",
+		ReservationType: types.ReservationTypeManual,
+		ExpiryTime:      now.Add(6 * time.Hour),
+		Duration:        2 * time.Hour,
+		ValidationInfo:  "[validated: 23045MB, 1 processes]",
+		ModelInfo: &gpu.ModelInfo{
+			Model:    "qwen/Qwen2.5-72B-Instruct",
+			Provider: "qwen",
+		},
+	}
+
+	// GPU 5: david running mistralai/Mistral-Large-2
+	statuses[5] = gpu.GPUStatusInfo{
+		GPUID:           5,
+		Status:          "IN_USE",
+		User:            "david",
+		ReservationType: types.ReservationTypeRun,
+		LastHeartbeat:   now,
+		Duration:        30 * time.Minute,
+		ValidationInfo:  "[validated: 19532MB, 1 processes]",
+		ModelInfo: &gpu.ModelInfo{
+			Model:    "mistralai/Mistral-Large-2",
+			Provider: "mistralai",
+		},
+	}
+
+	// GPU 6: eve running redhatai/granite-20b-multilingual
+	statuses[6] = gpu.GPUStatusInfo{
+		GPUID:           6,
+		Status:          "IN_USE",
+		User:            "eve",
+		ReservationType: types.ReservationTypeRun,
+		LastHeartbeat:   now.Add(-45 * time.Second),
+		Duration:        90 * time.Minute,
+		ValidationInfo:  "[validated: 12856MB, 2 processes]",
+		ModelInfo: &gpu.ModelInfo{
+			Model:    "redhatai/granite-20b-multilingual",
+			Provider: "redhatai",
+		},
+	}
+
+	// GPU 7: Available, never used
+	statuses[7] = gpu.GPUStatusInfo{
+		GPUID:          7,
+		Status:         "AVAILABLE",
+		ValidationInfo: "[validated: 0MB used]",
+	}
+
+	return statuses
+}
+
+func (ws *webServer) generateDemoReport(days int) reportData {
+	endTime := time.Now()
+	startTime := endTime.AddDate(0, 0, -days)
+
+	// Generate some realistic usage data
+	users := []userReport{
+		{
+			Name:        "alice",
+			GPUHours:    324.50,
+			Percentage:  28.5,
+			RunCount:    156,
+			ManualCount: 12,
+		},
+		{
+			Name:        "bob",
+			GPUHours:    245.25,
+			Percentage:  21.5,
+			RunCount:    98,
+			ManualCount: 45,
+		},
+		{
+			Name:        "charlie",
+			GPUHours:    186.75,
+			Percentage:  16.4,
+			RunCount:    67,
+			ManualCount: 89,
+		},
+		{
+			Name:        "david",
+			GPUHours:    172.00,
+			Percentage:  15.1,
+			RunCount:    145,
+			ManualCount: 5,
+		},
+		{
+			Name:        "eve",
+			GPUHours:    134.50,
+			Percentage:  11.8,
+			RunCount:    89,
+			ManualCount: 23,
+		},
+		{
+			Name:        "frank",
+			GPUHours:    76.00,
+			Percentage:  6.7,
+			RunCount:    45,
+			ManualCount: 12,
+		},
+	}
+
+	totalHours := 0.0
+	totalRun := 0
+	totalManual := 0
+	for _, u := range users {
+		totalHours += u.GPUHours
+		totalRun += u.RunCount
+		totalManual += u.ManualCount
+	}
+
+	return reportData{
+		Users:             users,
+		TotalGPUHours:     totalHours,
+		TotalReservations: totalRun + totalManual,
+		UniqueUsers:       len(users),
 		StartDate:         startTime.Format("2006-01-02"),
 		EndDate:           endTime.Format("2006-01-02"),
 		Days:              days,
