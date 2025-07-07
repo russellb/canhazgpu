@@ -30,10 +30,12 @@ Consider a system with 4 GPUs where you request 2 GPUs:
 
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 5h 30m 15s ago)    # Oldest release
-GPU 1: AVAILABLE (last released 1h 45m 30s ago)    # Recent release  
-GPU 2: AVAILABLE (last released 3h 12m 45s ago)    # Middle age
-GPU 3: AVAILABLE (last released 2h 08m 12s ago)    # Middle age
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 5h 30m 15s                                           # Oldest release
+1   available          free for 1h 45m 30s                                           # Recent release  
+2   available          free for 3h 12m 45s                                           # Middle age
+3   available          free for 2h 08m 12s                                           # Middle age
 ```
 
 **LRU Ranking** (oldest first):
@@ -58,10 +60,12 @@ Unauthorized GPUs are automatically excluded from LRU consideration:
 
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 4h 0m 0s ago)
-GPU 1: IN USE WITHOUT RESERVATION by user bob - 1024MB used
-GPU 2: AVAILABLE (last released 1h 0m 0s ago)  
-GPU 3: AVAILABLE (last released 2h 0m 0s ago)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 4h                                                    
+1   in use    bob                                           WITHOUT RESERVATION        1024MB used
+2   available          free for 1h                                                    
+3   available          free for 2h                                                    
 ```
 
 **LRU Pool** (unreserved GPU 1 excluded):
@@ -116,10 +120,12 @@ LRU timestamps provide valuable usage analytics:
 
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 0h 15m 30s ago)    # Recently active
-GPU 1: AVAILABLE (last released 8h 45m 12s ago)    # Underutilized
-GPU 2: IN USE by alice for 2h 30m 0s (run, ...)    # Currently active
-GPU 3: AVAILABLE (last released 1h 20m 45s ago)    # Normal usage
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 15m 30s                                               # Recently active
+1   available          free for 8h 45m 12s                                            # Underutilized
+2   in use    alice    2h 30m 0s   run     vllm-model       heartbeat 30s ago          # Currently active
+3   available          free for 1h 20m 45s                                            # Normal usage
 ```
 
 From this, you can identify:
@@ -132,10 +138,12 @@ From this, you can identify:
 ### Mixed Reservation Types
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 2h 0m 0s ago)
-GPU 1: IN USE by bob for 1h 0m 0s (run, ...)
-GPU 2: IN USE by alice for 30m 0s (manual, expires in 3h 30m 0s)
-GPU 3: AVAILABLE (last released 6h 0m 0s ago)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 2h                                                    
+1   in use    bob      1h 0m 0s    run     transformers     heartbeat 15s ago          
+2   in use    alice    30m 0s      manual                   expires in 3h 30m 0s      
+3   available          free for 6h                                                    
 ```
 
 **Available for LRU**: GPUs 0 and 3
@@ -149,10 +157,12 @@ When GPUs are first initialized, they have no `last_released` timestamp:
 Initialized 4 GPUs (IDs 0 to 7)
 
 ❯ canhazgpu status
-GPU 0: AVAILABLE (never used)
-GPU 1: AVAILABLE (never used)
-GPU 2: AVAILABLE (never used)  
-GPU 3: AVAILABLE (never used)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          never used                                                     
+1   available          never used                                                     
+2   available          never used                                                     
+3   available          never used                                                     
 ```
 
 **Initial LRU behavior**: 
@@ -166,13 +176,17 @@ LRU timestamps persist in Redis across system restarts:
 ```bash
 # Before restart
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 1h 30m 0s ago)
-GPU 1: AVAILABLE (last released 4h 15m 0s ago)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 1h 30m                                               
+1   available          free for 4h 15m                                               
 
 # After system restart
 ❯ canhazgpu status  
-GPU 0: AVAILABLE (last released 1h 35m 0s ago)  # Time continues
-GPU 1: AVAILABLE (last released 4h 20m 0s ago)  # Time continues
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 1h 35m                                               # Time continues
+1   available          free for 4h 20m                                               # Time continues
 ```
 
 ## LRU Implementation Details
@@ -219,9 +233,9 @@ LRU calculation is efficient:
 # lru_analysis.sh - Analyze GPU usage distribution
 
 echo "GPU Usage Distribution (last 24h):"
-canhazgpu status | grep "AVAILABLE" | while read -r line; do
-    GPU=$(echo "$line" | awk '{print $2}' | tr -d ':')
-    TIME=$(echo "$line" | sed -n 's/.*last released \([^)]*\).*/\1/p')
+canhazgpu status | grep "available" | while read -r line; do
+    GPU=$(echo "$line" | awk '{print $1}')
+    TIME=$(echo "$line" | sed -n 's/.*free for \([^[:space:]]*\).*/\1/p')
     echo "GPU $GPU: $TIME"
 done | sort -k3,3n
 ```
@@ -229,10 +243,12 @@ done | sort -k3,3n
 ### Identifying Imbalances
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 0h 15m 0s ago)     # Heavily used
-GPU 1: AVAILABLE (last released 0h 30m 0s ago)     # Heavily used
-GPU 2: AVAILABLE (last released 12h 45m 0s ago)    # Underutilized!
-GPU 3: AVAILABLE (last released 0h 45m 0s ago)     # Normal usage
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 15m                                                   # Heavily used
+1   available          free for 30m                                                   # Heavily used
+2   available          free for 12h 45m                                               # Underutilized!
+3   available          free for 45m                                                   # Normal usage
 ```
 
 GPU 2 hasn't been used in 12+ hours - might indicate:

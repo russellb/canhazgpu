@@ -138,21 +138,28 @@ canhazgpu status --memory-threshold 2048
 
 **Example Output:**
 ```bash
-GPU 0: AVAILABLE (last released 0h 30m 15s ago) [validated: 45MB used]
-GPU 1: IN USE by alice for 0h 15m 30s (run, last heartbeat 0h 0m 5s ago) [validated: 8452MB, 1 processes]
-GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
-GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validated: no actual usage detected]
+GPU  STATUS      USER      DURATION     TYPE    MODEL                    DETAILS                   VALIDATION
+---  ------      ----      --------     ----    -----                    -------                   ----------
+0    AVAILABLE   -         -            -       -                        free for 0h 30m 15s      45MB used
+1    IN_USE      alice     0h 15m 30s   RUN     meta-llama/Llama-2-7b-chat-hf  heartbeat 0h 0m 5s ago    8452MB, 1 processes
+2    UNRESERVED  user bob  -            -       codellama/CodeLlama-7b-Instruct-hf        1024MB used by PID 12345 (python3), PID 67890 (jupyter)  -
+3    IN_USE      charlie   1h 2m 15s    MANUAL  -                        expires in 3h 15m 45s    no usage detected
 ```
 
 **Status Types:**
 - `AVAILABLE`: GPU is free to use
-- `IN USE`: GPU is properly reserved
-- `IN USE WITHOUT RESERVATION`: GPU is being used without proper reservation
+- `IN_USE`: GPU is properly reserved
+- `UNRESERVED`: GPU is being used without proper reservation
 
-**Validation Info:**
-- `[validated: XMB, Y processes]`: Confirms reservation matches actual usage
-- `[validated: no actual usage detected]`: Reserved but no processes running
-- `[validated: XMB used]`: Shows memory usage on available GPUs
+**Table Columns:**
+- `GPU`: GPU ID number
+- `STATUS`: Current state (AVAILABLE, IN_USE, UNRESERVED, ERROR)
+- `USER`: Username who reserved the GPU (or who is using it unreserved)
+- `DURATION`: How long the GPU has been reserved
+- `TYPE`: Reservation type (RUN, MANUAL)
+- `MODEL`: Detected AI model (if any)
+- `DETAILS`: Additional information (heartbeat, expiry, process info)
+- `VALIDATION`: Actual GPU usage validation (memory, process count)
 
 ## run
 

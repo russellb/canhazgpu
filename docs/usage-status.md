@@ -15,83 +15,90 @@ No options are required - the command automatically validates all GPUs and shows
 ### Example Output
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 0h 30m 15s ago) [validated: 45MB used]
-GPU 1: IN USE by alice for 0h 15m 30s (run, last heartbeat 0h 0m 5s ago) [validated: 8452MB, 1 processes]
-GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
-GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validated: no actual usage detected]
-GPU 4: IN USE WITHOUT RESERVATION by users alice, bob and charlie - 2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
+GPU  STATUS      USER     DURATION     TYPE    MODEL                    DETAILS                  VALIDATION
+---  ------      ----     --------     ----    -----                    -------                  ----------
+0    AVAILABLE   -        -            -       -                        free for 0h 30m 15s     45MB used
+1    IN_USE      alice    0h 15m 30s   RUN     meta-llama/Llama-2-7b-chat-hf  heartbeat 0h 0m 5s ago   8452MB, 1 processes
+2    UNRESERVED  user bob -            -       mistralai/Mistral-7B-Instruct-v0.1    1024MB used by PID 12345 (python3), PID 67890 (jupyter)
+3    IN_USE      charlie  1h 2m 15s    MANUAL  -                        expires in 3h 15m 45s   no usage detected
+4    UNRESERVED  users alice, bob and charlie  -  -  meta-llama/Meta-Llama-3-8B-Instruct  2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
 ```
 
 ### Status Types
 
 #### AVAILABLE
 ```bash
-GPU 0: AVAILABLE (last released 0h 30m 15s ago) [validated: 45MB used]
+0    AVAILABLE   -        -            -       -                        free for 0h 30m 15s     45MB used
 ```
 
 - **Meaning**: GPU is free and can be allocated
-- **Time info**: Shows when it was last released (for LRU allocation)
+- **Time info**: Shows how long it has been free (for LRU allocation)
 - **Validation**: Shows current memory usage (usually low baseline usage)
 
 #### IN USE (Proper Reservations)
 ```bash
-GPU 1: IN USE by alice for 0h 15m 30s (run, last heartbeat 0h 0m 5s ago) [validated: 8452MB, 1 processes]
+1    IN_USE      alice    0h 15m 30s   RUN     openai/whisper-large-v3  heartbeat 0h 0m 5s ago   8452MB, 1 processes
 ```
 
 **Components:**
-- `by alice`: Username who reserved the GPU
-- `for 0h 15m 30s`: How long it's been reserved
-- `(run, ...)`: Reservation type and additional info
-- `[validated: ...]`: Actual usage validation
+- `alice`: Username who reserved the GPU
+- `0h 15m 30s`: How long it's been reserved
+- `RUN`: Reservation type (RUN or MANUAL)
+- `meta-llama/Llama-2-7b-chat-hf`: Detected AI model (if any)
+- `heartbeat 0h 0m 5s ago`: Additional reservation info
+- `8452MB, 1 processes`: Actual usage validation
 
 **Reservation Types:**
 
 **Run-type reservations:**
 ```bash
-(run, last heartbeat 0h 0m 5s ago)
+1    IN_USE      alice    0h 15m 30s   RUN     meta-llama/Llama-2-7b-chat-hf  heartbeat 0h 0m 5s ago   8452MB, 1 processes
 ```
 - Created by `canhazgpu run` command
 - Maintained by periodic heartbeats
 - Auto-released when process ends or heartbeat stops
+- Shows heartbeat timing in DETAILS column
 
 **Manual reservations:**
 ```bash
-(manual, expires in 3h 15m 45s)
+3    IN_USE      charlie  1h 2m 15s    MANUAL  -                        expires in 3h 15m 45s   no usage detected
 ```
 - Created by `canhazgpu reserve` command  
 - Time-based expiry
 - Must be manually released or will expire
+- Shows expiry timing in DETAILS column
 
-#### IN USE WITHOUT RESERVATION
+#### UNRESERVED
 ```bash
-GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
+2    UNRESERVED  user bob -            -       mistralai/Mistral-7B-Instruct-v0.1    1024MB used by PID 12345 (python3), PID 67890 (jupyter)  -
 ```
 
 - **Meaning**: Someone is using the GPU without proper reservation
 - **User identification**: Shows which user(s) are running unreserved processes
-- **Process details**: Lists PIDs and process names using the GPU
+- **Model detection**: Shows detected AI model in MODEL column
+- **Process details**: Lists PIDs and process names using the GPU in DETAILS column
 - **Impact**: This GPU will be excluded from allocation until usage stops
 
 **Multiple unreserved users:**
 ```bash
-GPU 4: IN USE WITHOUT RESERVATION by users alice, bob and charlie - 2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
+4    UNRESERVED  users alice, bob and charlie  -  -  meta-llama/Meta-Llama-3-8B-Instruct  2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more  -
 ```
 
 ### Validation Information
 
-The `[validated: ...]` section shows actual GPU usage detected via nvidia-smi:
+The VALIDATION column shows actual GPU usage detected via nvidia-smi:
 
 #### Confirms Proper Usage
 ```bash
-[validated: 8452MB, 1 processes]
+8452MB, 1 processes
 ```
 - GPU is reserved and actually being used
 - Shows memory usage and process count
 - Indicates healthy, proper resource utilization
 
-#### No Actual Usage
+#### No Usage Detected
 ```bash
-[validated: no actual usage detected]
+no usage detected
 ```
 - GPU is reserved but no processes are running
 - Might indicate:
@@ -101,7 +108,7 @@ The `[validated: ...]` section shows actual GPU usage detected via nvidia-smi:
 
 #### Baseline Usage Only
 ```bash
-[validated: 45MB used]
+45MB used
 ```
 - Available GPU with minimal background usage
 - Normal baseline memory usage from GPU drivers
@@ -125,7 +132,7 @@ canhazgpu status >> gpu_usage_log.txt
 
 #### Stale Reservations
 ```bash
-GPU 3: IN USE by alice for 8h 45m 0s (manual, expires in 0h 15m 0s) [validated: no actual usage detected]
+3    IN_USE      alice    8h 45m 0s    MANUAL  -                        expires in 0h 15m 0s    no usage detected
 ```
 - Long reservation with no actual usage
 - User likely forgot to release
@@ -133,7 +140,7 @@ GPU 3: IN USE by alice for 8h 45m 0s (manual, expires in 0h 15m 0s) [validated: 
 
 #### Heartbeat Issues
 ```bash
-GPU 1: IN USE by bob for 2h 30m 0s (run, last heartbeat 0h 5m 30s ago) [validated: 8452MB, 1 processes]
+1    IN_USE      bob      2h 30m 0s    RUN     codellama/CodeLlama-7b-Instruct-hf        heartbeat 0h 5m 30s ago 8452MB, 1 processes
 ```
 - Last heartbeat was 5+ minutes ago (should be <1 minute)
 - Possible network issues or process problems
@@ -141,8 +148,8 @@ GPU 1: IN USE by bob for 2h 30m 0s (run, last heartbeat 0h 5m 30s ago) [validate
 
 #### Unreserved Usage Patterns
 ```bash
-GPU 2: IN USE WITHOUT RESERVATION by user charlie - 12GB used by PID 12345 (python3)
-GPU 5: IN USE WITHOUT RESERVATION by user charlie - 8GB used by PID 23456 (jupyter)
+2    UNRESERVED  user charlie  -       -       microsoft/DialoGPT-large     12GB used by PID 12345 (python3)      -
+5    UNRESERVED  user charlie  -       -       NousResearch/Nous-Hermes-2-Yi-34B   8GB used by PID 23456 (jupyter)       -
 ```
 - Same user using multiple GPUs without reservation
 - High memory usage indicates active workloads
@@ -153,10 +160,12 @@ GPU 5: IN USE WITHOUT RESERVATION by user charlie - 8GB used by PID 23456 (jupyt
 #### Planning Allocations
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 2h 0m 0s ago)     # Good candidate
-GPU 1: AVAILABLE (last released 0h 30m 0s ago)    # Recently used
-GPU 2: IN USE by alice for 0h 5m 0s (run, ...)    # Just started
-GPU 3: IN USE by bob for 3h 45m 0s (manual, expires in 0h 15m 0s)  # Expiring soon
+GPU  STATUS     USER   DURATION   TYPE    MODEL            DETAILS                  VALIDATION
+---  ------     ----   --------   ----    -----            -------                  ----------
+0    AVAILABLE  -      -          -       -                free for 2h 0m 0s       1MB used     # Good candidate
+1    AVAILABLE  -      -          -       -                free for 0h 30m 0s      1MB used     # Recently used
+2    IN_USE     alice  0h 5m 0s   RUN     teknium/OpenHermes-2.5-Mistral-7B  heartbeat 0h 0m 3s ago   2048MB, 1 processes  # Just started
+3    IN_USE     bob    3h 45m 0s  MANUAL  -                expires in 0h 15m 0s    no usage detected    # Expiring soon
 ```
 
 From this, you can see:

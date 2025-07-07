@@ -194,7 +194,7 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 				status.ValidationInfo = fmt.Sprintf("[validated: %dMB used]", usage.MemoryMB)
 			}
 		} else {
-			status.ValidationInfo = "[validated: no actual usage detected]"
+			status.ValidationInfo = "[validated: no usage detected]"
 		}
 	} else {
 		// GPU has no reservation - check if it's being used without reservation

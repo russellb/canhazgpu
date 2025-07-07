@@ -3,6 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
+	"text/tabwriter"
+	"time"
 
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
@@ -54,63 +58,144 @@ func runStatus(ctx context.Context) error {
 		return fmt.Errorf("failed to get GPU status: %v", err)
 	}
 
-	// Display status for each GPU
-	for _, status := range statuses {
-		displayGPUStatus(status)
-	}
+	// Display status in table format
+	displayGPUStatusTable(statuses)
 
 	return nil
 }
 
-func displayGPUStatus(status gpu.GPUStatusInfo) {
+func displayGPUStatusTable(statuses []gpu.GPUStatusInfo) {
+	// Create a new tabwriter for aligned columns
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	defer w.Flush()
+
+	// Check if any GPU has model information
+	hasModels := false
+	for _, status := range statuses {
+		if status.ModelInfo != nil && status.ModelInfo.Model != "" {
+			hasModels = true
+			break
+		}
+	}
+
+	// Print header - exclude MODEL column if no models detected
+	if hasModels {
+		fmt.Fprintln(w, "GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION\tMODEL")
+		fmt.Fprintln(w, "---\t------\t----\t--------\t----\t-------\t----------\t-----")
+	} else {
+		fmt.Fprintln(w, "GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION")
+		fmt.Fprintln(w, "---\t------\t----\t--------\t----\t-------\t----------")
+	}
+
+	// Print each GPU status
+	for _, status := range statuses {
+		displaySingleGPUStatus(w, status, hasModels)
+	}
+}
+
+func displaySingleGPUStatus(w *tabwriter.Writer, status gpu.GPUStatusInfo, includeModel bool) {
+	gpu := fmt.Sprintf("%d", status.GPUID)
+
 	switch status.Status {
 	case "AVAILABLE":
+		var details string
 		if status.LastReleased.IsZero() {
-			fmt.Printf("GPU %d: AVAILABLE (never used)", status.GPUID)
+			details = "never used"
 		} else {
-			fmt.Printf("GPU %d: AVAILABLE (last released %s)",
-				status.GPUID, utils.FormatTimeAgo(status.LastReleased))
+			details = fmt.Sprintf("free for %s", utils.FormatDuration(time.Since(status.LastReleased)))
 		}
-		if status.ValidationInfo != "" {
-			fmt.Printf(" %s", status.ValidationInfo)
+
+		// Clean validation info
+		validation := strings.TrimSpace(strings.Trim(status.ValidationInfo, "[]"))
+		validation = strings.TrimPrefix(validation, "validated: ")
+
+		// Set model info
+		model := "-"
+		if status.ModelInfo != nil && status.ModelInfo.Model != "" {
+			model = status.ModelInfo.Model
 		}
-		fmt.Println()
+
+		if includeModel {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "AVAILABLE", "-", "-", "-", details, validation, model)
+		} else {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "AVAILABLE", "-", "-", "-", details, validation)
+		}
 
 	case "IN_USE":
-		fmt.Printf("GPU %d: IN USE by %s for %s",
-			status.GPUID, status.User, utils.FormatDuration(status.Duration))
+		user := status.User
+		duration := utils.FormatDuration(status.Duration)
+		reservationType := strings.ToUpper(status.ReservationType)
 
+		var details string
 		switch status.ReservationType {
 		case "run":
 			if !status.LastHeartbeat.IsZero() {
-				fmt.Printf(" (run, last heartbeat %s)",
-					utils.FormatTimeAgo(status.LastHeartbeat))
+				details = fmt.Sprintf("heartbeat %s", utils.FormatTimeAgo(status.LastHeartbeat))
 			} else {
-				fmt.Printf(" (run)")
+				details = "active"
 			}
 		case "manual":
 			if !status.ExpiryTime.IsZero() {
-				fmt.Printf(" (manual, expires %s)",
-					utils.FormatTimeUntil(status.ExpiryTime))
+				details = fmt.Sprintf("expires %s", utils.FormatTimeUntil(status.ExpiryTime))
 			} else {
-				fmt.Printf(" (manual)")
+				details = "manual reservation"
 			}
 		}
 
-		if status.ValidationInfo != "" {
-			fmt.Printf(" %s", status.ValidationInfo)
+		// Clean validation info
+		validation := strings.TrimSpace(strings.Trim(status.ValidationInfo, "[]"))
+		validation = strings.TrimPrefix(validation, "validated: ")
+
+		// Set model info
+		model := "-"
+		if status.ModelInfo != nil && status.ModelInfo.Model != "" {
+			model = status.ModelInfo.Model
 		}
-		fmt.Println()
+
+		if includeModel {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "IN_USE", user, duration, reservationType, details, validation, model)
+		} else {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "IN_USE", user, duration, reservationType, details, validation)
+		}
 
 	case "UNRESERVED":
-		userList := utils.FormatUserList(status.UnreservedUsers, 3)
-		fmt.Printf("GPU %d: IN USE WITHOUT RESERVATION by %s - %s\n",
-			status.GPUID, userList, status.ProcessInfo)
+		userList := utils.FormatUserList(status.UnreservedUsers, 2)
+		details := status.ProcessInfo
+
+		// Set model info
+		model := "-"
+		if status.ModelInfo != nil && status.ModelInfo.Model != "" {
+			model = status.ModelInfo.Model
+		}
+
+		if includeModel {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "UNRESERVED", userList, "-", "-", details, "-", model)
+		} else {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "UNRESERVED", userList, "-", "-", details, "-")
+		}
 
 	case "ERROR":
-		fmt.Printf("GPU %d: ERROR - %s\n", status.GPUID, status.Error)
+		if includeModel {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "ERROR", "-", "-", "-", status.Error, "-", "-")
+		} else {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "ERROR", "-", "-", "-", status.Error, "-")
+		}
 
 	default:
-		fmt.Printf("GPU %d: UNKNOWN STATUS\n", status.GPUID)
+		if includeModel {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "UNKNOWN", "-", "-", "-", "unknown status", "-", "-")
+		} else {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				gpu, "UNKNOWN", "-", "-", "-", "unknown status", "-")
+		}
 	}
 }

@@ -138,7 +138,7 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 - **Model Detection**: `DetectModelFromProcesses()` in `internal/gpu/model_detection.go` identifies running AI models:
   - **vLLM-specific detection**: Recognizes vLLM serve commands with positional or --model arguments
   - **Generic --model detection**: Detects `--model value` or `--model=value` patterns in any command
-  - **Examples**: Supports `python train.py --model openai/whisper-large-v3`, `inference-server --model=meta-llama/Llama-2-7b-chat-hf`
+  - **Examples**: Supports `python train.py --model meta-llama/Llama-2-7b-chat-hf`, `inference-server --model=mistralai/Mistral-7B-Instruct-v0.1`
   - **Provider extraction**: Automatically extracts provider names (e.g., "openai", "meta-llama") from model identifiers
 
 ### Allocation Strategy
@@ -166,8 +166,10 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 
 - Real-time validation shows actual vs reserved GPU usage
 - User accountability displays specific users running unreserved processes
-- Validation info format: `[validated: XMB, Y processes]`
-- "IN USE WITHOUT RESERVATION" status for unreserved usage
+- Table format with GPU, STATUS, USER, DURATION, TYPE, MODEL, DETAILS, VALIDATION columns
+- Validation info format: `XMB, Y processes` (no prefix)
+- "UNRESERVED" status for unreserved usage
+- Model detection displays identified AI models in MODEL column
 
 ### Time Handling
 
@@ -220,3 +222,7 @@ Reserved state:
 - Usage data stored in Redis with 90-day expiration to prevent unbounded growth
 - `report` command aggregates usage by user with configurable time windows
 - Supports both historical completed usage and current in-progress reservations
+
+## Documentation
+
+- Documentation is in the docs/ directory. All user facing features should be documented.

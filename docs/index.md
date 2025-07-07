@@ -47,10 +47,12 @@ canhazgpu web --port 8080
 
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 0h 30m 15s ago) [validated: 45MB used]
-GPU 1: IN USE by alice for 0h 15m 30s (run, last heartbeat 0h 0m 5s ago) [validated: 8452MB, 1 processes]
-GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
-GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s) [validated: no actual usage detected]
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 30m                                                   45MB used
+1   in use    alice    15m 30s     run     llama-2-7b-chat  heartbeat 5s ago          8452MB, 1 processes
+2   in use    bob                                           WITHOUT RESERVATION        1024MB used by PID 12345 (python3), PID 67890 (jupyter)
+3   in use    charlie  1h 2m 15s   manual                   expires in 3h 15m 45s     no usage detected
 ```
 
 ## Getting Started

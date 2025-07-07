@@ -734,7 +734,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 
                 // Show 0% memory usage for GPUs that are in use but have no detected usage
                 if (gpu.status === 'IN_USE' && (!gpu.validation_info || 
-                    (gpu.validation_info && gpu.validation_info.includes('no actual usage detected')))) {
+                    (gpu.validation_info && gpu.validation_info.includes('no usage detected')))) {
                     html += '<div class="memory-usage">';
                     html += '<div class="memory-bar">';
                     html += '<div class="memory-fill memory-low" style="width: 0%"></div>';
@@ -1222,7 +1222,7 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 	now := time.Now()
 	statuses := make([]gpu.GPUStatusInfo, 8)
 
-	// GPU 0: Available, last released 2 hours ago
+	// GPU 0: Available, free for 2 hours
 	statuses[0] = gpu.GPUStatusInfo{
 		GPUID:          0,
 		Status:         "AVAILABLE",

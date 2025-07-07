@@ -92,10 +92,12 @@ canhazgpu status
 
 Example output:
 ```
-GPU 0: AVAILABLE (last released 2h 30m 15s ago)
-GPU 1: IN USE by alice for 0h 15m 30s (run, last heartbeat 0h 0m 5s ago) [validated: 8452MB, 1 processes]
-GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3)
-GPU 3: IN USE by charlie for 1h 2m 15s (manual, expires in 3h 15m 45s)
+GPU  STATUS      USER      DURATION     TYPE    MODEL                    DETAILS                  VALIDATION
+---  ------      ----      --------     ----    -----                    -------                  ----------
+0    AVAILABLE   -         -            -       -                        free for 2h 30m 15s     1MB used
+1    IN_USE      alice     0h 15m 30s   RUN     meta-llama/Llama-2-13b-chat-hf  heartbeat 0h 0m 5s ago   8452MB, 1 processes
+2    UNRESERVED  user bob  -            -       mistralai/Mistral-7B-Instruct-v0.1        1024MB used by PID 12345 (python3)  -
+3    IN_USE      charlie   1h 2m 15s    MANUAL  -                        expires in 3h 15m 45s   no usage detected
 ```
 
 !!! info "Understanding the Output"

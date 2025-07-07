@@ -44,23 +44,29 @@ Unreserved usage detection runs:
 
 ### Single Unreserved User
 ```bash
-GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+2   in use    bob                          mistralai/Mistral-7B-Instruct-v0.1           WITHOUT RESERVATION        1024MB used by PID 12345 (python3), PID 67890 (jupyter)
 ```
 
 **Information shown:**
-- `user bob`: The user running unreserved processes
-- `1024MB used`: Total memory consumption on this GPU
+- `USER`: The user running unreserved processes (bob)
+- `DETAILS`: Shows "WITHOUT RESERVATION" status
+- `VALIDATION`: Total memory consumption and process details
 - `PID 12345 (python3)`: Process ID and name
 - `PID 67890 (jupyter)`: Additional processes (if any)
 
 ### Multiple Unreserved Users
 ```bash
-GPU 3: IN USE WITHOUT RESERVATION by users alice, bob and charlie - 2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
+GPU STATUS    USER            DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- --------------- ----------- ------- ---------------- -------------------------- ---------------------
+3   in use    alice,bob,charlie                    meta-llama/Meta-Llama-3-8B-Instruct                    WITHOUT RESERVATION        2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
 ```
 
 **Information shown:**
-- `users alice, bob and charlie`: All users with processes on this GPU
-- `2048MB used`: Total memory consumption
+- `USER`: All users with processes on this GPU (alice,bob,charlie)
+- `DETAILS`: Shows "WITHOUT RESERVATION" status
+- `VALIDATION`: Total memory consumption and process details
 - `and 2 more`: Indicates additional processes (display truncated for readability)
 
 ### Process Details
@@ -102,7 +108,9 @@ Error: Not enough GPUs available. Requested: 3, Available: 1 (2 GPUs in use with
 
 2. **Identify unreserved users and processes**:
    ```bash
-   GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3), PID 67890 (jupyter)
+   GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+   --- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+   2   in use    bob                          mistralai/Mistral-7B-Instruct-v0.1           WITHOUT RESERVATION        1024MB used by PID 12345 (python3), PID 67890 (jupyter)
    ```
 
 3. **Contact the user** to coordinate proper usage
@@ -186,26 +194,32 @@ fi
 
 ### Multi-GPU Unreserved Usage
 ```bash
-GPU 1: IN USE WITHOUT RESERVATION by user alice - 2048MB used by PID 11111 (python3)
-GPU 2: IN USE WITHOUT RESERVATION by user alice - 2048MB used by PID 11111 (python3)
-GPU 5: IN USE WITHOUT RESERVATION by user alice - 2048MB used by PID 11111 (python3)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+1   in use    alice                        NousResearch/Nous-Hermes-2-Yi-34B                         WITHOUT RESERVATION        2048MB used by PID 11111 (python3)
+2   in use    alice                        NousResearch/Nous-Hermes-2-Yi-34B                         WITHOUT RESERVATION        2048MB used by PID 11111 (python3)
+5   in use    alice                        NousResearch/Nous-Hermes-2-Yi-34B                         WITHOUT RESERVATION        2048MB used by PID 11111 (python3)
 ```
 
 Same process using multiple GPUs - user should reserve all needed GPUs properly.
 
 ### Mixed Usage Patterns
 ```bash
-GPU 0: IN USE by bob for 1h 30m 0s (run, last heartbeat 0h 0m 5s ago) [validated: 8452MB, 1 processes]
-GPU 1: IN USE WITHOUT RESERVATION by user alice - 1024MB used by PID 22222 (jupyter)
-GPU 2: AVAILABLE (last released 2h 0m 0s ago) [validated: 45MB used]
-GPU 3: IN USE by charlie for 0h 45m 0s (manual, expires in 7h 15m 0s) [validated: no actual usage detected]
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   in use    bob      1h 30m 0s   run     microsoft/DialoGPT-large heartbeat 5s ago          8452MB, 1 processes
+1   in use    alice                        teknium/OpenHermes-2.5-Mistral-7B                         WITHOUT RESERVATION        1024MB used by PID 22222 (jupyter)
+2   available          free for 2h                                                    45MB used
+3   in use    charlie  45m 0s      manual                   expires in 7h 15m 0s      no usage detected
 ```
 
 Mix of proper usage, unreserved usage, and available GPUs.
 
 ### Container-Based Unreserved Usage
 ```bash
-GPU 1: IN USE WITHOUT RESERVATION by users root, alice - 3072MB used by PID 33333 (dockerd), PID 44444 (python3) and 1 more
+GPU STATUS    USER        DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- ----------- ----------- ------- ---------------- -------------------------- ---------------------
+1   in use    root,alice                      codellama/CodeLlama-7b-Instruct-hf                      WITHOUT RESERVATION        3072MB used by PID 33333 (dockerd), PID 44444 (python3) and 1 more
 ```
 
 Docker containers running with GPU access - users should coordinate container GPU usage through canhazgpu.

@@ -158,8 +158,10 @@ Reserved 2 GPU(s): [1, 3] for 4h 0m 0s
 
 # Check current allocations
 ❯ canhazgpu status
-GPU 1: IN USE by alice for 0h 0m 30s (manual, expires in 3h 59m 30s)
-GPU 3: IN USE by alice for 0h 0m 30s (manual, expires in 3h 59m 30s)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+1   in use    alice    30s         manual                   expires in 3h 59m 30s     
+3   in use    alice    30s         manual                   expires in 3h 59m 30s     
 
 # Manually set CUDA_VISIBLE_DEVICES
 export CUDA_VISIBLE_DEVICES=1,3
@@ -171,11 +173,15 @@ Manual reservations automatically expire after the specified duration:
 
 ```bash
 ❯ canhazgpu status
-GPU 1: IN USE by alice for 3h 58m 45s (manual, expires in 0h 1m 15s)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+1   in use    alice    3h 58m 45s  manual                   expires in 1m 15s         
 
 # After expiration
 ❯ canhazgpu status  
-GPU 1: AVAILABLE (last released 0h 0m 5s ago)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+1   available          free for 5s                                                    
 ```
 
 ## Releasing Reservations
@@ -193,10 +199,12 @@ Use `status` to see your current reservations:
 
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 1h 15m 30s ago)
-GPU 1: IN USE by alice for 0h 45m 12s (manual, expires in 3h 14m 48s)  # Your reservation
-GPU 2: IN USE by bob for 1h 30m 0s (run, last heartbeat 0h 0m 5s ago)
-GPU 3: IN USE by alice for 0h 45m 12s (manual, expires in 3h 14m 48s)    # Your reservation
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 1h 15m 30s                                           
+1   in use    alice    45m 12s     manual                   expires in 3h 14m 48s     # Your reservation
+2   in use    bob      1h 30m 0s   run     pytorch-model    heartbeat 5s ago          
+3   in use    alice    45m 12s     manual                   expires in 3h 14m 48s     # Your reservation
 ```
 
 ## Error Handling

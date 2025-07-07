@@ -42,21 +42,23 @@ canhazgpu run --memory-threshold 512 --gpus 1 -- python train.py
 ## Validation Output
 
 ### Status Display
-The validation information appears in brackets in the status output:
+The validation information appears in the VALIDATION column of the status output:
 
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 0h 30m 15s ago) [validated: 45MB used]
-GPU 1: IN USE by alice for 0h 15m 30s (run, ...) [validated: 8452MB, 1 processes]
-GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3)
-GPU 3: IN USE by charlie for 1h 2m 15s (manual, ...) [validated: no actual usage detected]
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 30m                                                   45MB used
+1   in use    alice    15m 30s     run     llama-2-7b-chat  heartbeat 5s ago          8452MB, 1 processes
+2   in use    bob                                           WITHOUT RESERVATION        1024MB used by PID 12345 (python3)
+3   in use    charlie  1h 2m 15s   manual                   expires in 3h 15m 45s     no usage detected
 ```
 
 ### Validation States
 
 #### Normal Available GPU
 ```bash
-[validated: 45MB used]
+45MB used
 ```
 - Low memory usage indicates GPU is available
 - Only driver baseline memory consumption
@@ -64,7 +66,7 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, ...) [validated: no actual usage
 
 #### Confirmed Reservation Usage
 ```bash
-[validated: 8452MB, 1 processes]
+8452MB, 1 processes
 ```
 - High memory usage confirms GPU is actively used
 - Process count shows number of applications using GPU
@@ -72,7 +74,7 @@ GPU 3: IN USE by charlie for 1h 2m 15s (manual, ...) [validated: no actual usage
 
 #### No Usage Detected
 ```bash
-[validated: no actual usage detected]
+no usage detected
 ```
 - GPU is reserved but not actually being used
 - Could indicate:
@@ -103,15 +105,19 @@ With validation:
 
 ### User Accountability
 ```bash
-GPU 2: IN USE WITHOUT RESERVATION by user bob - 1024MB used by PID 12345 (python3)
-GPU 5: IN USE WITHOUT RESERVATION by user charlie - 8GB used by PID 23456 (jupyter)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+2   in use    bob                                           WITHOUT RESERVATION        1024MB used by PID 12345 (python3)
+5   in use    charlie                                       WITHOUT RESERVATION        8GB used by PID 23456 (jupyter)
 ```
 
 Clear identification of which users need to be contacted about policy compliance.
 
 ### Resource Optimization
 ```bash
-GPU 3: IN USE by alice for 8h 0m 0s (manual, expires in 0h 30m 0s) [validated: no actual usage detected]
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+3   in use    alice    8h 0m 0s    manual                   expires in 30m 0s         no usage detected
 ```
 
 Identifies stale reservations that could be released early to improve resource availability.
@@ -142,7 +148,9 @@ The error message indicates:
 
 ### Multiple Users Per GPU
 ```bash
-GPU 4: IN USE WITHOUT RESERVATION by users alice, bob and charlie - 2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
+GPU STATUS    USER            DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- --------------- ----------- ------- ---------------- -------------------------- ---------------------
+4   in use    alice,bob,charlie                                    WITHOUT RESERVATION        2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
 ```
 
 When multiple users have processes on the same GPU:
@@ -153,7 +161,9 @@ When multiple users have processes on the same GPU:
 ### Process Information Limitations
 Sometimes process details may be limited:
 ```bash
-by user unknown - 1024MB used by PID 12345 (unknown process)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+4   in use    unknown                                       WITHOUT RESERVATION        1024MB used by PID 12345 (unknown process)
 ```
 
 This can happen when:
@@ -163,7 +173,7 @@ This can happen when:
 
 ### High Memory Baseline
 ```bash
-[validated: 850MB used]
+850MB used
 ```
 
 Some systems may have higher baseline GPU memory usage due to:

@@ -239,7 +239,9 @@ canhazgpu admin --gpus 8 --force
 **Symptoms:**
 ```bash
 ❯ canhazgpu status
-GPU 1: IN USE by alice for 3h 0m 0s (run, last heartbeat 0h 15m 30s ago)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+1   in use    alice    3h 0m 0s    run                      heartbeat 15m 30s ago     
 ```
 
 **Analysis:**
@@ -264,7 +266,9 @@ redis-cli
 **Symptoms:**
 ```bash
 ❯ canhazgpu status
-GPU 0: AVAILABLE (last released 0h 5m 0s ago) [validated: 2048MB, 1 processes]
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available          free for 5m                                                    2048MB, 1 processes
 ```
 
 - GPU shows as available but has active processes
@@ -310,7 +314,9 @@ sudo chmod +x /usr/local/bin/canhazgpu
 **Symptoms:**
 ```bash
 ❯ canhazgpu status
-GPU 2: IN USE WITHOUT RESERVATION by user unknown - 1024MB used by PID 12345 (unknown process)
+GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+2   in use    unknown                                       WITHOUT RESERVATION        1024MB used by PID 12345 (unknown process)
 ```
 
 **Solutions:**
