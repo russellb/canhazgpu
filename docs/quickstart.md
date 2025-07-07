@@ -87,7 +87,11 @@ canhazgpu release
 Check the status regularly to see GPU usage:
 
 ```bash
+# Table output (human-readable)
 canhazgpu status
+
+# JSON output (for scripts and APIs)
+canhazgpu status --json
 ```
 
 Example output:
@@ -248,6 +252,21 @@ If you get permission errors, ensure:
 - nvidia-smi is available
 
 For more detailed troubleshooting, see the [Troubleshooting Guide](admin-troubleshooting.md).
+
+## Programmatic Integration
+
+For scripts and automation, use the JSON output format:
+
+```bash
+# Get available GPUs with jq
+canhazgpu status --json | jq '[.[] | select(.status == "AVAILABLE") | .gpu_id]'
+
+# Check for unreserved usage
+canhazgpu status --json | jq '[.[] | select(.status == "UNRESERVED")]'
+
+# Count total utilization
+canhazgpu status --json | jq 'length as $total | [.[] | select(.status != "AVAILABLE")] | length / $total * 100'
+```
 
 ## Next Steps
 

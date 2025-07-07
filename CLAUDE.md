@@ -60,6 +60,9 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 # Check status with automatic validation
 ./build/canhazgpu status
 
+# Get JSON output for programmatic use
+./build/canhazgpu status --json
+
 # Run command with GPU reservation (by count)
 ./build/canhazgpu run --gpus 1 -- python train.py
 

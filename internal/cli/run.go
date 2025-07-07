@@ -98,7 +98,7 @@ func init() {
 func validateRunCommand(args []string, dashIndex int) error {
 	// Case 1: No arguments at all
 	if len(args) == 0 {
-		return fmt.Errorf("no command specified. You must provide a command to run.\n\nUsage: canhazgpu run [flags] -- <command>\n\nExamples:\n  canhazgpu run --gpus 1 -- python train.py\n  canhazgpu run --gpu-ids 0,2 -- python -m torch.distributed.launch train.py\n\nNote: The '--' separator is required to separate canhazgpu flags from your command.")
+		return fmt.Errorf("no command specified. You must provide a command to run.\n\nUsage: canhazgpu run [flags] -- <command>\n\nExamples:\n  canhazgpu run --gpus 1 -- python train.py\n  canhazgpu run --gpu-ids 0,2 -- python -m torch.distributed.launch train.py\n\nNote: The '--' separator is required to separate canhazgpu flags from your command")
 	}
 
 	// Case 2: Check if "--" separator was used

@@ -5,14 +5,21 @@ The `status` command provides real-time visibility into GPU allocation and usage
 ## Basic Usage
 
 ```bash
+# Table output (default)
 canhazgpu status
+
+# JSON output for programmatic use
+canhazgpu status --json
+canhazgpu status -j
 ```
 
-No options are required - the command automatically validates all GPUs and shows comprehensive status information.
+No options are required for basic usage - the command automatically validates all GPUs and shows comprehensive status information in either table or JSON format.
 
-## Status Output Explained
+## Output Formats
 
-### Example Output
+### Table Output (Default)
+
+The default output format provides a human-readable table with aligned columns:
 ```bash
 ❯ canhazgpu status
 GPU  STATUS      USER     DURATION     TYPE    MODEL                    DETAILS                  VALIDATION
@@ -23,6 +30,82 @@ GPU  STATUS      USER     DURATION     TYPE    MODEL                    DETAILS 
 3    IN_USE      charlie  1h 2m 15s    MANUAL  -                        expires in 3h 15m 45s   no usage detected
 4    UNRESERVED  users alice, bob and charlie  -  -  meta-llama/Meta-Llama-3-8B-Instruct  2048MB used by PID 12345 (python3), PID 23456 (pytorch) and 2 more
 ```
+
+### JSON Output
+
+For programmatic integration, use the `--json` or `-j` flag to get structured JSON output:
+
+```bash
+❯ canhazgpu status --json
+[
+  {
+    "gpu_id": 0,
+    "status": "AVAILABLE",
+    "details": "free for 0h 30m 15s",
+    "validation": "45MB used",
+    "last_released": "2025-07-07T18:24:56.100193782Z"
+  },
+  {
+    "gpu_id": 1,
+    "status": "IN_USE",
+    "user": "alice",
+    "duration": "0h 15m 30s",
+    "type": "RUN",
+    "details": "heartbeat 0h 0m 5s ago",
+    "validation": "8452MB, 1 processes",
+    "model": {
+      "provider": "meta-llama",
+      "model": "meta-llama/Llama-2-7b-chat-hf"
+    },
+    "last_heartbeat": "2025-07-07T18:26:27.627148565Z"
+  },
+  {
+    "gpu_id": 2,
+    "status": "UNRESERVED",
+    "details": "WITHOUT RESERVATION",
+    "validation": "1024MB used",
+    "unreserved_users": ["bob"],
+    "process_info": "1024MB used by PID 12345 (python3), PID 67890 (jupyter)",
+    "model": {
+      "provider": "mistralai",
+      "model": "mistralai/Mistral-7B-Instruct-v0.1"
+    }
+  },
+  {
+    "gpu_id": 3,
+    "status": "IN_USE",
+    "user": "charlie",
+    "duration": "1h 2m 15s",
+    "type": "MANUAL",
+    "details": "expires in 3h 15m 45s",
+    "validation": "no usage detected",
+    "expiry_time": "2025-07-08T01:48:44Z"
+  }
+]
+```
+
+#### JSON Field Reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gpu_id` | integer | GPU identifier (0, 1, 2, etc.) |
+| `status` | string | Current status: `AVAILABLE`, `IN_USE`, `UNRESERVED`, `ERROR` |
+| `user` | string | Username (if GPU is reserved) |
+| `duration` | string | How long the GPU has been reserved |
+| `type` | string | Reservation type: `RUN`, `MANUAL` |
+| `details` | string | Context-specific information |
+| `validation` | string | Memory usage and process information |
+| `model` | object | Detected AI model information |
+| `model.provider` | string | Model provider (e.g., "meta-llama", "openai") |
+| `model.model` | string | Full model identifier |
+| `last_released` | string | ISO timestamp when GPU was last released |
+| `last_heartbeat` | string | ISO timestamp of last heartbeat |
+| `expiry_time` | string | ISO timestamp when manual reservation expires |
+| `unreserved_users` | array | List of users with unreserved processes |
+| `process_info` | string | Process details for unreserved usage |
+| `error` | string | Error message (for ERROR status) |
+
+## Status Information Explained
 
 ### Status Types
 
@@ -275,13 +358,78 @@ done
 ```
 
 ### Python Integration
+
+#### Using JSON Output (Recommended)
+```python
+import subprocess
+import json
+import time
+from datetime import datetime, timezone
+
+def get_gpu_status():
+    """Get GPU status as structured data using JSON output"""
+    result = subprocess.run(['canhazgpu', 'status', '--json'], 
+                          capture_output=True, text=True)
+    
+    if result.returncode != 0:
+        raise RuntimeError(f"Status check failed: {result.stderr}")
+    
+    return json.loads(result.stdout)
+
+def get_available_gpus():
+    """Get list of available GPU IDs"""
+    status = get_gpu_status()
+    return [gpu['gpu_id'] for gpu in status if gpu['status'] == 'AVAILABLE']
+
+def get_gpu_by_user(username):
+    """Get GPUs reserved by a specific user"""
+    status = get_gpu_status()
+    return [gpu for gpu in status if gpu.get('user') == username]
+
+def check_unreserved_usage():
+    """Check for unreserved GPU usage"""
+    status = get_gpu_status()
+    unreserved = [gpu for gpu in status if gpu['status'] == 'UNRESERVED']
+    
+    if unreserved:
+        print("WARNING: Unreserved GPU usage detected!")
+        for gpu in unreserved:
+            users = gpu.get('unreserved_users', [])
+            process_info = gpu.get('process_info', 'Unknown processes')
+            print(f"  GPU {gpu['gpu_id']}: Users {users} - {process_info}")
+    
+    return unreserved
+
+def get_gpu_utilization():
+    """Calculate GPU utilization statistics"""
+    status = get_gpu_status()
+    total = len(status)
+    available = len([gpu for gpu in status if gpu['status'] == 'AVAILABLE'])
+    in_use = len([gpu for gpu in status if gpu['status'] == 'IN_USE'])
+    unreserved = len([gpu for gpu in status if gpu['status'] == 'UNRESERVED'])
+    
+    return {
+        'total': total,
+        'available': available,
+        'in_use': in_use,
+        'unreserved': unreserved,
+        'utilization_percent': ((in_use + unreserved) / total) * 100
+    }
+
+# Usage examples
+print("Available GPUs:", get_available_gpus())
+print("Utilization:", get_gpu_utilization())
+check_unreserved_usage()
+```
+
+#### Legacy Text Parsing
 ```python
 import subprocess
 import re
 import time
 
-def get_gpu_status():
-    """Parse canhazgpu status output"""
+def get_gpu_status_legacy():
+    """Parse canhazgpu status text output (legacy method)"""
     result = subprocess.run(['canhazgpu', 'status'], 
                           capture_output=True, text=True)
     

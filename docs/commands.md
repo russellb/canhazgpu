@@ -116,8 +116,16 @@ canhazgpu admin --gpus 4 --force
 Show current GPU allocation status with automatic validation.
 
 ```bash
+# Table output (default)
 canhazgpu status
+
+# JSON output for programmatic use
+canhazgpu status --json
+canhazgpu status -j
 ```
+
+**Options:**
+- `-j, --json`: Output status as JSON array instead of table format
 
 **[→ Detailed Status Guide](usage-status.md)**
 
@@ -126,17 +134,23 @@ canhazgpu status
 # Standard status check
 canhazgpu status
 
+# JSON output for scripts and APIs
+canhazgpu status --json
+
 # Use a lower threshold to detect lighter GPU usage
 canhazgpu status --memory-threshold 512
 
 # Use a higher threshold to ignore small allocations
 canhazgpu status --memory-threshold 2048
+
+# Combine JSON with memory threshold
+canhazgpu status --json --memory-threshold 512
 ```
 
 !!! note "Global Memory Threshold"
     The `--memory-threshold` flag is a global option that affects GPU usage detection across all commands. It can be set in your [configuration file](configuration.md) or used with any command that performs GPU validation.
 
-**Example Output:**
+**Table Output Example:**
 ```bash
 GPU  STATUS      USER      DURATION     TYPE    MODEL                    DETAILS                   VALIDATION
 ---  ------      ----      --------     ----    -----                    -------                   ----------
@@ -144,6 +158,51 @@ GPU  STATUS      USER      DURATION     TYPE    MODEL                    DETAILS
 1    IN_USE      alice     0h 15m 30s   RUN     meta-llama/Llama-2-7b-chat-hf  heartbeat 0h 0m 5s ago    8452MB, 1 processes
 2    UNRESERVED  user bob  -            -       codellama/CodeLlama-7b-Instruct-hf        1024MB used by PID 12345 (python3), PID 67890 (jupyter)  -
 3    IN_USE      charlie   1h 2m 15s    MANUAL  -                        expires in 3h 15m 45s    no usage detected
+```
+
+**JSON Output Example:**
+```json
+[
+  {
+    "gpu_id": 0,
+    "status": "AVAILABLE",
+    "details": "free for 0h 30m 15s",
+    "validation": "45MB used"
+  },
+  {
+    "gpu_id": 1,
+    "status": "IN_USE",
+    "user": "alice",
+    "duration": "0h 15m 30s",
+    "type": "RUN",
+    "details": "heartbeat 0h 0m 5s ago",
+    "validation": "8452MB, 1 processes",
+    "model": {
+      "provider": "meta-llama",
+      "model": "meta-llama/Llama-2-7b-chat-hf"
+    }
+  },
+  {
+    "gpu_id": 2,
+    "status": "UNRESERVED",
+    "details": "WITHOUT RESERVATION",
+    "unreserved_users": ["bob"],
+    "process_info": "1024MB used by PID 12345 (python3), PID 67890 (jupyter)",
+    "model": {
+      "provider": "codellama",
+      "model": "codellama/CodeLlama-7b-Instruct-hf"
+    }
+  },
+  {
+    "gpu_id": 3,
+    "status": "IN_USE",
+    "user": "charlie",
+    "duration": "1h 2m 15s",
+    "type": "MANUAL",
+    "details": "expires in 3h 15m 45s",
+    "validation": "no usage detected"
+  }
+]
 ```
 
 **Status Types:**
