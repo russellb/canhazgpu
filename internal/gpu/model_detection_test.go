@@ -104,6 +104,27 @@ func TestDetectModelFromProcesses(t *testing.T) {
 			},
 			expected: &ModelInfo{Provider: "qwen", Model: "qwen/Qwen2-7B-Instruct"},
 		},
+		{
+			name: "lm_eval with vllm backend",
+			processes: []types.GPUProcessInfo{
+				{PID: 3567353, ProcessName: `/home/user/code/vllm2/.venv/bin/python /home/user/code/vllm2/.venv/bin/lm_eval --model vllm --model_args {"pretrained": "meta-llama/Meta-Llama-3-8B-Instruct", "gpu_memory_utilization": 0.8} --tasks gsm8k --batch_size auto`, User: "user1"},
+			},
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Meta-Llama-3-8B-Instruct"},
+		},
+		{
+			name: "lm_eval direct execution",
+			processes: []types.GPUProcessInfo{
+				{PID: 1234, ProcessName: `lm_eval --model vllm --model_args {"pretrained": "openai/whisper-large-v3"} --tasks hellaswag`, User: "user1"},
+			},
+			expected: &ModelInfo{Provider: "openai", Model: "openai/whisper-large-v3"},
+		},
+		{
+			name: "python -m lm_eval",
+			processes: []types.GPUProcessInfo{
+				{PID: 1234, ProcessName: `python -m lm_eval --model vllm --model_args {"pretrained": "qwen/Qwen2-7B-Instruct"} --tasks mmlu`, User: "user1"},
+			},
+			expected: &ModelInfo{Provider: "qwen", Model: "qwen/Qwen2-7B-Instruct"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -381,6 +402,72 @@ func TestParseGenericModelCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseGenericModelCommand(tt.command)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseLMEvalCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		command  string
+		expected *ModelInfo
+	}{
+		{
+			name:     "lm_eval with vllm backend full path",
+			command:  `/home/user/code/vllm2/.venv/bin/python /home/user/code/vllm2/.venv/bin/lm_eval --model vllm --model_args {"pretrained": "meta-llama/Meta-Llama-3-8B-Instruct", "gpu_memory_utilization": 0.8} --tasks gsm8k --batch_size auto`,
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Meta-Llama-3-8B-Instruct"},
+		},
+		{
+			name:     "lm_eval direct execution",
+			command:  `lm_eval --model vllm --model_args {"pretrained": "openai/whisper-large-v3"} --tasks hellaswag`,
+			expected: &ModelInfo{Provider: "openai", Model: "openai/whisper-large-v3"},
+		},
+		{
+			name:     "python -m lm_eval",
+			command:  `python -m lm_eval --model vllm --model_args {"pretrained": "qwen/Qwen2-7B-Instruct"} --tasks mmlu`,
+			expected: &ModelInfo{Provider: "qwen", Model: "qwen/Qwen2-7B-Instruct"},
+		},
+		{
+			name:     "lm_eval with invalid JSON (single quotes)",
+			command:  `lm_eval --model vllm --model_args {'pretrained': 'deepseek-ai/deepseek-coder-6.7b-instruct'} --tasks humaneval`,
+			expected: nil, // Should return nil since single quotes aren't valid JSON
+		},
+		{
+			name:     "lm_eval with complex JSON args",
+			command:  `python lm_eval --model vllm --model_args {"pretrained": "mistralai/Mistral-7B-Instruct-v0.1", "tensor_parallel_size": 2, "dtype": "float16"} --tasks gsm8k,hellaswag`,
+			expected: &ModelInfo{Provider: "mistralai", Model: "mistralai/Mistral-7B-Instruct-v0.1"},
+		},
+		{
+			name:     "lm_eval without pretrained field",
+			command:  `lm_eval --model vllm --model_args {"model": "meta-llama/Llama-2-7b"} --tasks mmlu`,
+			expected: nil,
+		},
+		{
+			name:     "lm_eval without model_args",
+			command:  `lm_eval --model hf --tasks gsm8k`,
+			expected: nil,
+		},
+		{
+			name:     "lm_eval with nested braces",
+			command:  `lm_eval --model vllm --model_args {"pretrained": "meta-llama/Llama-2-7b", "tokenizer": {"type": "llama"}} --tasks gsm8k`,
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Llama-2-7b"},
+		},
+		{
+			name:     "lm_eval with escaped quotes in model name",
+			command:  `lm_eval --model vllm --model_args {"pretrained": "model-with-\"quotes\"", "other": "value"} --tasks test`,
+			expected: &ModelInfo{Provider: "", Model: `model-with-"quotes"`},
+		},
+		{
+			name:     "lm_eval with malformed JSON",
+			command:  `lm_eval --model vllm --model_args {"pretrained": "incomplete-json --tasks test`,
+			expected: nil, // Should return nil due to malformed JSON
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseLMEvalCommand(tt.command)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

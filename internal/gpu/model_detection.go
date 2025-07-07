@@ -2,6 +2,7 @@ package gpu
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -39,6 +40,25 @@ func detectModelFromProcessName(processName string) *ModelInfo {
 	// 3. /path/to/vllm serve model_name
 	// 4. VLLM_USE_V1=1 canhazgpu run -- vllm serve model_name
 	parts := strings.Fields(processName)
+
+	// Check for lm_eval commands FIRST (before generic model detection)
+	// Handle cases like:
+	// - lm_eval --model ...
+	// - python lm_eval --model ...
+	// - /path/to/python /path/to/lm_eval --model ...
+	// - python -m lm_eval --model ...
+	lmEvalFound := false
+	for _, part := range parts {
+		// Check if this part is lm_eval (handles direct execution and python script)
+		if strings.HasSuffix(part, "lm_eval") || part == "lm_eval" {
+			lmEvalFound = true
+			break
+		}
+	}
+
+	if lmEvalFound {
+		return parseLMEvalCommand(processName)
+	}
 
 	// Check if this is a vLLM command by looking for "vllm" in the command
 	vllmFound := false
@@ -216,6 +236,96 @@ func extractProviderFromModel(model string) string {
 		return model[:slashIndex]
 	}
 	return ""
+}
+
+// parseLMEvalCommand extracts model information from lm_eval commands
+// Example:
+// lm_eval --model vllm --model_args {"pretrained": "meta-llama/Meta-Llama-3-8B-Instruct", "gpu_memory_utilization": 0.8} --tasks gsm8k
+func parseLMEvalCommand(command string) *ModelInfo {
+	// Look for --model_args parameter
+	modelArgsIndex := strings.Index(command, "--model_args")
+	if modelArgsIndex == -1 {
+		return nil
+	}
+
+	// Extract the JSON argument after --model_args
+	remaining := command[modelArgsIndex+len("--model_args"):]
+	remaining = strings.TrimSpace(remaining)
+
+	// Find the start of the JSON object
+	jsonStart := strings.Index(remaining, "{")
+	if jsonStart == -1 {
+		return nil
+	}
+
+	// Find the matching closing brace
+	jsonEnd := -1
+	braceCount := 0
+	inQuotes := false
+	escapeNext := false
+
+	for i := jsonStart; i < len(remaining); i++ {
+		if escapeNext {
+			escapeNext = false
+			continue
+		}
+
+		switch remaining[i] {
+		case '\\':
+			escapeNext = true
+		case '"':
+			inQuotes = !inQuotes
+		case '{':
+			if !inQuotes {
+				braceCount++
+			}
+		case '}':
+			if !inQuotes {
+				braceCount--
+				if braceCount == 0 {
+					jsonEnd = i + 1
+					break
+				}
+			}
+		}
+	}
+
+	if jsonEnd == -1 {
+		return nil
+	}
+
+	jsonStr := remaining[jsonStart:jsonEnd]
+
+	// Parse the JSON to extract model arguments
+	var modelArgs map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &modelArgs); err != nil {
+		// If JSON parsing fails, return nil
+		return nil
+	}
+
+	// Extract the "pretrained" field
+	pretrained, exists := modelArgs["pretrained"]
+	if !exists {
+		return nil
+	}
+
+	// Convert to string
+	model, ok := pretrained.(string)
+	if !ok {
+		return nil
+	}
+
+	if model == "" {
+		return nil
+	}
+
+	// Extract provider from model name
+	provider := extractProviderFromModel(model)
+
+	return &ModelInfo{
+		Provider: provider,
+		Model:    model,
+	}
 }
 
 // parseGenericModelCommand extracts model information from any command with --model arguments
