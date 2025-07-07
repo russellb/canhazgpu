@@ -63,15 +63,19 @@ Timeout formats supported:
 - 1d (1 day)
 - 0.5h (30 minutes with decimal)
 
-The '--' separator is important - it tells canhazgpu where its options end
+The '--' separator is required - it tells canhazgpu where its options end
 and your command begins.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		gpuCount, _ := cmd.Flags().GetInt("gpus")
 		gpuIDs, _ := cmd.Flags().GetIntSlice("gpu-ids")
 		timeoutStr, _ := cmd.Flags().GetString("timeout")
 
-		if len(args) == 0 {
-			return fmt.Errorf("no command specified. Use: canhazgpu run --gpus N -- <command>")
+		// Check if "--" separator was used
+		dashIndex := cmd.ArgsLenAtDash()
+
+		// Validate command arguments (requires "--" separator)
+		if err := validateRunCommand(args, dashIndex); err != nil {
+			return err
 		}
 
 		return runRun(cmd.Context(), gpuCount, gpuIDs, timeoutStr, args)
@@ -84,10 +88,27 @@ func init() {
 	runCmd.Flags().IntSliceP("gpu-ids", "G", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
 	runCmd.Flags().StringP("timeout", "t", "", "Timeout duration for graceful command termination (e.g., 30m, 2h, 1d). Disabled by default.")
 
-	// Allow passing through arbitrary arguments after --
+	// Require explicit -- separator: only parse flags before --, everything after is treated as opaque args
 	runCmd.Flags().SetInterspersed(false)
 
 	rootCmd.AddCommand(runCmd)
+}
+
+// validateRunCommand validates that a command was provided with required "--" separator
+func validateRunCommand(args []string, dashIndex int) error {
+	// Case 1: No arguments at all
+	if len(args) == 0 {
+		return fmt.Errorf("no command specified. You must provide a command to run.\n\nUsage: canhazgpu run [flags] -- <command>\n\nExamples:\n  canhazgpu run --gpus 1 -- python train.py\n  canhazgpu run --gpu-ids 0,2 -- python -m torch.distributed.launch train.py\n\nNote: The '--' separator is required to separate canhazgpu flags from your command.")
+	}
+
+	// Case 2: Check if "--" separator was used
+	// dashIndex == -1 means no "--" was found
+	if dashIndex == -1 {
+		return fmt.Errorf("missing '--' separator. You must use '--' to separate canhazgpu flags from your command.\n\nYou provided: canhazgpu run [flags] %s\nCorrect usage: canhazgpu run [flags] -- %s\n\nExamples:\n  canhazgpu run --gpus 1 -- python train.py\n  canhazgpu run --gpu-ids 0,1 -- %s",
+			strings.Join(args, " "), strings.Join(args, " "), args[0])
+	}
+
+	return nil
 }
 
 // killProcessGroup kills the entire process group (parent and all children)
@@ -113,6 +134,8 @@ func killProcessGroup(cmd *exec.Cmd) error {
 }
 
 func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, command []string) error {
+	// Cobra has already processed the "--" separator and given us just the command args
+
 	// If neither is specified, default to 1 GPU
 	if gpuCount == 0 && len(gpuIDs) == 0 {
 		gpuCount = 1

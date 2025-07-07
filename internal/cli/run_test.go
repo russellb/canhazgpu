@@ -348,3 +348,150 @@ func TestRunCommand_HeartbeatCleanup_Integration(t *testing.T) {
 
 	t.Log("GPU cleanup verified - this simulates the fixed behavior")
 }
+
+func TestValidateRunCommand(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		dashIndex   int // -1 means no "--" found, >= 0 means "--" at that position
+		expectError bool
+		errorMatch  string // Substring that should be in the error message
+	}{
+		{
+			name:        "No command specified",
+			args:        []string{},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "no command specified",
+		},
+		{
+			name:        "Only -- specified (empty command after --)",
+			args:        []string{}, // Cobra gives us empty args after processing "--"
+			dashIndex:   0,          // -- was found at position 0
+			expectError: true,
+			errorMatch:  "no command specified", // Empty args, even with --
+		},
+		{
+			name:        "Valid command with --",
+			args:        []string{"python", "train.py"},
+			dashIndex:   0, // -- was found
+			expectError: false,
+		},
+		{
+			name:        "Command without -- (python)",
+			args:        []string{"python", "train.py"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command without -- (python3)",
+			args:        []string{"python3", "-m", "torch.distributed.launch", "train.py"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command without -- (script file)",
+			args:        []string{"./train.py"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command without -- (absolute path)",
+			args:        []string{"/usr/bin/python", "script.py"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command without -- (shell script)",
+			args:        []string{"train.sh", "--epochs", "10"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command without -- (node)",
+			args:        []string{"node", "server.js"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command without -- (docker)",
+			args:        []string{"docker", "run", "my-image"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command without -- (python module)",
+			args:        []string{"python", "-m", "torch.distributed.launch"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Valid complex command with --",
+			args:        []string{"python", "-m", "torch.distributed.launch", "--nproc_per_node=2", "train.py", "--epochs", "100"},
+			dashIndex:   0, // -- was found
+			expectError: false,
+		},
+		{
+			name:        "Valid nvidia-smi with --",
+			args:        []string{"nvidia-smi"},
+			dashIndex:   0, // -- was found
+			expectError: false,
+		},
+		{
+			name:        "Command without -- (nvidia-smi)",
+			args:        []string{"nvidia-smi"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command without -- (unknown command)",
+			args:        []string{"unknowncommand123"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Valid echo command with --",
+			args:        []string{"echo", "hello"},
+			dashIndex:   0, // -- was found
+			expectError: false,
+		},
+		{
+			name:        "Flag without -- (should error)",
+			args:        []string{"--help"},
+			dashIndex:   -1, // No -- found
+			expectError: true,
+			errorMatch:  "missing '--' separator",
+		},
+		{
+			name:        "Command with arguments containing dashes",
+			args:        []string{"python", "script.py", "--model", "gpt-4", "--temperature", "0.7"},
+			dashIndex:   0, // -- was found
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRunCommand(tt.args, tt.dashIndex)
+
+			if tt.expectError {
+				assert.Error(t, err, "Expected an error for args: %v, dashIndex: %d", tt.args, tt.dashIndex)
+				if tt.errorMatch != "" {
+					assert.Contains(t, err.Error(), tt.errorMatch, "Error message should contain expected substring")
+				}
+			} else {
+				assert.NoError(t, err, "Expected no error for args: %v, dashIndex: %d", tt.args, tt.dashIndex)
+			}
+		})
+	}
+}
