@@ -3,9 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
-	"time"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
