@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"strconv"
+	"strings"
 
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
@@ -110,6 +112,17 @@ func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr str
 
 	fmt.Printf("Reserved %d GPU(s): %v for %s\n",
 		len(allocatedGPUs), allocatedGPUs, utils.FormatDuration(duration))
+
+	// Build list for CUDA_VISIBLE_DEVICES
+	ids := make([]string, len(allocatedGPUs))
+	for i, id := range allocatedGPUs {
+		ids[i] = strconv.Itoa(id)
+	}
+
+	fmt.Printf(
+		"\nRun the following command to run only on these GPUs:\nexport CUDA_VISIBLE_DEVICES=%s\n",
+		strings.Join(ids, ","),
+	)
 
 	return nil
 }
