@@ -34,7 +34,7 @@ func TestDisplayGPUStatusTable(t *testing.T) {
 			GPUID:           2,
 			Status:          "UNRESERVED",
 			UnreservedUsers: []string{"baduser"},
-			ProcessInfo:     "1024MB used by PID 1234 (python train.py)",
+			ProcessInfo:     "1024MB used by 1 process",
 		},
 	}
 

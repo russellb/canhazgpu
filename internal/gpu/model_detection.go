@@ -17,14 +17,33 @@ type ModelInfo struct {
 	Model    string `json:"model,omitempty"`    // e.g., "openai/whisper-large-v3"
 }
 
+// truncateModelName truncates model names longer than 50 characters
+func truncateModelName(model string) string {
+	if len(model) > 50 {
+		return model[:50] + "..."
+	}
+	return model
+}
+
 // DetectModelFromProcesses analyzes GPU processes to detect running models
 func DetectModelFromProcesses(processes []types.GPUProcessInfo) *ModelInfo {
 	for _, proc := range processes {
+		// First try the process name from nvidia-smi
 		if modelInfo := detectModelFromProcessName(proc.ProcessName); modelInfo != nil {
 			return modelInfo
 		}
 
-		// If no model found in current process, check parent process
+		// If process name doesn't contain model info, try to get full command line
+		// This is important for Python processes where nvidia-smi only shows "python3"
+		// but the full command line contains the actual script and arguments
+		if fullCmdline, err := getProcessCommandLine(proc.PID); err == nil && fullCmdline != "" {
+			if modelInfo := detectModelFromProcessName(fullCmdline); modelInfo != nil {
+				return modelInfo
+			}
+		}
+
+		// If still no model found, check parent process
+		// This handles cases where the GPU process is spawned by a parent with model info
 		if modelInfo := detectModelFromParentProcess(proc.PID); modelInfo != nil {
 			return modelInfo
 		}
@@ -221,7 +240,7 @@ func parseVLLMCommand(command string) *ModelInfo {
 
 	return &ModelInfo{
 		Provider: provider,
-		Model:    model,
+		Model:    truncateModelName(model),
 	}
 }
 
@@ -239,8 +258,9 @@ func extractProviderFromModel(model string) string {
 }
 
 // parseLMEvalCommand extracts model information from lm_eval commands
-// Example:
-// lm_eval --model vllm --model_args {"pretrained": "meta-llama/Meta-Llama-3-8B-Instruct", "gpu_memory_utilization": 0.8} --tasks gsm8k
+// Examples:
+// - lm_eval --model vllm --model_args {"pretrained": "meta-llama/Meta-Llama-3-8B-Instruct", "gpu_memory_utilization": 0.8} --tasks gsm8k
+// - lm_eval --model vllm --model_args pretrained=/path/to/Meta-Llama-3.1-8B-Instruct-custom,dtype=auto,... --tasks ruler
 func parseLMEvalCommand(command string) *ModelInfo {
 	// Look for --model_args parameter
 	modelArgsIndex := strings.Index(command, "--model_args")
@@ -248,23 +268,28 @@ func parseLMEvalCommand(command string) *ModelInfo {
 		return nil
 	}
 
-	// Extract the JSON argument after --model_args
+	// Extract the argument after --model_args
 	remaining := command[modelArgsIndex+len("--model_args"):]
 	remaining = strings.TrimSpace(remaining)
 
-	// Find the start of the JSON object
-	jsonStart := strings.Index(remaining, "{")
-	if jsonStart == -1 {
-		return nil
+	// Check if it starts with JSON
+	if strings.HasPrefix(remaining, "{") {
+		return parseLMEvalJSONArgs(remaining)
 	}
 
+	// Otherwise, parse as key=value format
+	return parseLMEvalKeyValueArgs(remaining)
+}
+
+// parseLMEvalJSONArgs handles JSON-formatted model_args
+func parseLMEvalJSONArgs(remaining string) *ModelInfo {
 	// Find the matching closing brace
 	jsonEnd := -1
 	braceCount := 0
 	inQuotes := false
 	escapeNext := false
 
-	for i := jsonStart; i < len(remaining); i++ {
+	for i := 0; i < len(remaining); i++ {
 		if escapeNext {
 			escapeNext = false
 			continue
@@ -294,12 +319,11 @@ func parseLMEvalCommand(command string) *ModelInfo {
 		return nil
 	}
 
-	jsonStr := remaining[jsonStart:jsonEnd]
+	jsonStr := remaining[:jsonEnd]
 
 	// Parse the JSON to extract model arguments
 	var modelArgs map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &modelArgs); err != nil {
-		// If JSON parsing fails, return nil
 		return nil
 	}
 
@@ -324,8 +348,85 @@ func parseLMEvalCommand(command string) *ModelInfo {
 
 	return &ModelInfo{
 		Provider: provider,
-		Model:    model,
+		Model:    truncateModelName(model),
 	}
+}
+
+// parseLMEvalKeyValueArgs handles key=value formatted model_args
+func parseLMEvalKeyValueArgs(remaining string) *ModelInfo {
+	// Find the end of model_args (next flag starting with -- or end of string)
+	argsEnd := strings.Index(remaining, " --")
+	args := remaining
+	if argsEnd != -1 {
+		args = remaining[:argsEnd]
+	}
+
+	// Split by commas to get individual key=value pairs
+	pairs := strings.Split(args, ",")
+
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if strings.HasPrefix(pair, "pretrained=") {
+			modelPath := strings.TrimPrefix(pair, "pretrained=")
+
+			// If it's an absolute path, extract the model name from the filename
+			if strings.HasPrefix(modelPath, "/") {
+				modelPath = extractModelFromPath(modelPath)
+			}
+
+			if modelPath == "" {
+				return nil
+			}
+
+			// Extract provider from model name
+			provider := extractProviderFromModel(modelPath)
+
+			return &ModelInfo{
+				Provider: provider,
+				Model:    truncateModelName(modelPath),
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractModelFromPath extracts model information from file paths
+// Example: /path/to/Meta-Llama-3.1-8B-Instruct-custom -> meta-llama/Meta-Llama-3.1-8B-Instruct-custom
+func extractModelFromPath(path string) string {
+	// Get the last component of the path
+	parts := strings.Split(path, "/")
+	if len(parts) == 0 {
+		return ""
+	}
+
+	filename := parts[len(parts)-1]
+	filenameLower := strings.ToLower(filename)
+
+	// Known model patterns to match at the beginning of filenames (case-insensitive)
+	knownPatterns := []struct {
+		prefix   string
+		provider string
+	}{
+		{"meta-llama", "meta-llama"},
+		{"llama", "meta-llama"},
+		{"qwen", "qwen"},
+		{"deepseek", "deepseek-ai"},
+		{"mistral", "mistralai"},
+		{"mixtral", "mistralai"},
+		{"gpt", "openai"},
+		{"whisper", "openai"},
+	}
+
+	for _, pattern := range knownPatterns {
+		if strings.HasPrefix(filenameLower, pattern.prefix) {
+			// Return in the format provider/filename (keeping the whole filename)
+			return pattern.provider + "/" + filename
+		}
+	}
+
+	// If no known pattern matches, return empty
+	return ""
 }
 
 // parseGenericModelCommand extracts model information from any command with --model arguments
@@ -361,6 +462,6 @@ func parseGenericModelCommand(command string) *ModelInfo {
 
 	return &ModelInfo{
 		Provider: provider,
-		Model:    model,
+		Model:    truncateModelName(model),
 	}
 }

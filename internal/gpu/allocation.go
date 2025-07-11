@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/russellb/canhazgpu/internal/redis_client"
@@ -208,17 +207,12 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 			}
 			status.UnreservedUsers = users
 
-			// Build process info string
-			var processes []string
-			for _, proc := range usage.Processes {
-				processes = append(processes, fmt.Sprintf("PID %d (%s)", proc.PID, proc.ProcessName))
-			}
-			status.ProcessInfo = fmt.Sprintf("%dMB used by %s", usage.MemoryMB,
-				strings.Join(processes, ", "))
-
-			if len(processes) > 3 {
-				status.ProcessInfo = fmt.Sprintf("%dMB used by %s and %d more",
-					usage.MemoryMB, strings.Join(processes[:3], ", "), len(processes)-3)
+			// Show memory usage without process details
+			processCount := len(usage.Processes)
+			if processCount == 1 {
+				status.ProcessInfo = fmt.Sprintf("%dMB used by 1 process", usage.MemoryMB)
+			} else {
+				status.ProcessInfo = fmt.Sprintf("%dMB used by %d processes", usage.MemoryMB, processCount)
 			}
 		} else {
 			status.Status = "AVAILABLE"

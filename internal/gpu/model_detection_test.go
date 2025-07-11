@@ -216,6 +216,11 @@ func TestParseVLLMCommand(t *testing.T) {
 			command:  "python -m vllm.entrypoints.openai.api_server --host 0.0.0.0 --model=qwen/Qwen2-7B-Instruct --port 8080",
 			expected: &ModelInfo{Provider: "qwen", Model: "qwen/Qwen2-7B-Instruct"},
 		},
+		{
+			name:     "vllm with very long model name - should truncate",
+			command:  "vllm serve --model meta-llama/Meta-Llama-3.1-8B-Instruct-some_very_long_string_that_exceeds_the_fifty_character_limit_by_quite_a_bit --port 8000",
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Meta-Llama-3.1-8B-Instruct-some_very_lo..."},
+		},
 	}
 
 	for _, tt := range tests {
@@ -463,11 +468,122 @@ func TestParseLMEvalCommand(t *testing.T) {
 			command:  `lm_eval --model vllm --model_args {"pretrained": "incomplete-json --tasks test`,
 			expected: nil, // Should return nil due to malformed JSON
 		},
+		{
+			name:     "lm_eval with key=value format",
+			command:  `lm_eval --model vllm --model_args pretrained=meta-llama/Meta-Llama-3.1-8B-Instruct,dtype=auto,add_bos_token=False --tasks ruler`,
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Meta-Llama-3.1-8B-Instruct"},
+		},
+		{
+			name:     "lm_eval with absolute path in key=value format",
+			command:  `/home/user/venv/bin/python /home/user/venv/bin/lm_eval --model vllm --model_args pretrained=/models/Meta-Llama-3.1-8B-Instruct-custom,dtype=auto,max_model_len=131072 --tasks ruler`,
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Meta-Llama-3.1-8B-Instruct-custom"},
+		},
+		{
+			name:     "lm_eval with various llama model paths",
+			command:  `lm_eval --model vllm --model_args pretrained=/path/to/Llama-2-7B-chat,gpu_memory_utilization=0.9 --tasks gsm8k`,
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Llama-2-7B-chat"},
+		},
+		{
+			name:     "lm_eval with qwen model path",
+			command:  `lm_eval --model vllm --model_args pretrained=/models/Qwen2-7B-Instruct-fp16,trust_remote_code=True --tasks mmlu`,
+			expected: &ModelInfo{Provider: "qwen", Model: "qwen/Qwen2-7B-Instruct-fp16"},
+		},
+		{
+			name:     "lm_eval with mistral model path",
+			command:  `lm_eval --model vllm --model_args pretrained=/workspace/Mistral-7B-v0.1-quantized,kv_cache_dtype=fp8 --tasks hellaswag`,
+			expected: &ModelInfo{Provider: "mistralai", Model: "mistralai/Mistral-7B-v0.1-quantized"},
+		},
+		{
+			name:     "lm_eval with deepseek model path",
+			command:  `lm_eval --model vllm --model_args pretrained=/data/deepseek-coder-33b-instruct,tensor_parallel_size=2 --tasks humaneval`,
+			expected: &ModelInfo{Provider: "deepseek-ai", Model: "deepseek-ai/deepseek-coder-33b-instruct"},
+		},
+		{
+			name:     "lm_eval with whisper model path",
+			command:  `lm_eval --model vllm --model_args pretrained=/models/whisper-large-v3-turbo,dtype=float16 --tasks asr`,
+			expected: &ModelInfo{Provider: "openai", Model: "openai/whisper-large-v3-turbo"},
+		},
+		{
+			name:     "lm_eval with gpt model path",
+			command:  `lm_eval --model vllm --model_args pretrained=/checkpoints/gpt-j-6B-finetuned,max_model_len=2048 --tasks lambada`,
+			expected: &ModelInfo{Provider: "openai", Model: "openai/gpt-j-6B-finetuned"},
+		},
+		{
+			name:     "lm_eval with mixtral model path",
+			command:  `lm_eval --model vllm --model_args pretrained=/models/mixtral-8x7b-instruct-v0.1,enable_chunked_prefill=True --tasks gsm8k`,
+			expected: &ModelInfo{Provider: "mistralai", Model: "mistralai/mixtral-8x7b-instruct-v0.1"},
+		},
+		{
+			name:     "lm_eval with unrecognized model path",
+			command:  `lm_eval --model vllm --model_args pretrained=/models/unknown-model-7b,dtype=auto --tasks test`,
+			expected: nil, // Should return nil for unrecognized model patterns
+		},
+		{
+			name:     "lm_eval with case insensitive match",
+			command:  `lm_eval --model vllm --model_args pretrained=/models/LLAMA-3-8B-INSTRUCT,dtype=auto --tasks test`,
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/LLAMA-3-8B-INSTRUCT"},
+		},
+		{
+			name:     "lm_eval with exact user command format",
+			command:  `/home/user//venv_lmeval/bin/python3 /home/user/venv_lmeval/bin/lm_eval --model vllm --model_args pretrained=/network/user/Meta-Llama-3.1-8B-Instruct`,
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Meta-Llama-3.1-8B-Instruct"},
+		},
+		{
+			name:     "lm_eval with key=value but no pretrained",
+			command:  `lm_eval --model vllm --model_args model_name=test,dtype=auto --tasks test`,
+			expected: nil,
+		},
+		{
+			name:     "lm_eval with very long model name - should truncate",
+			command:  `lm_eval --model vllm --model_args pretrained=/models/Meta-Llama-3.1-8B-Instruct-some_very_long_string_that_exceeds_the_fifty_character_limit_by_quite_a_bit,dtype=auto --tasks test`,
+			expected: &ModelInfo{Provider: "meta-llama", Model: "meta-llama/Meta-Llama-3.1-8B-Instruct-some_very_lo..."},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := parseLMEvalCommand(tt.command)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestTruncateModelName(t *testing.T) {
+	tests := []struct {
+		name     string
+		model    string
+		expected string
+	}{
+		{
+			name:     "Short model name",
+			model:    "openai/whisper-large-v3",
+			expected: "openai/whisper-large-v3",
+		},
+		{
+			name:     "Exactly 50 characters",
+			model:    "meta-llama/Meta-Llama-3.1-8B-Instruct-very-long",
+			expected: "meta-llama/Meta-Llama-3.1-8B-Instruct-very-long",
+		},
+		{
+			name:     "Over 50 characters - should truncate",
+			model:    "meta-llama/Meta-Llama-3.1-8B-Instruct-some_very_long_string_that_exceeds_the_fifty_character_limit_by_quite_a_bit",
+			expected: "meta-llama/Meta-Llama-3.1-8B-Instruct-some_very_lo...",
+		},
+		{
+			name:     "Very long model name",
+			model:    "mistralai/mixtral-8x7b-instruct-v0.1-some-very-long-suffix-that-exceeds-the-limit",
+			expected: "mistralai/mixtral-8x7b-instruct-v0.1-some-very-lon...",
+		},
+		{
+			name:     "Empty model name",
+			model:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := truncateModelName(tt.model)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
