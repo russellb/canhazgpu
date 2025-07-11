@@ -46,6 +46,22 @@ func (c *Client) GetGPUCount(ctx context.Context) (int, error) {
 	return val, err
 }
 
+func (c *Client) SetAvailableProvider(ctx context.Context, provider string) error {
+	return c.rdb.Set(ctx, types.RedisKeyProvider, provider, 0).Err()
+}
+
+func (c *Client) GetAvailableProvider(ctx context.Context) (string, error) {
+	val, err := c.rdb.Get(ctx, types.RedisKeyProvider).Result()
+	if err == redis.Nil {
+		return "", fmt.Errorf("GPU provider not initialized - run 'canhazgpu admin --gpus <count>' first")
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return val, nil
+}
+
 func (c *Client) GetGPUState(ctx context.Context, gpuID int) (*types.GPUState, error) {
 	key := fmt.Sprintf("%sgpu:%d", types.RedisKeyPrefix, gpuID)
 	val, err := c.rdb.Get(ctx, key).Result()

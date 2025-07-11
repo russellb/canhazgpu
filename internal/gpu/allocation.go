@@ -22,6 +22,15 @@ func NewAllocationEngine(client *redis_client.Client, config *types.Config) *All
 	}
 }
 
+func (ae *AllocationEngine) detectGPUUsage(ctx context.Context) (map[int]*types.GPUUsage, error) {
+	providerName, err := ae.client.GetAvailableProvider(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cached provider information: %v", err)
+	}
+	pm := NewProviderManagerFromNames([]string{providerName})
+	return pm.DetectAllGPUUsageWithoutChecks(ctx)
+}
+
 // AllocateGPUs allocates GPUs using LRU strategy with race condition protection
 func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.AllocationRequest) ([]int, error) {
 	// Validate the allocation request first
@@ -29,8 +38,8 @@ func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.All
 		return nil, err
 	}
 
-	// Validate GPU availability using nvidia-smi
-	usage, err := DetectGPUUsage(ctx)
+	// Validate GPU availability using cached provider information
+	usage, err := ae.detectGPUUsage(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate GPU usage: %v", err)
 	}
@@ -171,8 +180,8 @@ func (ae *AllocationEngine) GetGPUStatus(ctx context.Context) ([]GPUStatusInfo, 
 		return nil, err
 	}
 
-	// Get actual GPU usage
-	usage, err := DetectGPUUsage(ctx)
+	// Get actual GPU usage using cached provider information
+	usage, err := ae.detectGPUUsage(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate GPU usage: %v", err)
 	}
