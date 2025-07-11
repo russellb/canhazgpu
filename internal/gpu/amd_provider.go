@@ -106,12 +106,12 @@ func (a *AMDProvider) queryGPUMemory(ctx context.Context) (map[int]int, error) {
 	}
 
 	memory := make(map[int]int)
-	
+
 	// Parse GPU memory usage from JSON output
 	for _, gpu := range metricData {
 		if gpuIDVal, ok := gpu["gpu"].(float64); ok {
 			gpuID := int(gpuIDVal)
-			
+
 			if memUsage, ok := gpu["mem_usage"].(map[string]interface{}); ok {
 				if usedVram, ok := memUsage["used_vram"].(map[string]interface{}); ok {
 					if memValue, ok := usedVram["value"].(float64); ok {
@@ -148,12 +148,12 @@ func (a *AMDProvider) queryGPUProcesses(ctx context.Context) (map[int][]types.GP
 	}
 
 	processes := make(map[int][]types.GPUProcessInfo)
-	
+
 	// Parse process information from JSON output
 	for _, gpu := range processData {
 		if gpuIDVal, ok := gpu["gpu"].(float64); ok {
 			gpuID := int(gpuIDVal)
-			
+
 			if procList, ok := gpu["process_list"].([]interface{}); ok {
 				for _, procEntry := range procList {
 					if proc, ok := procEntry.(map[string]interface{}); ok {
@@ -163,7 +163,7 @@ func (a *AMDProvider) queryGPUProcesses(ctx context.Context) (map[int][]types.GP
 								continue
 							}
 						}
-						
+
 						// Extract the actual process_info object
 						if procInfo, ok := proc["process_info"].(map[string]interface{}); ok {
 							processInfo := a.parseProcessInfo(procInfo)
@@ -183,19 +183,19 @@ func (a *AMDProvider) queryGPUProcesses(ctx context.Context) (map[int][]types.GP
 // parseProcessInfo parses process information from amd-smi JSON output
 func (a *AMDProvider) parseProcessInfo(proc map[string]interface{}) *types.GPUProcessInfo {
 	processInfo := &types.GPUProcessInfo{}
-	
+
 	// Extract PID
 	if pidVal, ok := proc["pid"].(float64); ok {
 		processInfo.PID = int(pidVal)
 	} else {
 		return nil
 	}
-	
+
 	// Extract process name
 	if nameVal, ok := proc["name"].(string); ok {
 		processInfo.ProcessName = nameVal
 	}
-	
+
 	// Extract memory usage
 	if memUsage, ok := proc["memory_usage"].(map[string]interface{}); ok {
 		if vramMem, ok := memUsage["vram_mem"].(map[string]interface{}); ok {
@@ -217,13 +217,13 @@ func (a *AMDProvider) parseProcessInfo(proc map[string]interface{}) *types.GPUPr
 			}
 		}
 	}
-	
+
 	// Get process owner
 	user, err := getProcessOwner(processInfo.PID)
 	if err != nil {
 		user = "unknown"
 	}
 	processInfo.User = user
-	
+
 	return processInfo
-} 
+}
