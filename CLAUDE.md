@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This is `canhazgpu`, a GPU reservation tool for single host shared development systems. It's a Go CLI application that uses Redis as a backend to coordinate GPU allocations across multiple users and processes, with comprehensive validation to detect and prevent unreserved GPU usage.
+This is `canhazgpu`, a GPU reservation tool for single host shared development systems. It's a Go CLI application that uses Redis as a backend to coordinate GPU allocations across multiple users and processes, with comprehensive validation to detect and prevent unreserved GPU usage. The system supports both NVIDIA and AMD GPUs through a unified provider abstraction.
 
 ## Architecture
 
 The tool is a Go application structured as a CLI with internal packages that implements seven main commands:
-- `admin`: Initialize and configure the GPU pool with optional --force flag
-- `status`: Show current GPU allocation status with automatic nvidia-smi validation
+- `admin`: Initialize and configure the GPU pool with optional --force flag and --provider selection
+- `status`: Show current GPU allocation status with automatic provider-specific validation
 - `run`: Reserve GPU(s) and execute a command with `CUDA_VISIBLE_DEVICES` set
 - `reserve`: Manually reserve GPU(s) for a specified duration 
 - `release`: Release all manually reserved GPUs for the current user
@@ -20,10 +20,11 @@ The tool is a Go application structured as a CLI with internal packages that imp
 ### Core Components
 
 - **Redis Integration**: Uses Redis (localhost:6379) for persistent state management with keys under `canhazgpu:` prefix
+- **GPU Provider System**: Unified abstraction supporting both NVIDIA (nvidia-smi) and AMD (amd-smi) GPUs
 - **GPU Allocation Logic**: Tracks GPU state with JSON objects containing user, timestamps, heartbeat data, and reservation types
 - **Heartbeat System**: Background goroutine sends periodic heartbeats (60s interval) to maintain run-type reservations
 - **Auto-cleanup**: GPUs are automatically released when heartbeat expires (15 min timeout), manual reservations expire, or processes terminate
-- **Unreserved Usage Detection**: nvidia-smi integration detects GPUs in use without proper reservations
+- **Unreserved Usage Detection**: Provider-specific integration detects GPUs in use without proper reservations
 - **User Accountability**: Process ownership detection identifies which users are running unreserved processes
 - **LRU Allocation**: Least Recently Used strategy ensures fair GPU distribution over time
 - **Specific GPU Reservation**: Users can reserve exact GPU IDs (e.g., --gpu-ids 1,3) when specific hardware is needed
@@ -51,13 +52,17 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 
 ### Usage Examples
 ```bash
-# Initialize GPU pool
+# Initialize GPU pool (auto-detects provider)
 ./build/canhazgpu admin --gpus 8
+
+# Initialize with specific provider
+./build/canhazgpu admin --gpus 4 --provider nvidia
+./build/canhazgpu admin --gpus 2 --provider amd
 
 # Force reinitialize with different count
 ./build/canhazgpu admin --gpus 4 --force
 
-# Check status with automatic validation
+# Check status with automatic provider-specific validation
 ./build/canhazgpu status
 
 # Get JSON output for programmatic use
@@ -93,6 +98,22 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 ./build/canhazgpu --config config.json run --gpus 2 -- python train.py
 ```
 
+### GPU Provider Examples
+```bash
+# NVIDIA GPU setup
+canhazgpu admin --gpus $(nvidia-smi --list-gpus | wc -l)
+
+# AMD GPU setup
+canhazgpu admin --gpus $(amd-smi list --json | jq 'length')
+
+# Check provider availability
+nvidia-smi --help >/dev/null 2>&1 && echo "NVIDIA available" || echo "NVIDIA not available"
+amd-smi --help >/dev/null 2>&1 && echo "AMD available" || echo "AMD not available"
+
+# View cached provider information
+redis-cli get "canhazgpu:provider"
+```
+
 ## Dependencies
 
 - Go 1.23+ with modules:
@@ -101,7 +122,8 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
   - `github.com/spf13/viper`: Configuration management
 - System requirements: 
   - Redis server running on localhost:6379
-  - nvidia-smi command available for GPU validation
+  - **For NVIDIA GPUs**: nvidia-smi command available
+  - **For AMD GPUs**: amd-smi command available (ROCm 5.7+)
   - Access to /proc filesystem or ps command for user detection
 
 ## Key Implementation Details
@@ -121,20 +143,33 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 │   │   └── report.go               # report command implementation
 │   ├── gpu/                        # GPU management logic
 │   │   ├── allocation.go           # LRU allocation and coordination
-│   │   ├── validation.go           # nvidia-smi integration and usage detection
+│   │   ├── validation.go           # GPU usage validation and process detection
 │   │   ├── model_detection.go      # AI model detection from process commands
-│   │   └── heartbeat.go            # Background heartbeat system
+│   │   ├── heartbeat.go            # Background heartbeat system
+│   │   ├── provider.go             # GPU provider interface and manager
+│   │   ├── nvidia_provider.go      # NVIDIA GPU provider implementation
+│   │   └── amd_provider.go         # AMD GPU provider implementation
 │   ├── redis_client/               # Redis operations
 │   │   └── client.go               # Redis client with Lua scripts
-│   └── types/                      # Shared types and constants
-│       └── types.go                # Config, GPUState, and other types
+│   ├── types/                      # Shared types and constants
+│   │   └── types.go                # Config, GPUState, and other types
+│   └── utils/                      # Utility functions
+│       └── utils.go                # Common utility functions
 ├── autocomplete_canhazgpu.sh       # Custom bash completion script
 └── go.mod                          # Go module definition
 ```
 
+### GPU Provider System
+
+- **Provider Interface**: `GPUProvider` interface in `internal/gpu/provider.go` defines standard operations
+- **NVIDIA Provider**: `nvidia_provider.go` implements NVIDIA GPU management using nvidia-smi commands
+- **AMD Provider**: `amd_provider.go` implements AMD GPU management using amd-smi commands
+- **Provider Manager**: `ProviderManager` in `provider.go` handles provider detection, caching, and instance management
+- **Auto-detection**: Automatically detects available providers during system initialization
+
 ### GPU Validation and Detection
 
-- `DetectGPUUsage()` in `internal/gpu/validation.go`: Uses nvidia-smi to query actual GPU processes and memory usage
+- `DetectAllGPUUsage()` in `internal/gpu/provider.go`: Uses provider-specific commands to query actual GPU processes and memory usage
 - `GetProcessOwner()` in `internal/gpu/validation.go`: Identifies process owners via /proc filesystem or ps command
 - Unreserved usage detection excludes GPUs from allocation pool automatically
 - Configurable memory threshold (default: 1024 MB) determines if GPU is considered "in use" via --memory-threshold flag
@@ -173,6 +208,7 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 - Validation info format: `XMB, Y processes` (no prefix)
 - "UNRESERVED" status for unreserved usage
 - Model detection displays identified AI models in MODEL column
+- Provider-specific validation using appropriate GPU management tools
 
 ### Time Handling
 
@@ -192,6 +228,7 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 ### Core Keys
 
 - `canhazgpu:gpu_count`: Total number of available GPUs
+- `canhazgpu:provider`: Cached GPU provider type ("nvidia" or "amd")
 - `canhazgpu:allocation_lock`: Global allocation lock for race condition prevention
 - `canhazgpu:usage_history:{timestamp}:{user}:{gpu_id}`: Historical usage records for reporting
 
@@ -225,6 +262,27 @@ Reserved state:
 - Usage data stored in Redis with 90-day expiration to prevent unbounded growth
 - `report` command aggregates usage by user with configurable time windows
 - Supports both historical completed usage and current in-progress reservations
+
+## GPU Provider Support
+
+### NVIDIA GPUs
+- **Requirements**: nvidia-smi command available
+- **Driver Support**: CUDA drivers with nvidia-smi
+- **Process Detection**: Uses `nvidia-smi --query-compute-apps` for process information
+- **Memory Detection**: Uses `nvidia-smi --query-gpu` for memory usage
+- **Validation**: Real-time validation of GPU usage and process ownership
+
+### AMD GPUs
+- **Requirements**: amd-smi command available (ROCm 5.7+)
+- **Driver Support**: ROCm drivers with amd-smi
+- **Process Detection**: Uses `amd-smi process --json` for process information
+- **Memory Detection**: Uses `amd-smi metric --json` for memory usage
+- **Validation**: Real-time validation of GPU usage and process ownership
+
+### Provider Selection
+- **Auto-detection**: Automatically detects available providers during initialization
+- **Manual Selection**: Use `--provider nvidia` or `--provider amd` to force specific provider
+- **Single Provider**: System assumes only one GPU provider type per system
 
 ## Documentation
 

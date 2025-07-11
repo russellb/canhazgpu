@@ -11,7 +11,31 @@ canhazgpu admin --gpus 8
 ```
 
 !!! info "Finding GPU Count"
-    Use `nvidia-smi` to see how many GPUs are available on your system.
+    Use the appropriate command for your GPU type:
+    
+    **NVIDIA GPUs**: `nvidia-smi -L | wc -l`
+    
+    **AMD GPUs**: 
+    ```bash
+    # With jq (if available)
+    amd-smi list --json | jq 'length'
+    
+    # Without jq (alternative)
+    amd-smi list | grep -c "^GPU:"
+    ```
+
+You can also specify the GPU provider explicitly:
+
+```bash
+# Auto-detect provider (default)
+canhazgpu admin --gpus 8
+
+# Explicitly specify NVIDIA
+canhazgpu admin --gpus 8 --provider nvidia
+
+# Explicitly specify AMD  
+canhazgpu admin --gpus 8 --provider amd
+```
 
 If you need to change the GPU count later:
 
@@ -249,7 +273,7 @@ sudo systemctl start redis-server
 If you get permission errors, ensure:
 - Redis is accessible
 - You have access to `/proc` filesystem
-- nvidia-smi is available
+- nvidia-smi or amd-smi (depending on system) is available
 
 For more detailed troubleshooting, see the [Troubleshooting Guide](admin-troubleshooting.md).
 
