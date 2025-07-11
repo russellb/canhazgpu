@@ -30,8 +30,8 @@ func TestAllocationEngine_GetGPUStatus_Structure(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	if !isNvidiaSmiAvailable() {
-		t.Skip("Skipping test: nvidia-smi command not available")
+	if !isAnyGPUProviderAvailable() {
+		t.Skip("Skipping test: no GPU providers available (nvidia-smi, amd-smi not found)")
 	}
 
 	t.Log("Starting integration test - this may take time if Redis is not available")
@@ -69,8 +69,8 @@ func TestAllocationEngine_AllocateGPUs_Structure(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	if !isNvidiaSmiAvailable() {
-		t.Skip("Skipping test: nvidia-smi command not available")
+	if !isAnyGPUProviderAvailable() {
+		t.Skip("Skipping test: no GPU providers available (nvidia-smi, amd-smi not found)")
 	}
 
 	t.Log("Starting GPU allocation integration test - may take 10+ seconds")
@@ -96,7 +96,7 @@ func TestAllocationEngine_AllocateGPUs_Structure(t *testing.T) {
 	err := request.Validate()
 	assert.NoError(t, err)
 
-	t.Log("Attempting GPU allocation (requires nvidia-smi validation - may be slow)")
+	t.Log("Attempting GPU allocation (requires GPU provider validation - may be slow)")
 	// Try to allocate (may fail if pool not initialized, but shouldn't panic)
 	gpus, err := engine.AllocateGPUs(context.Background(), request)
 
