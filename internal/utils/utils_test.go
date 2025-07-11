@@ -259,25 +259,25 @@ func TestFormatUserList(t *testing.T) {
 			name:     "Single user",
 			users:    []string{"alice"},
 			maxUsers: 3,
-			expected: "user alice",
+			expected: "alice",
 		},
 		{
 			name:     "Two users",
 			users:    []string{"alice", "bob"},
 			maxUsers: 3,
-			expected: "users alice and bob",
+			expected: "alice and bob",
 		},
 		{
 			name:     "Three users",
 			users:    []string{"alice", "bob", "charlie"},
 			maxUsers: 3,
-			expected: "users alice, bob and charlie",
+			expected: "alice, bob and charlie",
 		},
 		{
 			name:     "More users than max",
 			users:    []string{"alice", "bob", "charlie", "david", "eve"},
 			maxUsers: 3,
-			expected: "users alice, bob, charlie and 2 more",
+			expected: "alice, bob, charlie and 2 more",
 		},
 	}
 

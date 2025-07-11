@@ -142,19 +142,19 @@ func FormatUserList(users []string, maxUsers int) string {
 	}
 
 	if len(users) == 1 {
-		return "user " + users[0]
+		return users[0]
 	}
 
 	if len(users) <= maxUsers {
 		if len(users) == 2 {
-			return "users " + users[0] + " and " + users[1]
+			return users[0] + " and " + users[1]
 		}
-		return "users " + strings.Join(users[:len(users)-1], ", ") + " and " + users[len(users)-1]
+		return strings.Join(users[:len(users)-1], ", ") + " and " + users[len(users)-1]
 	}
 
 	displayed := users[:maxUsers]
 	remaining := len(users) - maxUsers
-	return "users " + strings.Join(displayed, ", ") + fmt.Sprintf(" and %d more", remaining)
+	return strings.Join(displayed, ", ") + fmt.Sprintf(" and %d more", remaining)
 }
 
 // FormatProcessList formats a list of processes for display
