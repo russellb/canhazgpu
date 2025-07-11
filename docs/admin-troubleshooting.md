@@ -79,7 +79,40 @@ maxmemory 512mb  # Increase as needed
 sudo systemctl restart redis-server
 ```
 
-## NVIDIA Driver Issues
+## GPU Provider Issues
+
+### Wrong Provider Cached
+**Issue:** System using wrong GPU provider after switching hardware
+
+**Solution:**
+```bash
+# Check current cached provider
+redis-cli get "canhazgpu:provider"
+
+# Re-initialize with correct provider
+canhazgpu admin --gpus 8 --provider nvidia --force
+# OR
+canhazgpu admin --gpus 8 --provider amd --force
+
+# Let system auto-detect
+canhazgpu admin --gpus 8 --force
+```
+
+### Multiple GPU Vendors
+**Issue:** System has both NVIDIA and AMD GPUs
+
+**Current Limitation:** canhazgpu currently supports single provider per system
+
+**Workaround:** Use the provider for the GPUs you want to manage:
+```bash
+# Use NVIDIA provider for NVIDIA GPUs
+canhazgpu admin --gpus 4 --provider nvidia
+
+# Use AMD provider for AMD GPUs  
+canhazgpu admin --gpus 2 --provider amd
+```
+
+## NVIDIA GPU Issues
 
 ### nvidia-smi Not Available
 **Symptoms:**
@@ -104,7 +137,7 @@ sudo dnf install nvidia-driver
 nvidia-smi
 ```
 
-### Driver Version Issues
+### NVIDIA Driver Version Issues
 **Symptoms:**
 ```bash
 ❯ nvidia-smi
@@ -129,7 +162,7 @@ sudo apt install nvidia-driver-470
 sudo reboot
 ```
 
-### GPU Detection Issues
+### NVIDIA GPU Detection Issues
 **Symptoms:**
 ```bash
 ❯ nvidia-smi
@@ -151,6 +184,60 @@ nvidia-smi -q -d COMPUTE
 sudo nvidia-smi -r
 ```
 
+## AMD GPU Issues
+
+### amd-smi Not Available
+**Error:**
+```bash
+amd-smi: command not found
+```
+
+**Solution:**
+```bash
+# Check if AMD GPUs are present
+lspci | grep -i amd
+
+# Test amd-smi availability
+amd-smi list
+
+# Install ROCm and amd-smi (Ubuntu/Debian)
+sudo apt update
+sudo apt install rocm-dev amd-smi-lib
+
+# Install ROCm (CentOS/RHEL/Fedora)
+sudo dnf install rocm-dev amd-smi-lib
+```
+
+**Verify installation:**
+```bash
+amd-smi list
+```
+
+### AMD Driver Communication Error
+**Error:**
+```bash
+❯ amd-smi list
+Failed to initialize ROCm
+```
+
+**Solution:**
+Check ROCm installation and permissions:
+```bash
+# Check ROCm installation
+ls /opt/rocm/
+
+# Check user permissions
+groups $USER
+# Should include 'render' and 'video' groups
+
+# Add user to groups if needed
+sudo usermod -a -G render,video $USER
+# Log out and log back in
+
+# Restart ROCm services
+sudo systemctl restart rocm-smi
+```
+
 ## Allocation Problems
 
 ### Not Enough GPUs Available
@@ -166,10 +253,11 @@ Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use with
 canhazgpu status
 
 # Look for unreserved usage
-canhazgpu status | grep "WITHOUT RESERVATION"
+canhazgpu status | grep "UNRESERVED"
 
 # Check actual GPU processes
 nvidia-smi
+amd-smi list
 ```
 
 **Solutions:**
@@ -278,6 +366,7 @@ GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS             
 ```bash
 # Identify the process
 nvidia-smi
+amd-smi list
 
 # Contact process owner
 ps -o user,pid,command -p <PID>
@@ -365,8 +454,9 @@ sudo systemctl restart redis-server
 # Time the status command
 time canhazgpu status
 
-# Check nvidia-smi performance
+# Check nvidia-smi or amd-smi performance
 time nvidia-smi
+time amd-smi list
 
 # Check Redis performance
 redis-cli --latency -i 1
@@ -506,9 +596,13 @@ When reporting issues, collect:
 uname -a
 lsb_release -a
 
-# GPU information
+# NVIDIA GPU information
 nvidia-smi
 lspci | grep -i nvidia
+
+# AMD GPU information
+amd-smi list
+lspci | grep -i amd
 
 # Redis information
 redis-cli info

@@ -4,7 +4,9 @@
 
 - **Go 1.23+** (for building from source)
 - **Redis server** running on localhost:6379
-- **NVIDIA GPUs** with nvidia-smi available
+- **GPUs** with appropriate management tools:
+  - **NVIDIA GPUs**: nvidia-smi available
+  - **AMD GPUs**: amd-smi available (ROCm 5.7+)
 - **System access** to `/proc` filesystem or `ps` command for user detection
 
 ## Dependencies
@@ -45,7 +47,9 @@ redis-cli ping
 # Should return: PONG
 ```
 
-## NVIDIA Drivers
+## GPU Drivers
+
+### NVIDIA GPUs
 
 Ensure nvidia-smi is available:
 
@@ -55,6 +59,17 @@ nvidia-smi
 ```
 
 If not installed, install NVIDIA drivers for your system.
+
+### AMD GPUs
+
+Ensure amd-smi is available:
+
+```bash
+amd-smi list
+# Should display GPU information
+```
+
+If not installed, install ROCm drivers for your system:
 
 ## Install canhazgpu
 
@@ -148,9 +163,11 @@ canhazgpu reserve --duration <TAB>
 canhazgpu run --gpus 1 -- python <TAB>
 # Shows available Python files and completion
 
-# Complete program options
-canhazgpu run --gpus 1 -- nvidia-smi --<TAB>
+# Complete GPU management tool options
+canhazgpu run --gpus 1 -- nvidia-smi --<TAB>  # For NVIDIA
 # Shows nvidia-smi options
+canhazgpu run --gpus 1 -- amd-smi --<TAB>     # For AMD
+# Shows amd-smi options
 ```
 
 ### Manual Installation

@@ -8,7 +8,7 @@ In shared development environments with multiple GPUs, researchers and developer
 
 You peacefully share a host but want a helper to avoid accidental conflicts.
 
-- You have a single host with NVIDIA GPUs shared by multiple users
+- You have a single host with GPUs (NVIDIA or AMD) shared by multiple users
 - You all log in and run commands manually for development and/or testing
 - You can still talk to each other about playing nice and sharing your (GPU) toys
 
@@ -62,7 +62,8 @@ canhazgpu web --port 8080
 - **LRU allocation**: Fair distribution using least recently used strategy
 - **Specific GPU reservation**: Reserve exact GPU IDs when needed (e.g., --gpu-ids 1,3)
 - **Unreserved usage detection**: Identifies GPUs in use without proper reservations
-- **Real-time validation**: Uses nvidia-smi to verify actual GPU usage
+- **Real-time validation**: Uses nvidia-smi or amd-smi to verify actual GPU usage
+- **Multi-provider support**: Supports both NVIDIA and AMD GPUs with automatic detection
 - **Flexible reservations**: Support for both command execution and manual reservations
 - **Reservation reporting**: Track and analyze GPU reservation patterns over time by user
 - **Web dashboard**: Real-time monitoring interface with status and reservation reports
@@ -95,7 +96,9 @@ For detailed usage, configuration, and administration:
 
 - **Go 1.23+** (for building from source)
 - **Redis server** running on localhost:6379
-- **NVIDIA GPUs** with nvidia-smi available
+- **GPUs** with appropriate management tools:
+  - **NVIDIA GPUs**: nvidia-smi available
+  - **AMD GPUs**: amd-smi available (ROCm 5.7+)
 - **System access** to `/proc` filesystem or `ps` command
 
 ## Installation
@@ -121,13 +124,19 @@ sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
 # Optional: Create short alias symlink (after installing to /usr/local/bin)
 sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 
-# Initialize GPU pool
-canhazgpu admin --gpus $(nvidia-smi -L | wc -l)
+# Initialize GPU pool (auto-detects GPU provider)
+canhazgpu admin --gpus $(nvidia-smi -L | wc -l)  # For NVIDIA
+# OR
+canhazgpu admin --gpus $(amd-smi list --json | jq 'length')  # For AMD
+
+# Initialize with specific provider (optional)
+canhazgpu admin --gpus 8 --provider nvidia
+canhazgpu admin --gpus 8 --provider amd
 ```
 
 ## How It Works
 
-1. **Validation**: Uses nvidia-smi to detect actual GPU usage and identify conflicts
+1. **Validation**: Uses nvidia-smi or amd-smi to detect actual GPU usage and identify conflicts
 2. **Coordination**: Uses Redis for distributed state management and race condition prevention  
 3. **Allocation**: LRU (Least Recently Used) strategy ensures fair resource distribution
 4. **Monitoring**: Heartbeat system tracks active reservations and handles cleanup
