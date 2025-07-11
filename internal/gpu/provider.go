@@ -11,13 +11,13 @@ import (
 type GPUProvider interface {
 	// Name returns the name of the provider (e.g., "nvidia", "amd")
 	Name() string
-	
+
 	// IsAvailable checks if the provider's tools are available on the system
 	IsAvailable() bool
-	
+
 	// DetectGPUUsage queries the GPU usage for all GPUs managed by this provider
 	DetectGPUUsage(ctx context.Context) (map[int]*types.GPUUsage, error)
-	
+
 	// GetGPUCount returns the number of GPUs managed by this provider
 	GetGPUCount(ctx context.Context) (int, error)
 }
@@ -40,7 +40,7 @@ func NewProviderManager() *ProviderManager {
 // NewProviderManagerFromNames creates a provider manager with only the specified providers
 func NewProviderManagerFromNames(providerNames []string) *ProviderManager {
 	var providers []GPUProvider
-	
+
 	for _, name := range providerNames {
 		switch name {
 		case "nvidia":
@@ -49,7 +49,7 @@ func NewProviderManagerFromNames(providerNames []string) *ProviderManager {
 			providers = append(providers, NewAMDProvider())
 		}
 	}
-	
+
 	return &ProviderManager{
 		providers: providers,
 	}
@@ -69,11 +69,11 @@ func (pm *ProviderManager) GetAvailableProviders() []GPUProvider {
 // DetectAllGPUUsage detects usage from the available provider
 func (pm *ProviderManager) DetectAllGPUUsage(ctx context.Context) (map[int]*types.GPUUsage, error) {
 	availableProviders := pm.GetAvailableProviders()
-	
+
 	if len(availableProviders) == 0 {
 		return make(map[int]*types.GPUUsage), nil
 	}
-	
+
 	// Use the first (and only) available provider
 	provider := availableProviders[0]
 	return provider.DetectGPUUsage(ctx)
@@ -85,7 +85,7 @@ func (pm *ProviderManager) DetectAllGPUUsageWithoutChecks(ctx context.Context) (
 	if len(pm.providers) == 0 {
 		return nil, fmt.Errorf("no GPU providers configured in ProviderManager")
 	}
-	
+
 	// Use the first (and only) provider
 	provider := pm.providers[0]
 	return provider.DetectGPUUsage(ctx)
@@ -94,12 +94,12 @@ func (pm *ProviderManager) DetectAllGPUUsageWithoutChecks(ctx context.Context) (
 // GetTotalGPUCount returns the total number of GPUs from the available provider
 func (pm *ProviderManager) GetTotalGPUCount(ctx context.Context) (int, error) {
 	availableProviders := pm.GetAvailableProviders()
-	
+
 	if len(availableProviders) == 0 {
 		return 0, nil
 	}
-	
+
 	// Use the first (and only) available provider
 	provider := availableProviders[0]
 	return provider.GetGPUCount(ctx)
-} 
+}

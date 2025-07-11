@@ -13,7 +13,6 @@ import (
 	"github.com/russellb/canhazgpu/internal/utils"
 )
 
-
 // getProcessOwner determines the owner of a process
 func getProcessOwner(pid int) (string, error) {
 	// Try /proc filesystem first

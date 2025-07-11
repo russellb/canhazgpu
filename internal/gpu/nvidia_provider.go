@@ -217,4 +217,4 @@ func (n *NVIDIAProvider) getGPUIDFromUUID(ctx context.Context, uuid string) (int
 	}
 
 	return -1, fmt.Errorf("GPU UUID not found: %s", uuid)
-} 
+}

@@ -60,16 +60,16 @@ func runAdmin(ctx context.Context, gpuCount int, force bool, explicitProvider st
 	if explicitProvider != "" {
 		// Use explicitly specified provider
 		fmt.Printf("Using explicitly specified GPU provider: %s\n", explicitProvider)
-		
+
 		// Validate provider name
 		if explicitProvider != "nvidia" && explicitProvider != "amd" {
 			return fmt.Errorf("invalid provider '%s'. Valid providers are: nvidia, amd", explicitProvider)
 		}
-		
+
 		// Validate that the specified provider is available
 		pm := gpu.NewProviderManager()
 		availableProviders := pm.GetAvailableProviders()
-		
+
 		available := false
 		for _, provider := range availableProviders {
 			if provider.Name() == explicitProvider {
@@ -77,22 +77,22 @@ func runAdmin(ctx context.Context, gpuCount int, force bool, explicitProvider st
 				break
 			}
 		}
-		
+
 		if !available {
 			return fmt.Errorf("provider '%s' is not available on this system", explicitProvider)
 		}
-		
+
 		providerName = explicitProvider
 	} else {
 		// Auto-detect available provider
 		fmt.Print("Detecting available GPU provider... ")
 		pm := gpu.NewProviderManager()
 		availableProviders := pm.GetAvailableProviders()
-		
+
 		if len(availableProviders) == 0 {
 			return fmt.Errorf("no GPU providers available (nvidia-smi, amd-smi not found)")
 		}
-		
+
 		if len(availableProviders) > 1 {
 			var names []string
 			for _, provider := range availableProviders {
@@ -100,7 +100,7 @@ func runAdmin(ctx context.Context, gpuCount int, force bool, explicitProvider st
 			}
 			return fmt.Errorf("multiple GPU providers detected: %v. Please specify one with --provider", names)
 		}
-		
+
 		providerName = availableProviders[0].Name()
 		fmt.Printf("found %s\n", providerName)
 	}
