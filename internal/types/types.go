@@ -171,6 +171,7 @@ const (
 
 	RedisKeyPrefix         = "canhazgpu:"
 	RedisKeyGPUCount       = RedisKeyPrefix + "gpu_count"
+	RedisKeyProvider       = RedisKeyPrefix + "provider"
 	RedisKeyAllocationLock = RedisKeyPrefix + "allocation_lock"
 	RedisKeyUsageHistory   = RedisKeyPrefix + "usage_history:"
 

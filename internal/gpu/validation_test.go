@@ -61,25 +61,34 @@ func TestDetectGPUUsage_Integration(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	if !isNvidiaSmiAvailable() {
-		t.Skip("Skipping test: nvidia-smi command not available")
+	t.Log("Starting GPU provider integration test - may take 5-10 seconds or timeout")
+	t.Log("This test uses the new GPU Provider system (NVIDIA/AMD)")
+
+	// Use the new GPU Provider system
+	pm := NewProviderManager()
+	availableProviders := pm.GetAvailableProviders()
+
+	if len(availableProviders) == 0 {
+		t.Skip("Skipping test: no GPU providers available (nvidia-smi, amd-smi not found)")
 	}
 
-	t.Log("Starting nvidia-smi integration test - may take 5-10 seconds or timeout")
-	t.Log("This test requires nvidia-smi command to be available on the system")
+	t.Logf("Found %d available provider(s):", len(availableProviders))
+	for _, provider := range availableProviders {
+		t.Logf("  - %s provider", provider.Name())
+	}
 
-	// This test requires nvidia-smi to be available
-	usage, err := DetectGPUUsage(context.Background())
+	// Test GPU usage detection with available providers
+	usage, err := pm.DetectAllGPUUsage(context.Background())
 
-	// If nvidia-smi is not available, the function should handle it gracefully
+	// If no providers are available, the function should handle it gracefully
 	if err != nil {
-		t.Logf("nvidia-smi not available or failed: %v (this is expected on non-GPU systems)", err)
+		t.Logf("GPU detection failed: %v (this is expected on non-GPU systems)", err)
 		// Should return empty usage, not crash
 		assert.Empty(t, usage)
 		return
 	}
 
-	t.Log("nvidia-smi detection completed successfully")
+	t.Log("GPU detection completed successfully")
 
 	// If successful, usage should be a valid map
 	assert.NotNil(t, usage)
@@ -97,6 +106,7 @@ func TestDetectGPUUsage_Integration(t *testing.T) {
 			assert.Greater(t, proc.PID, 0)
 			assert.NotEmpty(t, proc.ProcessName)
 			assert.GreaterOrEqual(t, proc.MemoryMB, 0)
+			assert.NotEmpty(t, proc.User) // Should have a user (not "unknown")
 		}
 	}
 }
