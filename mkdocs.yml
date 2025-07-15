@@ -64,6 +64,7 @@ nav:
     - Commands Overview: commands.md
     - Running Jobs: usage-run.md
     - Manual Reservations: usage-reserve.md
+    - Releasing GPUs: usage-release.md
     - Status Monitoring: usage-status.md
   - Features:
     - GPU Validation: features-validation.md

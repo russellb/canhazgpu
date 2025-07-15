@@ -22,6 +22,9 @@ canhazgpu reserve --gpus 1 --duration 4h
 # Release manual reservations
 canhazgpu release
 
+# Release specific GPUs
+canhazgpu release --gpu-ids 1,3
+
 # View usage reports
 canhazgpu report --days 7
 
@@ -80,7 +83,8 @@ GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS             
 
 ### Detailed Usage
 - **[Running Jobs](usage-run.md)** - GPU reservation with run command
-- **[Manual Reservations](usage-reserve.md)** - Reserve GPUs manually  
+- **[Manual Reservations](usage-reserve.md)** - Reserve GPUs manually
+- **[Releasing GPUs](usage-release.md)** - Release GPU reservations
 - **[Status Monitoring](usage-status.md)** - Monitor GPU usage and reservations
 
 ### Key Features

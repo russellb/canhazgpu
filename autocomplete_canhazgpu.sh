@@ -85,13 +85,13 @@ _canhazgpu_complete() {
             COMPREPLY=( $(compgen -W "--gpus --gpu-ids -g -G --duration -d --help" -- "$cur") )
             ;;
         release)
-            COMPREPLY=( $(compgen -W "--help" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--gpu-ids -G --help" -- "$cur") )
             ;;
         run)
             COMPREPLY=( $(compgen -W "--gpus --gpu-ids -g -G --timeout -t --help --" -- "$cur") )
             ;;
         status)
-            COMPREPLY=( $(compgen -W "--help" -- "$cur") )
+            COMPREPLY=( $(compgen -W "--json -j --help" -- "$cur") )
             ;;
         report)
             COMPREPLY=( $(compgen -W "--days --help" -- "$cur") )

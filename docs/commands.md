@@ -8,7 +8,7 @@ Usage: canhazgpu [OPTIONS] COMMAND [ARGS]...
 
 Commands:
   admin    Initialize GPU pool for this machine
-  release  Release all manually reserved GPUs held by the current user
+  release  Release manually reserved GPUs held by the current user
   report   Generate GPU usage reports
   reserve  Reserve GPUs manually for a specified duration
   run      Reserve GPUs and run a command with CUDA_VISIBLE_DEVICES set
@@ -342,17 +342,25 @@ Unlike the `run` command, `reserve` does NOT automatically set `CUDA_VISIBLE_DEV
 
 ## release
 
-Release all manually reserved GPUs held by the current user.
+Release manually reserved GPUs held by the current user.
 
 ```bash
-canhazgpu release
+canhazgpu release [--gpu-ids <ids>]
 ```
 
-**No options required.**
+**[→ Detailed Release Guide](usage-release.md)**
+
+**Options:**
+- `-G, --gpu-ids`: Specific GPU IDs to release (comma-separated, e.g., 1,3,5)
 
 **Examples:**
 ```bash
+# Release all manually reserved GPUs
 ❯ canhazgpu release
+Released 2 GPU(s): [1, 3]
+
+# Release specific GPUs
+❯ canhazgpu release --gpu-ids 1,3
 Released 2 GPU(s): [1, 3]
 
 ❯ canhazgpu release  
@@ -360,8 +368,7 @@ No manually reserved GPUs found for current user
 ```
 
 !!! note "Scope"
-    This only releases manual reservations made with the `reserve` command. 
-    It does not affect active `run` sessions.
+    By default, releases all manually reserved GPUs. With `--gpu-ids`, can release specific GPUs including both manual reservations (from `reserve` command) and run-type reservations (from `run` command).
 
 ## report
 

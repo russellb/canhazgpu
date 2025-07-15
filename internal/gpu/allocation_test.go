@@ -260,3 +260,143 @@ func TestLRUStrategy_Concepts(t *testing.T) {
 		assert.Equal(t, expected, gpus[i].id, "GPU %d should be at position %d in LRU order", expected, i)
 	}
 }
+
+func TestReleaseSpecificGPUs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// Test Redis client setup
+	config := &types.Config{
+		RedisHost:       "localhost",
+		RedisPort:       6379,
+		RedisDB:         15,
+		MemoryThreshold: types.MemoryThresholdMB,
+	}
+	redisClient := redis_client.NewClient(config)
+	defer redisClient.Close()
+
+	ctx := context.Background()
+	
+	// Check Redis connectivity
+	if err := redisClient.Ping(ctx); err != nil {
+		t.Skip("Skipping test: Redis not available")
+	}
+
+	// Initialize test environment
+	if err := redisClient.SetGPUCount(ctx, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := NewAllocationEngine(redisClient, config)
+
+	// Test 1: Release specific manually reserved GPUs
+	t.Run("ReleaseSpecificManualGPUs", func(t *testing.T) {
+		// Clean up state
+		for i := 0; i < 4; i++ {
+			redisClient.SetGPUState(ctx, i, &types.GPUState{})
+		}
+
+		// Reserve GPUs 0, 1, 2 manually
+		now := time.Now()
+		expiryTime := now.Add(1 * time.Hour)
+		
+		for i := 0; i < 3; i++ {
+			state := &types.GPUState{
+				User:          "testuser",
+				StartTime:     types.FlexibleTime{Time: now},
+				Type:          types.ReservationTypeManual,
+				ExpiryTime:    types.FlexibleTime{Time: expiryTime},
+			}
+			if err := redisClient.SetGPUState(ctx, i, state); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Release specific GPUs 0 and 2
+		released, err := engine.ReleaseSpecificGPUs(ctx, "testuser", []int{0, 2})
+		assert.NoError(t, err)
+		assert.ElementsMatch(t, []int{0, 2}, released)
+
+		// Verify GPUs 0 and 2 are released
+		for _, gpuID := range []int{0, 2} {
+			state, err := redisClient.GetGPUState(ctx, gpuID)
+			assert.NoError(t, err)
+			assert.Empty(t, state.User)
+			assert.NotZero(t, state.LastReleased.Time)
+		}
+
+		// Verify GPU 1 is still reserved
+		state, err := redisClient.GetGPUState(ctx, 1)
+		assert.NoError(t, err)
+		assert.Equal(t, "testuser", state.User)
+		assert.Equal(t, types.ReservationTypeManual, state.Type)
+	})
+
+	// Test 2: Release specific run-type GPUs
+	t.Run("ReleaseSpecificRunGPUs", func(t *testing.T) {
+		// Clean up state
+		for i := 0; i < 4; i++ {
+			redisClient.SetGPUState(ctx, i, &types.GPUState{})
+		}
+
+		// Reserve GPU 1 as run-type
+		now := time.Now()
+		state := &types.GPUState{
+			User:          "testuser",
+			StartTime:     types.FlexibleTime{Time: now},
+			LastHeartbeat: types.FlexibleTime{Time: now},
+			Type:          types.ReservationTypeRun,
+		}
+		if err := redisClient.SetGPUState(ctx, 1, state); err != nil {
+			t.Fatal(err)
+		}
+
+		// Release the run-type GPU
+		released, err := engine.ReleaseSpecificGPUs(ctx, "testuser", []int{1})
+		assert.NoError(t, err)
+		assert.Equal(t, []int{1}, released)
+
+		// Verify GPU 1 is released
+		state, err = redisClient.GetGPUState(ctx, 1)
+		assert.NoError(t, err)
+		assert.Empty(t, state.User)
+		assert.NotZero(t, state.LastReleased.Time)
+	})
+
+	// Test 3: No GPUs released if not owned by user
+	t.Run("NoReleaseIfNotOwned", func(t *testing.T) {
+		// Clean up state
+		for i := 0; i < 4; i++ {
+			redisClient.SetGPUState(ctx, i, &types.GPUState{})
+		}
+
+		// Reserve GPU 0 by different user
+		state := &types.GPUState{
+			User:      "otheruser",
+			StartTime: types.FlexibleTime{Time: time.Now()},
+			Type:      types.ReservationTypeManual,
+		}
+		if err := redisClient.SetGPUState(ctx, 0, state); err != nil {
+			t.Fatal(err)
+		}
+
+		// Try to release as testuser
+		released, err := engine.ReleaseSpecificGPUs(ctx, "testuser", []int{0})
+		assert.NoError(t, err)
+		assert.Empty(t, released)
+
+		// Verify GPU 0 is still owned by otheruser
+		state, err = redisClient.GetGPUState(ctx, 0)
+		assert.NoError(t, err)
+		assert.Equal(t, "otheruser", state.User)
+	})
+
+	// Test 4: Handle non-existent GPU IDs gracefully
+	t.Run("HandleNonExistentGPUs", func(t *testing.T) {
+		// Try to release GPUs that don't exist
+		released, err := engine.ReleaseSpecificGPUs(ctx, "testuser", []int{10, 20})
+		assert.NoError(t, err)
+		assert.Empty(t, released)
+	})
+}

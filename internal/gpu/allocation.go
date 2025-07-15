@@ -122,6 +122,48 @@ func (ae *AllocationEngine) ReleaseGPUs(ctx context.Context, user string) ([]int
 	return releasedGPUs, nil
 }
 
+// ReleaseSpecificGPUs releases specific GPUs owned by a user (both manual and run-type reservations)
+func (ae *AllocationEngine) ReleaseSpecificGPUs(ctx context.Context, user string, gpuIDs []int) ([]int, error) {
+	var releasedGPUs []int
+	now := time.Now()
+	
+	for _, gpuID := range gpuIDs {
+		state, err := ae.client.GetGPUState(ctx, gpuID)
+		if err != nil {
+			continue
+		}
+		
+		// Release GPU if it's reserved by this user (either manual or run type)
+		if state.User == user && (state.Type == types.ReservationTypeManual || state.Type == types.ReservationTypeRun) {
+			// Record usage history
+			duration := now.Sub(state.StartTime.ToTime()).Seconds()
+			usageRecord := &types.UsageRecord{
+				User:            state.User,
+				GPUID:           gpuID,
+				StartTime:       state.StartTime,
+				EndTime:         types.FlexibleTime{Time: now},
+				Duration:        duration,
+				ReservationType: state.Type,
+			}
+			if err := ae.client.RecordUsageHistory(ctx, usageRecord); err != nil {
+				// Log error but don't fail the release
+				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history: %v\n", err)
+			}
+			
+			// Mark as available with last_released timestamp
+			availableState := &types.GPUState{
+				LastReleased: types.FlexibleTime{Time: now},
+			}
+			if err := ae.client.SetGPUState(ctx, gpuID, availableState); err != nil {
+				return nil, fmt.Errorf("failed to release GPU %d: %v", gpuID, err)
+			}
+			releasedGPUs = append(releasedGPUs, gpuID)
+		}
+	}
+	
+	return releasedGPUs, nil
+}
+
 // GetGPUStatus returns the current status of all GPUs with validation
 func (ae *AllocationEngine) GetGPUStatus(ctx context.Context) ([]GPUStatusInfo, error) {
 	gpuCount, err := ae.client.GetGPUCount(ctx)
