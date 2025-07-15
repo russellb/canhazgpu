@@ -53,6 +53,16 @@ func (c *Client) SetAvailableProvider(ctx context.Context, provider string) erro
 func (c *Client) GetAvailableProvider(ctx context.Context) (string, error) {
 	val, err := c.rdb.Get(ctx, types.RedisKeyProvider).Result()
 	if err == redis.Nil {
+		// Check if this is a pre-provider deployment by looking for existing GPU count
+		gpuCount, countErr := c.GetGPUCount(ctx)
+		if countErr == nil && gpuCount > 0 {
+			// This is a pre-provider deployment - auto-migrate to NVIDIA for backward compatibility
+			provider := "nvidia"
+			if setErr := c.SetAvailableProvider(ctx, provider); setErr != nil {
+				return "", fmt.Errorf("failed to auto-migrate pre-provider deployment to NVIDIA: %v", setErr)
+			}
+			return provider, nil
+		}
 		return "", fmt.Errorf("GPU provider not initialized - run 'canhazgpu admin --gpus <count>' first")
 	}
 	if err != nil {

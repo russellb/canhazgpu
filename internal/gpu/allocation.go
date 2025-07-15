@@ -135,13 +135,13 @@ func (ae *AllocationEngine) ReleaseGPUs(ctx context.Context, user string) ([]int
 func (ae *AllocationEngine) ReleaseSpecificGPUs(ctx context.Context, user string, gpuIDs []int) ([]int, error) {
 	var releasedGPUs []int
 	now := time.Now()
-	
+
 	for _, gpuID := range gpuIDs {
 		state, err := ae.client.GetGPUState(ctx, gpuID)
 		if err != nil {
 			continue
 		}
-		
+
 		// Release GPU if it's reserved by this user (either manual or run type)
 		if state.User == user && (state.Type == types.ReservationTypeManual || state.Type == types.ReservationTypeRun) {
 			// Record usage history
@@ -158,7 +158,7 @@ func (ae *AllocationEngine) ReleaseSpecificGPUs(ctx context.Context, user string
 				// Log error but don't fail the release
 				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history: %v\n", err)
 			}
-			
+
 			// Mark as available with last_released timestamp
 			availableState := &types.GPUState{
 				LastReleased: types.FlexibleTime{Time: now},
@@ -169,7 +169,7 @@ func (ae *AllocationEngine) ReleaseSpecificGPUs(ctx context.Context, user string
 			releasedGPUs = append(releasedGPUs, gpuID)
 		}
 	}
-	
+
 	return releasedGPUs, nil
 }
 

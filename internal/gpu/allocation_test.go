@@ -274,10 +274,14 @@ func TestReleaseSpecificGPUs(t *testing.T) {
 		MemoryThreshold: types.MemoryThresholdMB,
 	}
 	redisClient := redis_client.NewClient(config)
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			t.Logf("Warning: failed to close Redis client: %v", err)
+		}
+	}()
 
 	ctx := context.Background()
-	
+
 	// Check Redis connectivity
 	if err := redisClient.Ping(ctx); err != nil {
 		t.Skip("Skipping test: Redis not available")
@@ -294,19 +298,21 @@ func TestReleaseSpecificGPUs(t *testing.T) {
 	t.Run("ReleaseSpecificManualGPUs", func(t *testing.T) {
 		// Clean up state
 		for i := 0; i < 4; i++ {
-			redisClient.SetGPUState(ctx, i, &types.GPUState{})
+			if err := redisClient.SetGPUState(ctx, i, &types.GPUState{}); err != nil {
+				t.Fatalf("Failed to reset GPU %d state: %v", i, err)
+			}
 		}
 
 		// Reserve GPUs 0, 1, 2 manually
 		now := time.Now()
 		expiryTime := now.Add(1 * time.Hour)
-		
+
 		for i := 0; i < 3; i++ {
 			state := &types.GPUState{
-				User:          "testuser",
-				StartTime:     types.FlexibleTime{Time: now},
-				Type:          types.ReservationTypeManual,
-				ExpiryTime:    types.FlexibleTime{Time: expiryTime},
+				User:       "testuser",
+				StartTime:  types.FlexibleTime{Time: now},
+				Type:       types.ReservationTypeManual,
+				ExpiryTime: types.FlexibleTime{Time: expiryTime},
 			}
 			if err := redisClient.SetGPUState(ctx, i, state); err != nil {
 				t.Fatal(err)
@@ -337,7 +343,9 @@ func TestReleaseSpecificGPUs(t *testing.T) {
 	t.Run("ReleaseSpecificRunGPUs", func(t *testing.T) {
 		// Clean up state
 		for i := 0; i < 4; i++ {
-			redisClient.SetGPUState(ctx, i, &types.GPUState{})
+			if err := redisClient.SetGPUState(ctx, i, &types.GPUState{}); err != nil {
+				t.Fatalf("Failed to reset GPU %d state: %v", i, err)
+			}
 		}
 
 		// Reserve GPU 1 as run-type
@@ -368,7 +376,9 @@ func TestReleaseSpecificGPUs(t *testing.T) {
 	t.Run("NoReleaseIfNotOwned", func(t *testing.T) {
 		// Clean up state
 		for i := 0; i < 4; i++ {
-			redisClient.SetGPUState(ctx, i, &types.GPUState{})
+			if err := redisClient.SetGPUState(ctx, i, &types.GPUState{}); err != nil {
+				t.Fatalf("Failed to reset GPU %d state: %v", i, err)
+			}
 		}
 
 		// Reserve GPU 0 by different user

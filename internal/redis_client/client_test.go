@@ -501,3 +501,58 @@ func TestClient_AtomicReserveGPUs_MixedMode(t *testing.T) {
 		}
 	}
 }
+
+func TestClient_ProviderBackwardCompatibility(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	// Test 1: Provider not initialized, no GPU count -> should get standard error
+	provider, err := client.GetAvailableProvider(ctx)
+	assert.Error(t, err)
+	assert.Empty(t, provider)
+	assert.Contains(t, err.Error(), "GPU provider not initialized")
+
+	// Test 2: Set GPU count first (simulating pre-provider deployment)
+	err = client.SetGPUCount(ctx, 4)
+	require.NoError(t, err)
+
+	// Now when getting provider, it should auto-migrate to NVIDIA
+	provider, err = client.GetAvailableProvider(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "nvidia", provider)
+
+	// Test 3: Verify provider was actually stored in Redis
+	storedProvider, err := client.GetAvailableProvider(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "nvidia", storedProvider)
+
+	// Test 4: Clear provider but keep GPU count to test migration again
+	err = client.rdb.Del(ctx, types.RedisKeyProvider).Err()
+	require.NoError(t, err)
+
+	// Should auto-migrate again
+	provider, err = client.GetAvailableProvider(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "nvidia", provider)
+}
+
+func TestClient_ProviderExplicitSet(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	// Test explicit provider setting
+	err := client.SetAvailableProvider(ctx, "amd")
+	assert.NoError(t, err)
+
+	provider, err := client.GetAvailableProvider(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "amd", provider)
+
+	// Test overwriting provider
+	err = client.SetAvailableProvider(ctx, "nvidia")
+	assert.NoError(t, err)
+
+	provider, err = client.GetAvailableProvider(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "nvidia", provider)
+}
