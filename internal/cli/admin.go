@@ -7,6 +7,7 @@ import (
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var adminCmd = &cobra.Command{
@@ -17,9 +18,9 @@ This must be run once before using other commands.
 
 Use --force to reinitialize an existing pool (this will clear all reservations).`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		gpuCount, _ := cmd.Flags().GetInt("gpus")
-		force, _ := cmd.Flags().GetBool("force")
-		provider, _ := cmd.Flags().GetString("provider")
+		gpuCount := viper.GetInt("admin.gpus")
+		force := viper.GetBool("admin.force")
+		provider := viper.GetString("admin.provider")
 
 		if gpuCount <= 0 {
 			return fmt.Errorf("GPU count must be greater than 0")

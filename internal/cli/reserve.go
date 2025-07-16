@@ -12,6 +12,7 @@ import (
 	"github.com/russellb/canhazgpu/internal/types"
 	"github.com/russellb/canhazgpu/internal/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var reserveCmd = &cobra.Command{
@@ -49,9 +50,9 @@ Example usage:
 The reserved GPUs must be manually released with 'canhazgpu release' or will
 automatically expire after the specified duration.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		gpuCount, _ := cmd.Flags().GetInt("gpus")
-		gpuIDs, _ := cmd.Flags().GetIntSlice("gpu-ids")
-		durationStr, _ := cmd.Flags().GetString("duration")
+		gpuCount := viper.GetInt("reserve.gpus")
+		gpuIDs := viper.GetIntSlice("reserve.gpu-ids")
+		durationStr := viper.GetString("reserve.duration")
 
 		return runReserve(cmd.Context(), gpuCount, gpuIDs, durationStr)
 	},

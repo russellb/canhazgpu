@@ -7,6 +7,7 @@ import (
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var releaseCmd = &cobra.Command{
@@ -26,7 +27,7 @@ Examples:
   canhazgpu release                # Release all manually reserved GPUs
   canhazgpu release --gpu-ids 1,3  # Release specific GPUs`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		gpuIDs, _ := cmd.Flags().GetIntSlice("gpu-ids")
+		gpuIDs := viper.GetIntSlice("release.gpu-ids")
 		return runRelease(cmd.Context(), gpuIDs)
 	},
 }

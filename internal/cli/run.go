@@ -17,6 +17,7 @@ import (
 	"github.com/russellb/canhazgpu/internal/types"
 	"github.com/russellb/canhazgpu/internal/utils"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var runCmd = &cobra.Command{
@@ -66,9 +67,9 @@ Timeout formats supported:
 The '--' separator is required - it tells canhazgpu where its options end
 and your command begins.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		gpuCount, _ := cmd.Flags().GetInt("gpus")
-		gpuIDs, _ := cmd.Flags().GetIntSlice("gpu-ids")
-		timeoutStr, _ := cmd.Flags().GetString("timeout")
+		gpuCount := viper.GetInt("run.gpus")
+		gpuIDs := viper.GetIntSlice("run.gpu-ids")
+		timeoutStr := viper.GetString("run.timeout")
 
 		// Check if "--" separator was used
 		dashIndex := cmd.ArgsLenAtDash()
