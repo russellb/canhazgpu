@@ -52,6 +52,8 @@ func (a *AMDProvider) DetectGPUUsage(ctx context.Context) (map[int]*types.GPUUsa
 			MemoryMB:  memoryMB,
 			Processes: []types.GPUProcessInfo{},
 			Users:     make(map[string]bool),
+			Provider:  "AMD",
+			Model:     "", // Leave blank for AMD GPUs
 		}
 
 		// Add processes for this GPU

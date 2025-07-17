@@ -306,6 +306,8 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             color: var(--text-secondary);
             margin-left: 5px;
             text-align: center;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         .status-badge {
             padding: 5px 12px;
@@ -327,6 +329,13 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             padding-top: 12px;
             border-top: 1px solid var(--border-color);
             display: none;
+        }
+        .gpu-hardware-info {
+            color: var(--accent-color);
+            font-weight: 600;
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
         }
         .memory-usage {
             display: flex;
@@ -684,6 +693,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 
                 html += '<div class="gpu-header-center">';
                 html += '<div class="gpu-id">GPU ' + gpu.gpu_id + '</div>';
+                
                 if (summary) {
                     html += '<div class="gpu-summary">' + summary + '</div>';
                 }
@@ -692,6 +702,15 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 html += '<span class="status-badge status-' + statusClass + '">' + statusText + '</span>';
                 html += '</div>';
                 html += '<div class="gpu-details">';
+                
+                // Add GPU provider and model information at the top of details
+                if (gpu.provider) {
+                    if (gpu.gpu_model) {
+                        html += '<div class="gpu-hardware-info"><strong>Hardware:</strong> ' + gpu.provider + ' ' + gpu.gpu_model + '</div>';
+                    } else {
+                        html += '<div class="gpu-hardware-info"><strong>Hardware:</strong> ' + gpu.provider + '</div>';
+                    }
+                }
                 
                 if (gpu.user) {
                     html += '<div><strong>User:</strong> ' + gpu.user + '</div>';
@@ -1039,6 +1058,8 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		ProcessInfo     string         `json:"process_info,omitempty"`
 		Error           string         `json:"error,omitempty"`
 		ModelInfo       *gpu.ModelInfo `json:"model_info,omitempty"`
+		Provider        string         `json:"provider,omitempty"`
+		GPUModel        string         `json:"gpu_model,omitempty"`
 	}
 
 	jsonStatuses := make([]jsonGPUStatus, len(statuses))
@@ -1054,6 +1075,8 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 			ProcessInfo:     status.ProcessInfo,
 			Error:           status.Error,
 			ModelInfo:       status.ModelInfo,
+			Provider:        status.Provider,
+			GPUModel:        status.GPUModel,
 		}
 
 		if !status.LastHeartbeat.IsZero() {
@@ -1228,6 +1251,8 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 		Status:         "AVAILABLE",
 		LastReleased:   now.Add(-2 * time.Hour),
 		ValidationInfo: "[validated: 45MB used]",
+		Provider:       "NVIDIA",
+		GPUModel:       "H100",
 	}
 
 	// GPU 1: alice running meta-llama/Llama-3.1-8B-Instruct for 1h 15m
@@ -1239,6 +1264,8 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 		LastHeartbeat:   now.Add(-30 * time.Second),
 		Duration:        75 * time.Minute,
 		ValidationInfo:  "[validated: 8452MB, 2 processes]",
+		Provider:        "NVIDIA",
+		GPUModel:        "H100",
 		ModelInfo: &gpu.ModelInfo{
 			Model:    "meta-llama/Llama-3.1-8B-Instruct",
 			Provider: "meta-llama",
@@ -1254,6 +1281,8 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 		LastHeartbeat:   now.Add(-15 * time.Second),
 		Duration:        45 * time.Minute,
 		ValidationInfo:  "[validated: 15234MB, 1 processes]",
+		Provider:        "NVIDIA",
+		GPUModel:        "A100",
 		ModelInfo: &gpu.ModelInfo{
 			Model:    "deepseek-ai/deepseek-v2",
 			Provider: "deepseek-ai",
@@ -1269,6 +1298,8 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 		LastHeartbeat:   now.Add(-15 * time.Second),
 		Duration:        45 * time.Minute,
 		ValidationInfo:  "[validated: 15234MB, 1 processes]",
+		Provider:        "NVIDIA",
+		GPUModel:        "A100",
 		ModelInfo: &gpu.ModelInfo{
 			Model:    "deepseek-ai/deepseek-v2",
 			Provider: "deepseek-ai",
@@ -1284,6 +1315,8 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 		ExpiryTime:      now.Add(6 * time.Hour),
 		Duration:        2 * time.Hour,
 		ValidationInfo:  "[validated: 23045MB, 1 processes]",
+		Provider:        "NVIDIA",
+		GPUModel:        "RTX 4090",
 		ModelInfo: &gpu.ModelInfo{
 			Model:    "qwen/Qwen2.5-72B-Instruct",
 			Provider: "qwen",
@@ -1299,6 +1332,8 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 		LastHeartbeat:   now,
 		Duration:        30 * time.Minute,
 		ValidationInfo:  "[validated: 19532MB, 1 processes]",
+		Provider:        "NVIDIA",
+		GPUModel:        "RTX 4090",
 		ModelInfo: &gpu.ModelInfo{
 			Model:    "mistralai/Mistral-Large-2",
 			Provider: "mistralai",
@@ -1314,6 +1349,8 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 		LastHeartbeat:   now.Add(-45 * time.Second),
 		Duration:        90 * time.Minute,
 		ValidationInfo:  "[validated: 12856MB, 2 processes]",
+		Provider:        "AMD",
+		GPUModel:        "",
 		ModelInfo: &gpu.ModelInfo{
 			Model:    "redhatai/granite-20b-multilingual",
 			Provider: "redhatai",
@@ -1325,6 +1362,8 @@ func (ws *webServer) generateDemoStatus() []gpu.GPUStatusInfo {
 		GPUID:          7,
 		Status:         "AVAILABLE",
 		ValidationInfo: "[validated: 0MB used]",
+		Provider:       "AMD",
+		GPUModel:       "",
 	}
 
 	return statuses

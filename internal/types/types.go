@@ -71,6 +71,8 @@ type GPUUsage struct {
 	MemoryMB  int              `json:"memory_mb"`
 	Processes []GPUProcessInfo `json:"processes"`
 	Users     map[string]bool  `json:"users"`
+	Provider  string           `json:"provider"` // "nvidia" or "amd"
+	Model     string           `json:"model"`    // GPU model name (e.g., "H100", "RTX 4090") or "AMD"
 }
 
 // GPUProcessInfo represents a process using a GPU

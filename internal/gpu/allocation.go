@@ -220,7 +220,9 @@ type GPUStatusInfo struct {
 	UnreservedUsers []string
 	ProcessInfo     string
 	Error           string
-	ModelInfo       *ModelInfo `json:"model_info,omitempty"` // Detected model information
+	ModelInfo       *ModelInfo `json:"model_info,omitempty"` // Detected AI model information
+	Provider        string     `json:"provider,omitempty"`   // GPU provider (e.g., "NVIDIA", "AMD")
+	GPUModel        string     `json:"gpu_model,omitempty"`  // GPU model (e.g., "H100", "RTX 4090")
 }
 
 func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usage *types.GPUUsage) GPUStatusInfo {
@@ -279,6 +281,12 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 	// Detect model information from processes if available
 	if usage != nil && len(usage.Processes) > 0 {
 		status.ModelInfo = DetectModelFromProcesses(usage.Processes)
+	}
+
+	// Add GPU provider and model information if available
+	if usage != nil {
+		status.Provider = usage.Provider
+		status.GPUModel = usage.Model
 	}
 
 	return status

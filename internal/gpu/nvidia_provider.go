@@ -47,13 +47,21 @@ func (n *NVIDIAProvider) DetectGPUUsage(ctx context.Context) (map[int]*types.GPU
 		return nil, fmt.Errorf("failed to query NVIDIA GPU processes: %v", err)
 	}
 
-	// Combine memory usage and process information
+	// Query GPU models
+	models, err := n.queryGPUModels(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query NVIDIA GPU models: %v", err)
+	}
+
+	// Combine memory usage, process information, and GPU models
 	for gpuID, memoryMB := range memoryUsage {
 		gpuUsage := &types.GPUUsage{
 			GPUID:     gpuID,
 			MemoryMB:  memoryMB,
 			Processes: []types.GPUProcessInfo{},
 			Users:     make(map[string]bool),
+			Provider:  "NVIDIA",
+			Model:     models[gpuID], // Will be empty string if not found
 		}
 
 		// Add processes for this GPU
@@ -217,4 +225,35 @@ func (n *NVIDIAProvider) getGPUIDFromUUID(ctx context.Context, uuid string) (int
 	}
 
 	return -1, fmt.Errorf("GPU UUID not found: %s", uuid)
+}
+
+// queryGPUModels queries GPU model names via nvidia-smi
+func (n *NVIDIAProvider) queryGPUModels(ctx context.Context) (map[int]string, error) {
+	cmd := exec.CommandContext(ctx, "nvidia-smi",
+		"--query-gpu=index,name",
+		"--format=csv,noheader")
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	models := make(map[int]string)
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		fields := strings.Split(line, ", ")
+		if len(fields) >= 2 {
+			gpuID, err := strconv.Atoi(strings.TrimSpace(fields[0]))
+			if err != nil {
+				continue
+			}
+			model := strings.TrimSpace(fields[1])
+			// Remove "NVIDIA " prefix if present to keep it concise
+			model = strings.TrimPrefix(model, "NVIDIA ")
+			models[gpuID] = model
+		}
+	}
+
+	return models, scanner.Err()
 }
