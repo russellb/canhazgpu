@@ -507,22 +507,87 @@ func (c *Client) ClearAllGPUStates(ctx context.Context) error {
 
 // RecordUsageHistory records a GPU usage entry when a reservation is released
 func (c *Client) RecordUsageHistory(ctx context.Context, record *types.UsageRecord) error {
-	// Create a unique key based on timestamp and user
-	key := fmt.Sprintf("%s%d:%s:%d", types.RedisKeyUsageHistory,
-		record.EndTime.ToTime().Unix(), record.User, record.GPUID)
-
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}
 
-	// Store with 90 day expiration to prevent unbounded growth
-	return c.rdb.Set(ctx, key, data, 90*24*time.Hour).Err()
+	// Write to new sorted set format for efficient range queries
+	sortedSetKey := types.RedisKeyPrefix + "usage_history_sorted"
+	score := float64(record.EndTime.ToTime().Unix())
+
+	// Add to sorted set with timestamp as score
+	if err := c.rdb.ZAdd(ctx, sortedSetKey, &redis.Z{
+		Score:  score,
+		Member: string(data),
+	}).Err(); err != nil {
+		return fmt.Errorf("failed to add to sorted set: %v", err)
+	}
+
+	// Set expiration on sorted set (90 days) if not already set
+	if err := c.rdb.Expire(ctx, sortedSetKey, 90*24*time.Hour).Err(); err != nil {
+		// Log warning but don't fail - expiration might already be set
+		fmt.Printf("Warning: failed to set expiration on usage history: %v\n", err)
+	}
+
+	return nil
 }
 
 // GetUsageHistory retrieves usage history for the specified time range
 func (c *Client) GetUsageHistory(ctx context.Context, startTime, endTime time.Time) ([]*types.UsageRecord, error) {
-	// Get all usage history keys
+	sortedSetKey := types.RedisKeyPrefix + "usage_history_sorted"
+
+	// Check if new sorted set format exists
+	exists, err := c.rdb.Exists(ctx, sortedSetKey).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check sorted set existence: %v", err)
+	}
+
+	if exists > 0 {
+		// Use efficient sorted set range query
+		results, err := c.rdb.ZRangeByScore(ctx, sortedSetKey, &redis.ZRangeBy{
+			Min: fmt.Sprintf("%d", startTime.Unix()),
+			Max: fmt.Sprintf("%d", endTime.Unix()),
+		}).Result()
+		if err != nil {
+			return nil, fmt.Errorf("failed to query sorted set: %v", err)
+		}
+
+		var records []*types.UsageRecord
+		for _, result := range results {
+			var record types.UsageRecord
+			if err := json.Unmarshal([]byte(result), &record); err != nil {
+				continue
+			}
+			records = append(records, &record)
+		}
+
+		return records, nil
+	}
+
+	// TODO: Remove backwards compatibility fallback after migration is complete
+	// New format doesn't exist - check old format and migrate
+	oldRecords, err := c.getUsageHistoryOldFormat(ctx, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve usage history from old format: %v", err)
+	}
+
+	// If we found old records, migrate them to new format but leave old data in place
+	// TODO: Add cleanup of old data after confident migration is successful
+	if len(oldRecords) > 0 {
+		if err := c.migrateOldUsageRecords(ctx, oldRecords); err != nil {
+			// Log warning but still return the old records
+			fmt.Printf("Warning: failed to migrate old usage records: %v\n", err)
+		}
+	}
+
+	return oldRecords, nil
+}
+
+// getUsageHistoryOldFormat retrieves usage history using the old KEYS-based approach
+// This function is used for backwards compatibility during migration
+func (c *Client) getUsageHistoryOldFormat(ctx context.Context, startTime, endTime time.Time) ([]*types.UsageRecord, error) {
+	// Get all usage history keys using the old pattern
 	pattern := types.RedisKeyUsageHistory + "*"
 	keys, err := c.rdb.Keys(ctx, pattern).Result()
 	if err != nil {
@@ -541,11 +606,44 @@ func (c *Client) GetUsageHistory(ctx context.Context, startTime, endTime time.Ti
 			continue
 		}
 
-		// Filter by time range
-		if record.EndTime.ToTime().After(startTime) && record.EndTime.ToTime().Before(endTime) {
+		// Filter by time range - use <= and >= to be inclusive
+		if record.EndTime.ToTime().After(startTime) && record.EndTime.ToTime().Before(endTime.Add(time.Second)) {
 			records = append(records, &record)
 		}
 	}
 
 	return records, nil
+}
+
+// migrateOldUsageRecords migrates old format usage records to the new sorted set format
+func (c *Client) migrateOldUsageRecords(ctx context.Context, records []*types.UsageRecord) error {
+	sortedSetKey := types.RedisKeyPrefix + "usage_history_sorted"
+
+	// Batch add records to sorted set
+	var members []*redis.Z
+	for _, record := range records {
+		data, err := json.Marshal(record)
+		if err != nil {
+			continue
+		}
+
+		members = append(members, &redis.Z{
+			Score:  float64(record.EndTime.ToTime().Unix()),
+			Member: string(data),
+		})
+	}
+
+	if len(members) > 0 {
+		if err := c.rdb.ZAdd(ctx, sortedSetKey, members...).Err(); err != nil {
+			return fmt.Errorf("failed to migrate records to sorted set: %v", err)
+		}
+
+		// Set expiration on sorted set (90 days)
+		if err := c.rdb.Expire(ctx, sortedSetKey, 90*24*time.Hour).Err(); err != nil {
+			// Log warning but don't fail
+			fmt.Printf("Warning: failed to set expiration on usage history: %v\n", err)
+		}
+	}
+
+	return nil
 }

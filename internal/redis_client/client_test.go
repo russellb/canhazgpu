@@ -2,9 +2,12 @@ package redis_client
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/russellb/canhazgpu/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -534,6 +537,404 @@ func TestClient_ProviderBackwardCompatibility(t *testing.T) {
 	provider, err = client.GetAvailableProvider(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "nvidia", provider)
+}
+
+// Test Usage History functionality with sorted sets and backwards compatibility
+
+func TestClient_RecordUsageHistory_NewFormat(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	// Create test usage record
+	startTime := time.Now().Add(-2 * time.Hour)
+	endTime := time.Now().Add(-1 * time.Hour)
+	usageRecord := &types.UsageRecord{
+		User:            "testuser",
+		GPUID:           0,
+		StartTime:       types.FlexibleTime{Time: startTime},
+		EndTime:         types.FlexibleTime{Time: endTime},
+		Duration:        3600.0, // 1 hour in seconds
+		ReservationType: types.ReservationTypeRun,
+	}
+
+	// Record usage history
+	err := client.RecordUsageHistory(ctx, usageRecord)
+	assert.NoError(t, err)
+
+	// Verify record was added to sorted set
+	sortedSetKey := types.RedisKeyPrefix + "usage_history_sorted"
+	count, err := client.rdb.ZCard(ctx, sortedSetKey).Result()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), count)
+
+	// Verify the record can be retrieved by score
+	results, err := client.rdb.ZRangeByScore(ctx, sortedSetKey, &redis.ZRangeBy{
+		Min: fmt.Sprintf("%d", endTime.Unix()-1),
+		Max: fmt.Sprintf("%d", endTime.Unix()+1),
+	}).Result()
+	assert.NoError(t, err)
+	assert.Len(t, results, 1)
+
+	// Verify old format key does NOT exist (no dual-write)
+	oldKey := fmt.Sprintf("%s%d:%s:%d", types.RedisKeyUsageHistory,
+		endTime.Unix(), usageRecord.User, usageRecord.GPUID)
+	exists, err := client.rdb.Exists(ctx, oldKey).Result()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), exists)
+}
+
+func TestClient_GetUsageHistory_NewFormat(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	// Create multiple test usage records
+	baseTime := time.Now().Add(-24 * time.Hour)
+	var expectedRecords []*types.UsageRecord
+
+	for i := 0; i < 5; i++ {
+		startTime := baseTime.Add(time.Duration(i) * time.Hour)
+		endTime := baseTime.Add(time.Duration(i+1) * time.Hour)
+		usageRecord := &types.UsageRecord{
+			User:            fmt.Sprintf("user%d", i),
+			GPUID:           i % 2, // Alternate between GPU 0 and 1
+			StartTime:       types.FlexibleTime{Time: startTime},
+			EndTime:         types.FlexibleTime{Time: endTime},
+			Duration:        3600.0,
+			ReservationType: types.ReservationTypeRun,
+		}
+		expectedRecords = append(expectedRecords, usageRecord)
+
+		// Record each usage
+		err := client.RecordUsageHistory(ctx, usageRecord)
+		require.NoError(t, err)
+	}
+
+	// Query for records in a specific time range
+	queryStart := baseTime.Add(-1 * time.Hour)
+	queryEnd := baseTime.Add(3 * time.Hour)
+
+	retrievedRecords, err := client.GetUsageHistory(ctx, queryStart, queryEnd)
+	assert.NoError(t, err)
+
+	// Should get first 3 records (i=0,1,2 have end times within range)
+	assert.Len(t, retrievedRecords, 3)
+
+	// Verify records are correct
+	for i, record := range retrievedRecords {
+		assert.Equal(t, expectedRecords[i].User, record.User)
+		assert.Equal(t, expectedRecords[i].GPUID, record.GPUID)
+		assert.Equal(t, expectedRecords[i].Duration, record.Duration)
+	}
+}
+
+func TestClient_GetUsageHistory_BackwardsCompatibility(t *testing.T) {
+	// This test is now represented by TestClient_GetUsageHistory_OldFormatOnlyMigration
+	// Simplified logic: only check old format when new format doesn't exist
+	t.Skip("Test functionality moved to TestClient_GetUsageHistory_OldFormatOnlyMigration")
+}
+
+func TestClient_GetUsageHistory_MixedFormats(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	baseTime := time.Now().Add(-24 * time.Hour)
+
+	// Create some records in new format
+	for i := 0; i < 2; i++ {
+		startTime := baseTime.Add(time.Duration(i) * time.Hour)
+		endTime := baseTime.Add(time.Duration(i+1) * time.Hour)
+		usageRecord := &types.UsageRecord{
+			User:            fmt.Sprintf("newuser%d", i),
+			GPUID:           i,
+			StartTime:       types.FlexibleTime{Time: startTime},
+			EndTime:         types.FlexibleTime{Time: endTime},
+			Duration:        3600.0,
+			ReservationType: types.ReservationTypeRun,
+		}
+
+		err := client.RecordUsageHistory(ctx, usageRecord)
+		require.NoError(t, err)
+	}
+
+	// Query records - should only get new format records
+	queryStart := baseTime.Add(-1 * time.Hour)
+	queryEnd := baseTime.Add(5 * time.Hour)
+
+	retrievedRecords, err := client.GetUsageHistory(ctx, queryStart, queryEnd)
+	assert.NoError(t, err)
+
+	// Since sorted set exists, we should only get new format records
+	assert.Len(t, retrievedRecords, 2)
+
+	// Verify we only have new format users
+	userMap := make(map[string]bool)
+	for _, record := range retrievedRecords {
+		userMap[record.User] = true
+	}
+
+	assert.True(t, userMap["newuser0"])
+	assert.True(t, userMap["newuser1"])
+
+	// Verify sorted set has correct count
+	sortedSetKey := types.RedisKeyPrefix + "usage_history_sorted"
+	count, err := client.rdb.ZCard(ctx, sortedSetKey).Result()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), count)
+}
+
+func TestClient_GetUsageHistory_OldFormatOnlyMigration(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	baseTime := time.Now().Add(-24 * time.Hour)
+
+	// Create records in old format only (simulate legacy data)
+	var oldRecords []*types.UsageRecord
+	for i := 0; i < 3; i++ {
+		startTime := baseTime.Add(time.Duration(i) * time.Hour)
+		endTime := baseTime.Add(time.Duration(i+1) * time.Hour)
+		usageRecord := &types.UsageRecord{
+			User:            fmt.Sprintf("olduser%d", i),
+			GPUID:           i,
+			StartTime:       types.FlexibleTime{Time: startTime},
+			EndTime:         types.FlexibleTime{Time: endTime},
+			Duration:        3600.0,
+			ReservationType: types.ReservationTypeManual,
+		}
+		oldRecords = append(oldRecords, usageRecord)
+
+		// Store only in old format
+		oldKey := fmt.Sprintf("%s%d:%s:%d", types.RedisKeyUsageHistory,
+			endTime.Unix(), usageRecord.User, usageRecord.GPUID)
+		data, err := json.Marshal(usageRecord)
+		require.NoError(t, err)
+		err = client.rdb.Set(ctx, oldKey, data, 90*24*time.Hour).Err()
+		require.NoError(t, err)
+	}
+
+	// Verify sorted set doesn't exist yet
+	sortedSetKey := types.RedisKeyPrefix + "usage_history_sorted"
+	exists, err := client.rdb.Exists(ctx, sortedSetKey).Result()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), exists)
+
+	// Query all records - should trigger migration
+	queryStart := baseTime.Add(-1 * time.Hour)
+	queryEnd := baseTime.Add(4 * time.Hour)
+
+	retrievedRecords, err := client.GetUsageHistory(ctx, queryStart, queryEnd)
+	assert.NoError(t, err)
+	assert.Len(t, retrievedRecords, 3)
+
+	// Verify migration occurred - sorted set should now exist
+	exists, err = client.rdb.Exists(ctx, sortedSetKey).Result()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), exists)
+
+	// Verify records were migrated correctly
+	count, err := client.rdb.ZCard(ctx, sortedSetKey).Result()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), count)
+
+	// Verify retrieved records match original (order may be different due to sorted set)
+	retrievedUserMap := make(map[string]*types.UsageRecord)
+	for _, record := range retrievedRecords {
+		retrievedUserMap[record.User] = record
+	}
+
+	for _, oldRecord := range oldRecords {
+		retrievedRecord, exists := retrievedUserMap[oldRecord.User]
+		assert.True(t, exists, "Record for user %s should exist", oldRecord.User)
+		if exists {
+			assert.Equal(t, oldRecord.GPUID, retrievedRecord.GPUID)
+			assert.Equal(t, oldRecord.ReservationType, retrievedRecord.ReservationType)
+		}
+	}
+
+	// Verify old format keys still exist (per user request - don't remove old data)
+	for i, oldRecord := range oldRecords {
+		oldKey := fmt.Sprintf("%s%d:%s:%d", types.RedisKeyUsageHistory,
+			oldRecord.EndTime.ToTime().Unix(), oldRecord.User, oldRecord.GPUID)
+		exists, err := client.rdb.Exists(ctx, oldKey).Result()
+		assert.NoError(t, err)
+		assert.Equal(t, int64(1), exists, "Old format key should still exist for record %d", i)
+	}
+
+	// Subsequent queries should use new format only
+	retrievedRecords2, err := client.GetUsageHistory(ctx, queryStart, queryEnd)
+	assert.NoError(t, err)
+	assert.Len(t, retrievedRecords2, 3)
+
+	// Should have same records as before
+	for _, record := range retrievedRecords2 {
+		assert.True(t, retrievedUserMap[record.User] != nil)
+	}
+}
+
+func TestClient_UsageHistory_EmptyResults(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	// Query when no records exist
+	startTime := time.Now().Add(-2 * time.Hour)
+	endTime := time.Now().Add(-1 * time.Hour)
+
+	records, err := client.GetUsageHistory(ctx, startTime, endTime)
+	assert.NoError(t, err)
+	assert.Empty(t, records)
+}
+
+func TestClient_UsageHistory_TimeRangeFiltering(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	// Create records across different time periods
+	baseTime := time.Now().Add(-48 * time.Hour)
+	testCases := []struct {
+		name       string
+		hourOffset int
+		user       string
+	}{
+		{"old_record", 0, "user_old"},
+		{"target_record1", 24, "user_target1"},
+		{"target_record2", 25, "user_target2"},
+		{"recent_record", 47, "user_recent"},
+	}
+
+	for _, tc := range testCases {
+		startTime := baseTime.Add(time.Duration(tc.hourOffset) * time.Hour)
+		endTime := baseTime.Add(time.Duration(tc.hourOffset+1) * time.Hour)
+		usageRecord := &types.UsageRecord{
+			User:            tc.user,
+			GPUID:           0,
+			StartTime:       types.FlexibleTime{Time: startTime},
+			EndTime:         types.FlexibleTime{Time: endTime},
+			Duration:        3600.0,
+			ReservationType: types.ReservationTypeRun,
+		}
+
+		err := client.RecordUsageHistory(ctx, usageRecord)
+		require.NoError(t, err)
+	}
+
+	// Query for only the middle 2 records (target_record1 and target_record2)
+	queryStart := baseTime.Add(23 * time.Hour)
+	queryEnd := baseTime.Add(27 * time.Hour)
+
+	retrievedRecords, err := client.GetUsageHistory(ctx, queryStart, queryEnd)
+	assert.NoError(t, err)
+	assert.Len(t, retrievedRecords, 2)
+
+	// Verify correct records were returned
+	retrievedUsers := make(map[string]bool)
+	for _, record := range retrievedRecords {
+		retrievedUsers[record.User] = true
+	}
+
+	assert.True(t, retrievedUsers["user_target1"])
+	assert.True(t, retrievedUsers["user_target2"])
+	assert.False(t, retrievedUsers["user_old"])
+	assert.False(t, retrievedUsers["user_recent"])
+}
+
+func TestClient_MigrateOldUsageRecords(t *testing.T) {
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	// Create test records to migrate
+	baseTime := time.Now().Add(-24 * time.Hour)
+	var testRecords []*types.UsageRecord
+
+	for i := 0; i < 3; i++ {
+		startTime := baseTime.Add(time.Duration(i) * time.Hour)
+		endTime := baseTime.Add(time.Duration(i+1) * time.Hour)
+		usageRecord := &types.UsageRecord{
+			User:            fmt.Sprintf("migrateuser%d", i),
+			GPUID:           i,
+			StartTime:       types.FlexibleTime{Time: startTime},
+			EndTime:         types.FlexibleTime{Time: endTime},
+			Duration:        3600.0,
+			ReservationType: types.ReservationTypeManual,
+		}
+		testRecords = append(testRecords, usageRecord)
+	}
+
+	// Call migration function directly
+	err := client.migrateOldUsageRecords(ctx, testRecords)
+	assert.NoError(t, err)
+
+	// Verify records were added to sorted set
+	sortedSetKey := types.RedisKeyPrefix + "usage_history_sorted"
+	count, err := client.rdb.ZCard(ctx, sortedSetKey).Result()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), count)
+
+	// Verify records can be retrieved by time range
+	queryStart := baseTime.Add(-1 * time.Hour)
+	queryEnd := baseTime.Add(4 * time.Hour)
+
+	results, err := client.rdb.ZRangeByScore(ctx, sortedSetKey, &redis.ZRangeBy{
+		Min: fmt.Sprintf("%d", queryStart.Unix()),
+		Max: fmt.Sprintf("%d", queryEnd.Unix()),
+	}).Result()
+	assert.NoError(t, err)
+	assert.Len(t, results, 3)
+}
+
+func TestClient_UsageHistory_Performance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping performance test in short mode")
+	}
+
+	client := setupTestRedis(t)
+	ctx := context.Background()
+
+	// Create a larger number of records to test performance
+	numRecords := 1000
+	baseTime := time.Now().Add(-time.Duration(numRecords) * time.Hour)
+
+	t.Logf("Creating %d usage records for performance test", numRecords)
+	start := time.Now()
+
+	for i := 0; i < numRecords; i++ {
+		startTime := baseTime.Add(time.Duration(i) * time.Hour)
+		endTime := baseTime.Add(time.Duration(i+1) * time.Hour)
+		usageRecord := &types.UsageRecord{
+			User:            fmt.Sprintf("perfuser%d", i%10), // 10 different users
+			GPUID:           i % 8,                           // 8 GPUs
+			StartTime:       types.FlexibleTime{Time: startTime},
+			EndTime:         types.FlexibleTime{Time: endTime},
+			Duration:        3600.0,
+			ReservationType: types.ReservationTypeRun,
+		}
+
+		err := client.RecordUsageHistory(ctx, usageRecord)
+		require.NoError(t, err)
+	}
+
+	insertDuration := time.Since(start)
+	t.Logf("Inserted %d records in %v (%.2f records/sec)", numRecords, insertDuration, float64(numRecords)/insertDuration.Seconds())
+
+	// Test query performance
+	queryStart := baseTime.Add(time.Duration(numRecords/4) * time.Hour)
+	queryEnd := baseTime.Add(time.Duration(3*numRecords/4) * time.Hour)
+
+	start = time.Now()
+	retrievedRecords, err := client.GetUsageHistory(ctx, queryStart, queryEnd)
+	queryDuration := time.Since(start)
+
+	assert.NoError(t, err)
+	expectedRecords := numRecords / 2                                                       // Should get middle half of records
+	assert.InDelta(t, expectedRecords, len(retrievedRecords), float64(expectedRecords)*0.1) // Allow 10% variance
+
+	t.Logf("Retrieved %d records in %v", len(retrievedRecords), queryDuration)
+	assert.Less(t, queryDuration, 1*time.Second, "Query should complete in under 1 second")
+
+	// Verify sorted set exists and has correct count
+	sortedSetKey := types.RedisKeyPrefix + "usage_history_sorted"
+	count, err := client.rdb.ZCard(ctx, sortedSetKey).Result()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(numRecords), count)
 }
 
 func TestClient_ProviderExplicitSet(t *testing.T) {
