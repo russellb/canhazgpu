@@ -2,6 +2,8 @@
 
 ***A GPU reservation tool for single host shared development systems***
 
+![canhazgpu mascot](docs/images/mascot-small.png)
+
 In shared development environments with multiple GPUs, researchers and developers often face conflicts when trying to use GPUs simultaneously, leading to out-of-memory errors, failed training runs, and wasted time debugging resource conflicts. This utility provides a simple reservation system that coordinates GPU access across multiple users and processes on a single machine.
 
 ### Who this is for
