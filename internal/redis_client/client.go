@@ -382,8 +382,8 @@ func (c *Client) atomicReserveSpecificGPUs(ctx context.Context, request *types.A
 					-- GPU is already reserved
 					if state.type == "manual" and state.expiry_time and tonumber(state.expiry_time) < current_time then
 						-- Manual reservation has expired, continue
-					elseif state.type == "run" and state.last_heartbeat and (current_time - tonumber(state.last_heartbeat)) > 900 then
-						-- Run reservation heartbeat timeout (15 minutes), continue
+					elseif state.type == "run" and state.last_heartbeat and (current_time - tonumber(state.last_heartbeat)) > 300 then
+						-- Run reservation heartbeat timeout (5 minutes), continue
 					else
 						-- GPU is actively reserved
 						return redis.error_reply("GPU " .. gpu_id .. " is already reserved by user '" .. state.user .. "'")

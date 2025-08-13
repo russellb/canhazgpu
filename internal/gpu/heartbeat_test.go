@@ -197,7 +197,7 @@ func TestHeartbeatTiming_Concepts(t *testing.T) {
 
 	// Constants from heartbeat implementation
 	heartbeatInterval := 60 * time.Second
-	heartbeatTimeout := 15 * time.Minute
+	heartbeatTimeout := 5 * time.Minute
 
 	// Verify timing relationships
 	assert.True(t, heartbeatTimeout > heartbeatInterval,
@@ -205,8 +205,8 @@ func TestHeartbeatTiming_Concepts(t *testing.T) {
 
 	// Calculate how many heartbeats can be missed before timeout
 	missedBeatsBeforeTimeout := heartbeatTimeout / heartbeatInterval
-	assert.GreaterOrEqual(t, float64(missedBeatsBeforeTimeout), 10.0,
-		"Should allow at least 10 missed heartbeats before timeout")
+	assert.GreaterOrEqual(t, float64(missedBeatsBeforeTimeout), 5.0,
+		"Should allow at least 5 missed heartbeats before timeout")
 
 	// Verify reasonable intervals
 	assert.LessOrEqual(t, heartbeatInterval, 2*time.Minute,

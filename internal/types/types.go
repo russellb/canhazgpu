@@ -178,7 +178,7 @@ const (
 	RedisKeyUsageHistory   = RedisKeyPrefix + "usage_history:"
 
 	HeartbeatInterval = 60 * time.Second
-	HeartbeatTimeout  = 15 * time.Minute
+	HeartbeatTimeout  = 5 * time.Minute
 	LockTimeout       = 10 * time.Second
 	MaxLockRetries    = 5
 

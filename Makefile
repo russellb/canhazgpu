@@ -16,6 +16,7 @@ help:
 	@echo "  make test-coverage- Run tests with coverage report"
 	@echo "  make test-integration - Run integration tests only (requires Redis/nvidia-smi)"
 	@echo "  make deps         - Download Go dependencies"
+	@echo "  make fmt          - go fmt"
 	@echo ""
 	@echo "Documentation targets:"
 	@echo "  make docs-deps    - Install documentation dependencies"
