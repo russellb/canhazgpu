@@ -184,7 +184,18 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	// Allocate GPUs
 	allocatedGPUs, err := engine.AllocateGPUs(ctx, request)
 	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Verify we got the requested number of GPUs
+	expectedCount := gpuCount
+	if len(gpuIDs) > 0 {
+		expectedCount = len(gpuIDs)
+	}
+	if len(allocatedGPUs) != expectedCount {
+		fmt.Fprintf(os.Stderr, "Error: failed to allocate requested GPUs: requested %d, got %d\n", expectedCount, len(allocatedGPUs))
+		os.Exit(1)
 	}
 
 	if hasTimeout {
