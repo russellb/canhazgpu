@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/russellb/canhazgpu/internal/redis_client"
@@ -35,9 +33,15 @@ func NewHeartbeatManager(client *redis_client.Client, allocatedGPUs []int, user 
 }
 
 // Start begins sending heartbeats for the allocated GPUs
-func (hm *HeartbeatManager) Start() {
+func (hm *HeartbeatManager) Start() error {
+	// Send initial heartbeat synchronously before starting background tasks
+	if err := hm.sendHeartbeat(); err != nil {
+		return fmt.Errorf("failed to send initial heartbeat: %w", err)
+	}
+
+	// Now start background tasks
 	go hm.heartbeatLoop()
-	go hm.signalHandler()
+	return nil
 }
 
 // Stop stops the heartbeat and releases GPUs
@@ -59,11 +63,7 @@ func (hm *HeartbeatManager) heartbeatLoop() {
 	ticker := time.NewTicker(types.HeartbeatInterval)
 	defer ticker.Stop()
 
-	// Send initial heartbeat
-	if err := hm.sendHeartbeat(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to send initial heartbeat: %v\n", err)
-	}
-
+	// Initial heartbeat already sent in Start(), so just loop
 	for {
 		select {
 		case <-hm.ctx.Done():
@@ -104,19 +104,6 @@ func (hm *HeartbeatManager) sendHeartbeat() error {
 	}
 
 	return nil
-}
-
-// signalHandler listens for termination signals and stops the heartbeat
-func (hm *HeartbeatManager) signalHandler() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case <-sigChan:
-		hm.cancel()
-	case <-hm.ctx.Done():
-		return
-	}
 }
 
 // releaseGPUs releases all allocated GPUs when stopping

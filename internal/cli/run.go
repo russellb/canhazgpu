@@ -208,7 +208,13 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 
 	// Start heartbeat manager
 	heartbeat := gpu.NewHeartbeatManager(client, allocatedGPUs, user)
-	heartbeat.Start()
+	if err := heartbeat.Start(); err != nil {
+		// Release GPUs on failure
+		if _, releaseErr := engine.ReleaseSpecificGPUs(ctx, user, allocatedGPUs); releaseErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to release GPUs after heartbeat failure: %v\n", releaseErr)
+		}
+		return fmt.Errorf("failed to initialize heartbeat: %v", err)
+	}
 	defer heartbeat.Stop()
 
 	// Set CUDA_VISIBLE_DEVICES
