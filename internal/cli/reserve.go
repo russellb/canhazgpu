@@ -22,7 +22,7 @@ var reserveCmd = &cobra.Command{
 This is useful for interactive development sessions or planning work.
 
 You can reserve GPUs in two ways:
-- By count: --gpus N (allocates N GPUs using LRU strategy)
+- By count: --gpus N (allocates N GPUs using MRU-per-user strategy)
 - By specific IDs: --gpu-ids 1,3,5 (reserves exactly those GPU IDs)
 
 When using --gpu-ids, the --gpus flag is optional if:

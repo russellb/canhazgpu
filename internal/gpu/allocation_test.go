@@ -214,11 +214,11 @@ func TestAllocationRequest_Validation(t *testing.T) {
 	}
 }
 
-func TestLRUStrategy_Concepts(t *testing.T) {
-	// Test the concept of LRU (Least Recently Used) strategy
+func TestMRUPerUserStrategy_Concepts(t *testing.T) {
+	// Test the concept of MRU-per-user (Most Recently Used per user) strategy
 	// This tests the logic without requiring actual Redis or GPU hardware
 
-	// LRU should prioritize GPUs that were released longest ago
+	// MRU-per-user should prioritize GPUs that this user most recently used
 	now := time.Now()
 
 	// Mock GPU states with different release times
@@ -229,35 +229,63 @@ func TestLRUStrategy_Concepts(t *testing.T) {
 		3: {},                                                                // Never used (zero time)
 	}
 
-	// LRU order should be: 3 (never used), 0 (oldest), 2, 1 (newest)
-	expectedOrder := []int{3, 0, 2, 1}
-
-	// Simulate LRU sorting logic
-	type gpuWithTime struct {
-		id   int
-		time time.Time
+	// Mock user history: user "alice" used GPU 1 most recently, then GPU 2
+	userHistory := map[int]time.Time{
+		1: now.Add(-30 * time.Minute), // Used 30 min ago
+		2: now.Add(-90 * time.Minute), // Used 90 min ago
 	}
 
-	var gpus []gpuWithTime
+	// Expected MRU-per-user order for "alice":
+	// 1 (alice used most recently)
+	// 2 (alice used second most recently)
+	// 3 (never used globally - prefer over older GPUs)
+	// 0 (oldest globally, never used by alice)
+	expectedOrder := []int{1, 2, 3, 0}
+
+	// Simulate MRU-per-user sorting logic
+	type gpuWithPriority struct {
+		id             int
+		globalReleased time.Time
+		userLastUsed   time.Time
+	}
+
+	var gpus []gpuWithPriority
 	for id, state := range gpuStates {
-		gpus = append(gpus, gpuWithTime{id: id, time: state.LastReleased.Time})
+		gpus = append(gpus, gpuWithPriority{
+			id:             id,
+			globalReleased: state.LastReleased.Time,
+			userLastUsed:   userHistory[id],
+		})
 	}
 
-	// Sort by time (zero time first, then oldest first)
+	// Sort by MRU-per-user strategy
 	for i := 0; i < len(gpus)-1; i++ {
 		for j := i + 1; j < len(gpus); j++ {
-			// Zero time (never used) comes first
-			if gpus[j].time.IsZero() && !gpus[i].time.IsZero() {
+			// If both have user history, prefer more recent
+			if !gpus[i].userLastUsed.IsZero() && !gpus[j].userLastUsed.IsZero() {
+				if gpus[j].userLastUsed.After(gpus[i].userLastUsed) {
+					gpus[i], gpus[j] = gpus[j], gpus[i]
+				}
+			} else if !gpus[j].userLastUsed.IsZero() {
+				// Only j has user history, prefer it
 				gpus[i], gpus[j] = gpus[j], gpus[i]
-			} else if !gpus[i].time.IsZero() && !gpus[j].time.IsZero() && gpus[j].time.Before(gpus[i].time) {
-				gpus[i], gpus[j] = gpus[j], gpus[i]
+			} else if gpus[i].userLastUsed.IsZero() && gpus[j].userLastUsed.IsZero() {
+				// Neither has user history, use global LRU (oldest first)
+				if gpus[i].globalReleased.IsZero() && !gpus[j].globalReleased.IsZero() {
+					// i is never used, keep it before j
+				} else if !gpus[i].globalReleased.IsZero() && gpus[j].globalReleased.IsZero() {
+					// j is never used, move it before i
+					gpus[i], gpus[j] = gpus[j], gpus[i]
+				} else if !gpus[i].globalReleased.IsZero() && !gpus[j].globalReleased.IsZero() && gpus[j].globalReleased.Before(gpus[i].globalReleased) {
+					gpus[i], gpus[j] = gpus[j], gpus[i]
+				}
 			}
 		}
 	}
 
-	// Verify LRU order
+	// Verify MRU-per-user order
 	for i, expected := range expectedOrder {
-		assert.Equal(t, expected, gpus[i].id, "GPU %d should be at position %d in LRU order", expected, i)
+		assert.Equal(t, expected, gpus[i].id, "GPU %d should be at position %d in MRU-per-user order", expected, i)
 	}
 }
 

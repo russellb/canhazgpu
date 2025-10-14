@@ -152,7 +152,7 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		return c.atomicReserveSpecificGPUs(ctx, request, unreservedGPUs)
 	}
 
-	// Original logic for allocating by count
+	// MRU-per-user logic for allocating by count
 	luaScript := `
 		local gpu_count = tonumber(ARGV[1])
 		local requested = tonumber(ARGV[2])
@@ -161,7 +161,7 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		local current_time = tonumber(ARGV[5])
 		local expiry_time = ARGV[6]
 		local unreserved_gpus_json = ARGV[7]
-		
+
 		-- Parse unreserved GPUs
 		local unreserved_gpus = {}
 		if unreserved_gpus_json and unreserved_gpus_json ~= "" and unreserved_gpus_json ~= "[]" and unreserved_gpus_json ~= "null" then
@@ -172,24 +172,48 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 				end
 			end
 		end
-		
-		-- Get available GPUs with LRU ranking
+
+		-- Query usage history for this user to get their most recently used GPUs
+		local user_gpu_history = {}
+		local history_key = "canhazgpu:usage_history_sorted"
+
+		-- Get recent usage records for this user (last 100 records should be plenty)
+		local recent_records = redis.call('ZREVRANGE', history_key, 0, 99, 'WITHSCORES')
+		for i = 1, #recent_records, 2 do
+			local record_json = recent_records[i]
+			local timestamp = tonumber(recent_records[i + 1])
+
+			local success, record = pcall(cjson.decode, record_json)
+			if success and record and record.user == user and record.gpu_id ~= nil then
+				local gpu_id = tonumber(record.gpu_id)
+				-- Only keep the most recent timestamp for each GPU
+				if not user_gpu_history[gpu_id] or user_gpu_history[gpu_id] < timestamp then
+					user_gpu_history[gpu_id] = timestamp
+				end
+			end
+		end
+
+		-- Get available GPUs with MRU-per-user ranking
 		local available_gpus = {}
 		for i = 0, gpu_count - 1 do
 			local key = "canhazgpu:gpu:" .. i
 			local gpu_data = redis.call('GET', key)
-			
+
 			-- Skip unreserved GPUs
 			if not unreserved_gpus[i] then
 				if not gpu_data then
 					-- GPU is available (never used)
-					table.insert(available_gpus, {id = i, last_released = 0})
+					table.insert(available_gpus, {
+						id = i,
+						last_released = 0,
+						user_last_used = user_gpu_history[i] or 0
+					})
 				else
 					local state = cjson.decode(gpu_data)
 					if not state.user then
 						-- GPU is available
 						local last_released = 0
-						
+
 						-- Parse last_released timestamp
 						if state.last_released and state.last_released ~= "" then
 							-- RFC3339 format: extract Unix timestamp
@@ -197,34 +221,51 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 							-- For simplicity, we'll use the current_time as a reference
 							-- and assign a large value to indicate it was previously used
 							last_released = current_time - 86400 -- Default to 24 hours ago
-							
+
 							-- Better approach: extract year, month, day, hour, minute, second from RFC3339
 							-- Format: 2025-06-30T16:34:38.372177993Z
-							local year, month, day, hour, min, sec = string.match(state.last_released, 
+							local year, month, day, hour, min, sec = string.match(state.last_released,
 								"(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
-							
+
 							if year then
 								-- Convert to Unix timestamp (approximate)
 								-- This is a simplified conversion that works for recent dates
-								local days_since_epoch = (tonumber(year) - 1970) * 365 + 
-									(tonumber(month) - 1) * 30 + 
+								local days_since_epoch = (tonumber(year) - 1970) * 365 +
+									(tonumber(month) - 1) * 30 +
 									tonumber(day)
-								last_released = days_since_epoch * 86400 + 
-									tonumber(hour) * 3600 + 
-									tonumber(min) * 60 + 
+								last_released = days_since_epoch * 86400 +
+									tonumber(hour) * 3600 +
+									tonumber(min) * 60 +
 									tonumber(sec)
 							end
 						end
-						
-						table.insert(available_gpus, {id = i, last_released = last_released})
+
+						table.insert(available_gpus, {
+							id = i,
+							last_released = last_released,
+							user_last_used = user_gpu_history[i] or 0
+						})
 					end
 				end
 			end
 		end
-		
-		-- Sort by last_released (oldest first)
-		table.sort(available_gpus, function(a, b) 
-			return a.last_released < b.last_released 
+
+		-- Sort by MRU-per-user: prefer GPUs this user used most recently
+		-- If user never used a GPU, fall back to global LRU
+		table.sort(available_gpus, function(a, b)
+			-- If both have user history, prefer more recent
+			if a.user_last_used > 0 and b.user_last_used > 0 then
+				return a.user_last_used > b.user_last_used
+			end
+			-- If only one has user history, prefer it
+			if a.user_last_used > 0 then
+				return true
+			end
+			if b.user_last_used > 0 then
+				return false
+			end
+			-- Neither has user history, use global LRU (oldest first)
+			return a.last_released < b.last_released
 		end)
 		
 		-- Check if we have enough GPUs

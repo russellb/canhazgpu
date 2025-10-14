@@ -31,7 +31,7 @@ func (ae *AllocationEngine) detectGPUUsage(ctx context.Context) (map[int]*types.
 	return pm.DetectAllGPUUsageWithoutChecks(ctx)
 }
 
-// AllocateGPUs allocates GPUs using LRU strategy with race condition protection
+// AllocateGPUs allocates GPUs using MRU-per-user strategy with race condition protection
 func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.AllocationRequest) ([]int, error) {
 	// Validate the allocation request first
 	if err := request.Validate(); err != nil {
