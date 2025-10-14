@@ -20,6 +20,16 @@ import (
 	"github.com/spf13/viper"
 )
 
+// ExitCodeError is an error that carries an exit code
+type ExitCodeError struct {
+	Code    int
+	Message string
+}
+
+func (e *ExitCodeError) Error() string {
+	return e.Message
+}
+
 var runCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Reserve GPUs and run a command with CUDA_VISIBLE_DEVICES set",
@@ -79,7 +89,14 @@ and your command begins.`,
 			return err
 		}
 
-		return runRun(cmd.Context(), gpuCount, gpuIDs, timeoutStr, args)
+		err := runRun(cmd.Context(), gpuCount, gpuIDs, timeoutStr, args)
+
+		// Handle exit code errors
+		if exitErr, ok := err.(*ExitCodeError); ok {
+			os.Exit(exitErr.Code)
+		}
+
+		return err
 	},
 	DisableFlagsInUseLine: true,
 }
@@ -184,8 +201,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	// Allocate GPUs
 	allocatedGPUs, err := engine.AllocateGPUs(ctx, request)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("%v", err)
 	}
 
 	// Verify we got the requested number of GPUs
@@ -194,8 +210,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 		expectedCount = len(gpuIDs)
 	}
 	if len(allocatedGPUs) != expectedCount {
-		fmt.Fprintf(os.Stderr, "Error: failed to allocate requested GPUs: requested %d, got %d\n", expectedCount, len(allocatedGPUs))
-		os.Exit(1)
+		return fmt.Errorf("failed to allocate requested GPUs: requested %d, got %d", expectedCount, len(allocatedGPUs))
 	}
 
 	if hasTimeout {
@@ -334,22 +349,18 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	// Wait for command to complete
 	err = cmd.Wait()
 
-	// Handle exit code properly - ensure cleanup happens before exiting
+	// Handle exit code properly - ensure cleanup happens before returning
 	if err != nil {
 		if atomic.LoadInt32(&timeoutKilled) == 1 {
 			fmt.Printf("Command was terminated due to timeout\n")
-			// Stop heartbeat and clean up GPUs before exiting
-			heartbeat.Stop()
-			os.Exit(124) // Standard timeout exit code
+			// Defer will handle cleanup
+			return &ExitCodeError{Code: 124, Message: "command timed out"}
 		}
 
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				// Stop heartbeat and clean up GPUs before exiting
-				heartbeat.Stop()
-
-				// Exit with the same code as the failed command
-				os.Exit(status.ExitStatus())
+				// Defer will handle cleanup
+				return &ExitCodeError{Code: status.ExitStatus(), Message: fmt.Sprintf("command exited with code %d", status.ExitStatus())}
 			}
 		}
 		// For other types of errors, the defer will handle cleanup

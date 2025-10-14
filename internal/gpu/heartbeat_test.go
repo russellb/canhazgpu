@@ -50,7 +50,10 @@ func TestHeartbeatManager_StartStop(t *testing.T) {
 
 	t.Log("Starting heartbeat manager (launches background goroutines)")
 	// Test starting (should not panic)
-	manager.Start()
+	err := manager.Start()
+	if err != nil {
+		t.Fatalf("Failed to start heartbeat manager: %v", err)
+	}
 
 	t.Log("Waiting 100ms for heartbeat to initialize")
 	// Brief delay to let heartbeat start
@@ -89,7 +92,10 @@ func TestHeartbeatManager_Wait(t *testing.T) {
 	manager := NewHeartbeatManager(redisClient, gpuIDs, user)
 
 	t.Log("Starting heartbeat manager first")
-	manager.Start()
+	err := manager.Start()
+	if err != nil {
+		t.Fatalf("Failed to start heartbeat manager: %v", err)
+	}
 
 	t.Log("Setting up goroutine to stop manager after 100ms")
 	// Test Wait method with timeout
@@ -141,14 +147,43 @@ func TestHeartbeatManager_DoubleStop(t *testing.T) {
 	}
 	redisClient := redis_client.NewClient(config)
 
+	ctx := context.Background()
+
+	// Check if Redis is available
+	if err := redisClient.Ping(ctx); err != nil {
+		t.Skipf("Redis not available: %v", err)
+	}
+
 	gpuIDs := []int{0}
 	user := "testuser"
+
+	// Set up the GPU reservation first (required for initial heartbeat to succeed)
+	now := time.Now()
+	initialState := &types.GPUState{
+		User:          user,
+		StartTime:     types.FlexibleTime{Time: now},
+		LastHeartbeat: types.FlexibleTime{Time: now},
+		Type:          types.ReservationTypeRun,
+	}
+	if err := redisClient.SetGPUState(ctx, gpuIDs[0], initialState); err != nil {
+		t.Skipf("Cannot set up GPU state (Redis issue?): %v", err)
+	}
+
+	// Clean up after test
+	defer func() {
+		availableState := &types.GPUState{
+			LastReleased: types.FlexibleTime{Time: time.Now()},
+		}
+		_ = redisClient.SetGPUState(ctx, gpuIDs[0], availableState)
+	}()
 
 	manager := NewHeartbeatManager(redisClient, gpuIDs, user)
 
 	t.Log("Starting heartbeat manager")
-	// Start heartbeat
-	manager.Start()
+	err := manager.Start()
+	if err != nil {
+		t.Fatalf("Failed to start heartbeat manager: %v", err)
+	}
 
 	t.Log("Waiting 50ms then testing double-stop")
 	// Brief delay
