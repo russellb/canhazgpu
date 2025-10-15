@@ -47,6 +47,11 @@ func (ae *AllocationEngine) AllocateGPUs(ctx context.Context, request *types.All
 	// Get list of unreserved GPUs
 	unreservedGPUs := GetUnreservedGPUs(ctx, usage, ae.config.MemoryThreshold)
 
+	// If force flag is set, clear unreserved GPUs list to allow allocation
+	if request.Force {
+		unreservedGPUs = []int{}
+	}
+
 	// Acquire allocation lock
 	if err := ae.client.AcquireAllocationLock(ctx); err != nil {
 		return nil, err

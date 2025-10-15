@@ -229,6 +229,26 @@ func TestAllocationRequest_Validation(t *testing.T) {
 			},
 			valid: false,
 		},
+		{
+			name: "Valid request with Force flag set",
+			request: &AllocationRequest{
+				GPUIDs:          []int{0, 1, 2},
+				User:            "testuser",
+				ReservationType: "manual",
+				Force:           true,
+			},
+			valid: true,
+		},
+		{
+			name: "Valid request with Force flag false",
+			request: &AllocationRequest{
+				GPUCount:        2,
+				User:            "testuser",
+				ReservationType: "run",
+				Force:           false,
+			},
+			valid: true,
+		},
 	}
 
 	for _, tt := range tests {

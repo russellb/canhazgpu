@@ -32,9 +32,13 @@ When using --gpu-ids, the --gpus flag is optional if:
 If specific GPU IDs are requested and any are not available, the entire
 reservation will fail.
 
+Use --force to reserve GPUs that are currently in unreserved use. This is
+useful when you've started a job without using canhazgpu and want to create
+a reservation retroactively.
+
 Duration formats supported:
 - 30m (30 minutes)
-- 2h (2 hours)  
+- 2h (2 hours)
 - 1d (1 day)
 - 0.5h (30 minutes with decimal)
 
@@ -46,6 +50,7 @@ variable based on the GPU IDs shown in the output:
 Example usage:
   canhazgpu reserve --gpus 2 --duration 4h
   canhazgpu reserve --gpu-ids 1,3 --duration 2h
+  canhazgpu reserve --gpu-ids 0,1,2 --duration 8h --force
 
 The reserved GPUs must be manually released with 'canhazgpu release' or will
 automatically expire after the specified duration.`,
@@ -53,8 +58,9 @@ automatically expire after the specified duration.`,
 		gpuCount := viper.GetInt("reserve.gpus")
 		gpuIDs := viper.GetIntSlice("reserve.gpu-ids")
 		durationStr := viper.GetString("reserve.duration")
+		force := viper.GetBool("reserve.force")
 
-		return runReserve(cmd.Context(), gpuCount, gpuIDs, durationStr)
+		return runReserve(cmd.Context(), gpuCount, gpuIDs, durationStr, force)
 	},
 }
 
@@ -62,11 +68,12 @@ func init() {
 	reserveCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
 	reserveCmd.Flags().IntSliceP("gpu-ids", "G", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
 	reserveCmd.Flags().StringP("duration", "d", "8h", "Duration to reserve GPUs (e.g., 30m, 2h, 1d)")
+	reserveCmd.Flags().BoolP("force", "f", false, "Force reservation even if GPU is in unreserved use")
 
 	rootCmd.AddCommand(reserveCmd)
 }
 
-func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr string) error {
+func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr string, force bool) error {
 	// If neither is specified, default to 1 GPU
 	if gpuCount == 0 && len(gpuIDs) == 0 {
 		gpuCount = 1
@@ -103,6 +110,7 @@ func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr str
 		User:            user,
 		ReservationType: types.ReservationTypeManual,
 		ExpiryTime:      &expiryTime,
+		Force:           force,
 	}
 
 	// Allocate GPUs

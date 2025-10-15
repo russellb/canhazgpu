@@ -90,6 +90,7 @@ type AllocationRequest struct {
 	User            string
 	ReservationType string
 	ExpiryTime      *time.Time
+	Force           bool // If true, allow reserving GPUs that are in unreserved use
 }
 
 // Validate checks if the allocation request is valid
