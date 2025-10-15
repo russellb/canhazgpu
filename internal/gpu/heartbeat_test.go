@@ -154,6 +154,16 @@ func TestHeartbeatManager_DoubleStop(t *testing.T) {
 		t.Skipf("Redis not available: %v", err)
 	}
 
+	// Clear all GPU states to ensure clean test environment
+	if err := redisClient.ClearAllGPUStates(ctx); err != nil {
+		t.Skipf("Cannot clear GPU states (Redis issue?): %v", err)
+	}
+
+	// Initialize GPU count
+	if err := redisClient.SetGPUCount(ctx, 1); err != nil {
+		t.Skipf("Cannot set GPU count (Redis issue?): %v", err)
+	}
+
 	gpuIDs := []int{0}
 	user := "testuser"
 
