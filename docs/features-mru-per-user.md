@@ -1,295 +1,253 @@
-# LRU Allocation Strategy
+# MRU-per-User Allocation Strategy
 
-canhazgpu uses a **Least Recently Used (LRU)** allocation strategy to ensure fair distribution of GPU resources over time. This approach promotes equitable access and can help with thermal management and hardware longevity.
+canhazgpu uses a **Most Recently Used per User (MRU-per-user)** allocation strategy to provide better GPU affinity for individual users while maintaining fair distribution across the team. This approach gives users preference for GPUs they've recently used, which can improve performance through cache locality and familiarity.
 
-## How LRU Works
+## How MRU-per-User Works
 
 ### Basic Principle
-When multiple GPUs are available for allocation, canhazgpu selects the GPU(s) that were **released longest ago**. This ensures that:
+When allocating GPUs, canhazgpu prioritizes GPUs that **you** have used most recently, based on your usage history. If you haven't used any available GPUs, it falls back to a global LRU (Least Recently Used) strategy.
 
-- All GPUs get used over time
-- No single GPU is overworked while others sit idle
-- Resource allocation is fair across time periods
-- Thermal loads are distributed across hardware
+This ensures:
+- Users get consistent GPU assignments when possible
+- Better cache locality and potential performance improvements
+- Fair distribution when users have no history with available GPUs
+- All GPUs still get used over time
 
-### Timestamp Tracking
-Each GPU maintains a `last_released` timestamp in Redis:
+### Priority System
+The allocation follows this priority order:
 
-```json
-{
-  "last_released": 1672531200.123
-}
-```
+1. **User's Most Recent GPUs** - GPUs you used most recently are allocated first
+2. **User's Older GPUs** - Other GPUs from your history, by recency
+3. **Global LRU Fallback** - GPUs you've never used, selected by global LRU (oldest released first)
 
-When a GPU is released (either from `run` completion or manual `release`), this timestamp is updated to the current time.
+### Usage History Tracking
+Each time you release a GPU, a usage record is stored in Redis with:
+- User name
+- GPU ID
+- Start and end timestamps
+- Duration
+- Reservation type
 
-## LRU in Action
+The system queries your recent usage history (last 100 records) to determine which GPUs to prefer for you.
 
-### Example Scenario
-Consider a system with 4 GPUs where you request 2 GPUs:
+## MRU-per-User in Action
 
-```bash
-❯ canhazgpu status
-GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
---- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
-0   available          free for 5h 30m 15s                                           # Oldest release
-1   available          free for 1h 45m 30s                                           # Recent release  
-2   available          free for 3h 12m 45s                                           # Middle age
-3   available          free for 2h 08m 12s                                           # Middle age
-```
-
-**LRU Ranking** (oldest first):
-1. GPU 0 (5h 30m ago) ← Selected
-2. GPU 2 (3h 12m ago) ← Selected  
-3. GPU 3 (2h 08m ago)
-4. GPU 1 (1h 45m ago)
-
-**Result**: GPUs 0 and 2 are allocated.
-
-### Allocation Output
-```bash
-❯ canhazgpu run --gpus 2 -- python train.py
-Reserved 2 GPU(s): [0, 2] for command execution
-# CUDA_VISIBLE_DEVICES=0,2 python train.py
-```
-
-## LRU with Unauthorized Usage
-
-### Exclusion from LRU Pool
-Unauthorized GPUs are automatically excluded from LRU consideration:
+### Example Scenario - Alice's Workflow
+Alice has been working with GPUs 1 and 2 recently:
 
 ```bash
 ❯ canhazgpu status
 GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
 --- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
-0   available          free for 4h                                                    
-1   in use    bob                                           WITHOUT RESERVATION        1024MB used
-2   available          free for 1h                                                    
-3   available          free for 2h                                                    
+0   available          free for 5h 30m
+1   available          free for 30m                                                     # Alice used recently
+2   available          free for 45m                                                     # Alice used before GPU 1
+3   available          free for 2h 15m
 ```
 
-**LRU Pool** (unreserved GPU 1 excluded):
-1. GPU 0 (4h ago) ← Available for allocation
-2. GPU 3 (2h ago) ← Available for allocation
-3. GPU 2 (1h ago) ← Available for allocation
+**Alice's Usage History**:
+- GPU 1: Used 30 min ago
+- GPU 2: Used 45 min ago
+- GPU 0, 3: Never used by Alice
 
-**Request 2 GPUs**: Would get GPUs 0 and 3.
+**When Alice requests 2 GPUs**:
+1. GPU 1 (her most recent) ← Selected
+2. GPU 2 (her second most recent) ← Selected
 
-### Error Handling
-```bash
-❯ canhazgpu run --gpus 4 -- python train.py
-Error: Not enough GPUs available. Requested: 4, Available: 3 (1 GPUs in use without reservation - run 'canhazgpu status' for details)
-```
+**Result**: Alice gets GPUs 1 and 2, maintaining her workflow continuity.
 
-The system shows you exactly why allocation failed.
-
-## LRU Benefits
-
-### Fair Resource Distribution
-Without LRU, users might always get the same GPUs:
-- GPU 0 gets used constantly
-- GPU 7 never gets used
-- Uneven wear and thermal stress
-
-With LRU:
-- All GPUs get used over time
-- Fair rotation ensures equitable access
-- Better long-term hardware health
-
-### Thermal Management
-**Problem without LRU:**
-```bash
-# Always allocating GPU 0
-GPU 0: 85°C (constantly hot)
-GPU 1: 35°C (always idle)
-GPU 2: 35°C (always idle)
-GPU 3: 35°C (always idle)
-```
-
-**With LRU distribution:**
-```bash
-# Heat distributed across GPUs
-GPU 0: 65°C (used 2 hours ago)
-GPU 1: 45°C (used 6 hours ago)  
-GPU 2: 85°C (currently in use)
-GPU 3: 55°C (used 4 hours ago)
-```
-
-### Usage Pattern Analytics
-LRU timestamps provide valuable usage analytics:
+### Example Scenario - Bob's First Request
+Bob is a new user with no usage history:
 
 ```bash
 ❯ canhazgpu status
 GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
 --- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
-0   available          free for 15m 30s                                               # Recently active
-1   available          free for 8h 45m 12s                                            # Underutilized
-2   in use    alice    2h 30m 0s   run     vllm-model       heartbeat 30s ago          # Currently active
-3   available          free for 1h 20m 45s                                            # Normal usage
+0   available          free for 6h
+1   available          free for 30m
+2   available          free for 45m
+3   available          free for 2h 15m
 ```
 
-From this, you can identify:
-- **Underutilized resources** (GPU 1)
-- **Normal usage patterns** (GPUs 0, 3)
-- **Current workloads** (GPU 2)
+**Bob's Usage History**: None
 
-## Advanced LRU Scenarios
+**When Bob requests 2 GPUs** (falls back to global LRU):
+1. GPU 0 (oldest global release) ← Selected
+2. GPU 3 (second oldest) ← Selected
 
-### Mixed Reservation Types
+**Result**: Bob gets GPUs 0 and 3 using LRU fallback.
+
+## MRU Benefits
+
+### GPU Affinity
+**Scenario**: Alice is developing a model and making iterative changes.
+
+Without MRU-per-user (random or strict LRU):
+```bash
+Run 1: Gets GPUs 0, 3
+Run 2: Gets GPUs 1, 4  # Different GPUs, cache cold
+Run 3: Gets GPUs 2, 5  # Different GPUs again
+```
+
+With MRU-per-user:
+```bash
+Run 1: Gets GPUs 0, 3
+Run 2: Gets GPUs 0, 3  # Same GPUs, cache warm!
+Run 3: Gets GPUs 0, 3  # Consistent assignment
+```
+
+### Cache Locality Benefits
+Modern GPUs have caches that can benefit from reusing the same GPU:
+- **L2 cache** may retain useful data
+- **Model weights** might be partially cached
+- **Kernel compilations** might be cached by the driver
+
+### Workflow Continuity
+Users working on specific projects get consistent GPU assignments:
+- Easier debugging (same hardware behavior)
+- Better performance monitoring (comparing runs on same GPU)
+- Reduced variability in experiments
+
+### Fair Distribution Still Maintained
+MRU-per-user doesn't create unfairness:
+- If your preferred GPU is busy, you get another
+- New users get LRU allocation (fair distribution)
+- Global LRU fallback ensures all GPUs get used
+
+## Advanced Scenarios
+
+### Mixed User Workloads
+
+**System state**:
+- Alice frequently uses GPUs 1, 2
+- Bob frequently uses GPUs 3, 4
+- GPU 0, 5, 6, 7 are available
+
+**Alice requests 2 GPUs**:
+1. Checks availability of GPUs 1, 2 (her recent GPUs)
+2. Both available → Gets GPUs 1, 2
+
+**Bob requests 2 GPUs**:
+1. Checks availability of GPUs 3, 4 (his recent GPUs)
+2. Both available → Gets GPUs 3, 4
+
+**Charlie (new user) requests 2 GPUs**:
+1. No history → Falls back to global LRU
+2. Gets GPUs 0, 5 (oldest available by global LRU)
+
+**Result**: Each user gets their preferred GPUs when possible!
+
+### Handling Conflicts
+
+If multiple users want the same GPU:
+
+```bash
+# Alice and Bob both recently used GPU 1
+# GPU 1 becomes available
+# Alice requests first → Gets GPU 1
+# Bob requests second → Gets GPU 2 (his next preference) or LRU fallback
+```
+
+The system respects reservation order - first request wins.
+
+### With Unreserved Usage
+
+Unreserved GPUs are excluded from ALL allocation strategies:
+
 ```bash
 ❯ canhazgpu status
-GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
---- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
-0   available          free for 2h                                                    
-1   in use    bob      1h 0m 0s    run     transformers     heartbeat 15s ago          
-2   in use    alice    30m 0s      manual                   expires in 3h 30m 0s      
-3   available          free for 6h                                                    
+GPU STATUS      USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
+--- ----------- -------- ----------- ------- ---------------- -------------------------- ---------------------
+0   available            free for 2h
+1   UNRESERVED  bob                                           1024MB used by 1 process
+2   available            free for 1h
+3   available            free for 3h
 ```
 
-**Available for LRU**: GPUs 0 and 3
-**LRU order**: GPU 3 (6h ago), then GPU 0 (2h ago)
+**Alice's history**: GPUs 1, 2, 3 (in that order)
 
-### New System Initialization
-When GPUs are first initialized, they have no `last_released` timestamp:
+**When Alice requests 2 GPUs**:
+1. GPU 1 is her first preference, but it's UNRESERVED → Skip
+2. GPU 2 is her second preference → Select
+3. GPU 3 is her third preference → Select
 
-```bash
-❯ canhazgpu admin --gpus 4
-Initialized 4 GPUs (IDs 0 to 7)
+**Result**: Alice gets GPUs 2 and 3.
 
-❯ canhazgpu status
-GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
---- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
-0   available          never used                                                     
-1   available          never used                                                     
-2   available          never used                                                     
-3   available          never used                                                     
-```
+## Implementation Details
 
-**Initial LRU behavior**: 
-- GPUs with no `last_released` timestamp are considered "oldest"
-- Allocation order is deterministic (typically lowest ID first)
-- After first use cycle, normal LRU takes over
+### Efficient History Querying
+The system queries Redis for recent usage efficiently:
+- Queries last 100 usage records from sorted set
+- Filters for current user's records
+- Tracks most recent timestamp per GPU
+- All done atomically in a Lua script
 
-### LRU After System Restart
-LRU timestamps persist in Redis across system restarts:
-
-```bash
-# Before restart
-❯ canhazgpu status
-GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
---- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
-0   available          free for 1h 30m                                               
-1   available          free for 4h 15m                                               
-
-# After system restart
-❯ canhazgpu status  
-GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
---- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
-0   available          free for 1h 35m                                               # Time continues
-1   available          free for 4h 20m                                               # Time continues
-```
-
-## LRU Implementation Details
-
-### Atomic LRU Selection
-LRU selection happens atomically within Redis Lua scripts to prevent race conditions:
+### Atomic Selection
+MRU selection happens atomically within Redis Lua scripts:
 
 ```lua
--- Simplified LRU logic (actual implementation in Redis Lua)
-local available_gpus = {}
-for i = 0, gpu_count - 1 do
-    local gpu_data = redis.call('GET', 'canhazgpu:gpu:' .. i)
-    if gpu_data == false or gpu_is_available(gpu_data) then
-        -- Add to available list with timestamp
-        table.insert(available_gpus, {id = i, last_released = get_timestamp(gpu_data)})
+-- Query usage history for this user
+local user_gpu_history = {}
+local recent_records = redis.call('ZREVRANGE', 'canhazgpu:usage_history_sorted', 0, 99, 'WITHSCORES')
+
+-- Build user's GPU preference map
+for each record in recent_records do
+    if record.user == current_user then
+        user_gpu_history[gpu_id] = timestamp
     end
 end
 
--- Sort by last_released (oldest first)
-table.sort(available_gpus, function(a, b) 
-    return a.last_released < b.last_released 
+-- Sort available GPUs by MRU-per-user strategy
+table.sort(available_gpus, function(a, b)
+    -- If both have user history, prefer more recent
+    if a.user_last_used > 0 and b.user_last_used > 0 then
+        return a.user_last_used > b.user_last_used
+    end
+    -- If only one has user history, prefer it
+    if a.user_last_used > 0 then return true end
+    if b.user_last_used > 0 then return false end
+    -- Neither has history, use global LRU
+    return a.last_released < b.last_released
 end)
-
--- Select requested number of GPUs
-local selected = {}
-for i = 1, requested_count do
-    if available_gpus[i] then
-        table.insert(selected, available_gpus[i].id)
-    end
-end
 ```
 
-### Performance Considerations
-LRU calculation is efficient:
-- **Time complexity**: O(n log n) where n is the number of available GPUs
-- **Space complexity**: O(n) for sorting
-- **Typical performance**: <1ms for systems with dozens of GPUs
+### Performance
+- **Time complexity**: O(n log n) for sorting available GPUs
+- **History query**: O(log m + 100) where m is total history size
+- **Typical performance**: <2ms for systems with dozens of GPUs
 
-## Monitoring LRU Effectiveness
+## Monitoring MRU Effectiveness
 
-### Usage Distribution Analysis
+### Check Your GPU Affinity
 ```bash
-#!/bin/bash
-# lru_analysis.sh - Analyze GPU usage distribution
-
-echo "GPU Usage Distribution (last 24h):"
-canhazgpu status | grep "available" | while read -r line; do
-    GPU=$(echo "$line" | awk '{print $1}')
-    TIME=$(echo "$line" | sed -n 's/.*free for \([^[:space:]]*\).*/\1/p')
-    echo "GPU $GPU: $TIME"
-done | sort -k3,3n
+❯ canhazgpu report --days 7 | grep $(whoami)
 ```
 
-### Identifying Imbalances
+You should see patterns in your GPU usage - if MRU is working well, you'll repeatedly use the same GPUs.
+
+### System-Wide Distribution
 ```bash
-❯ canhazgpu status
-GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS                    VALIDATION
---- --------- -------- ----------- ------- ---------------- -------------------------- ---------------------
-0   available          free for 15m                                                   # Heavily used
-1   available          free for 30m                                                   # Heavily used
-2   available          free for 12h 45m                                               # Underutilized!
-3   available          free for 45m                                                   # Normal usage
+❯ canhazgpu report --days 7
 ```
 
-GPU 2 hasn't been used in 12+ hours - might indicate:
-- Hardware issues with that GPU
-- User preferences avoiding that GPU
-- Configuration problems
+Even with MRU-per-user, you should see all GPUs being used across all users (the LRU fallback ensures this).
 
-## Customizing LRU Behavior
-
-Currently, LRU is the only allocation strategy, but the system is designed to support alternatives:
-
-### Potential Future Strategies
-- **Round-robin**: Strict rotation regardless of release time
-- **Random**: Random selection for load balancing
-- **Thermal-aware**: Prefer cooler GPUs
-- **Performance-based**: Prefer faster GPUs for specific workloads
-
-### Configuration Extension Points
-The LRU logic is centralized and could be made configurable:
-```bash
-# Potential future configuration
-canhazgpu admin --allocation-strategy lru
-canhazgpu admin --allocation-strategy round-robin
-canhazgpu admin --allocation-strategy thermal-aware
-```
-
-## Best Practices with LRU
+## Best Practices
 
 ### For Users
-- **Don't game the system**: Trust the LRU allocation for fairness
-- **Release promptly**: Quick releases improve the LRU distribution
-- **Monitor your usage patterns**: Use `status` to see resource distribution
+- **Rely on MRU**: The system will give you your preferred GPUs when available
+- **Don't request specific IDs unnecessarily**: Let MRU handle assignment
+- **Release promptly**: Helps you and others get preferred GPUs
 
 ### For Administrators
-- **Monitor distribution**: Check for GPUs that are never used
-- **Investigate imbalances**: GPUs with very old `last_released` times may have issues
-- **Plan maintenance**: Use LRU data to schedule maintenance during low-usage periods
+- **Monitor distribution**: Ensure no GPUs are consistently idle
+- **Check affinity patterns**: Users should have consistent assignments
+- **Investigate anomalies**: If a user never gets their preferred GPU, investigate why
 
-### For System Health
-- **Thermal monitoring**: LRU helps distribute heat loads
-- **Hardware longevity**: Even usage patterns extend hardware life
-- **Performance consistency**: All GPUs stay active and ready
+### Transition from LRU
+If you're migrating from an LRU-only system:
+- **No configuration changes needed**: MRU-per-user is automatic
+- **Existing history is used**: Past usage data informs MRU decisions
+- **Graceful fallback**: Users without history get LRU allocation
 
-The LRU allocation strategy ensures that canhazgpu provides fair, efficient, and sustainable GPU resource management for your entire team.
+The MRU-per-user allocation strategy provides better user experience through GPU affinity while maintaining the fair distribution and efficiency that LRU provides.
