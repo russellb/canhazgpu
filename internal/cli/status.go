@@ -7,9 +7,9 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"text/tabwriter"
 	"time"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
 	"github.com/russellb/canhazgpu/internal/types"
@@ -44,6 +44,7 @@ var (
 	showAll     bool
 	remoteName  string
 	showSummary bool
+	noColorFlag bool
 )
 
 func init() {
@@ -51,11 +52,15 @@ func init() {
 	statusCmd.Flags().BoolVar(&showAll, "all", false, "Show status for all configured remote hosts")
 	statusCmd.Flags().StringVarP(&remoteName, "remote", "r", "", "Show status for a specific remote host")
 	statusCmd.Flags().BoolVarP(&showSummary, "summary", "s", false, "Show summary with GPU counts and availability")
+	statusCmd.Flags().BoolVar(&noColorFlag, "no-color", false, "Disable colored output")
 	rootCmd.AddCommand(statusCmd)
 }
 
 func runStatus(ctx context.Context) error {
 	config := getConfig()
+
+	// Set color mode
+	SetNoColor(noColorFlag)
 
 	// Validate flags
 	if showAll && remoteName != "" {
@@ -100,7 +105,7 @@ func runStatusLocal(ctx context.Context, config *types.Config) error {
 
 	// Display status in requested format
 	if showSummary {
-		displaySummary("localhost", statuses)
+		displaySingleHostSummary("localhost", statuses)
 	} else if jsonOutput {
 		return displayGPUStatusJSON(statuses)
 	} else {
@@ -117,7 +122,7 @@ func runStatusRemoteHost(ctx context.Context, host string) error {
 	}
 
 	if showSummary {
-		displaySummary(host, statuses)
+		displaySingleHostSummary(host, statuses)
 	} else if jsonOutput {
 		return displayGPUStatusJSON(statuses)
 	} else {
@@ -138,27 +143,23 @@ func runStatusAllHosts(ctx context.Context, config *types.Config) error {
 		return runStatusAllHostsJSON(ctx, config)
 	}
 
-	// For table and summary modes, display progressively
+	// For summary mode, collect all results first then display in table
+	if showSummary {
+		return runStatusAllHostsSummary(ctx, config)
+	}
+
+	// For table mode, display progressively
 	// Get and display local status first
 	localStatuses, localErr := getLocalStatus(ctx, config)
 
-	if showSummary {
-		// Print header for summary table
-		fmt.Printf("%-20s %5s  %-30s %9s  %6s\n",
-			"HOST", "TOTAL", "GPU_MODELS", "AVAILABLE", "IN_USE")
-		fmt.Printf("%-20s %5s  %-30s %9s  %6s\n",
-			"--------------------", "-----", "------------------------------", "---------", "------")
-
+	if true { // Always table mode here
+		fmt.Println()
 		if localErr != nil {
-			fmt.Printf("%-20s ERROR: %v\n", "localhost", localErr)
+			fmt.Printf("┌─ %s ─┐\n", FormatHost("localhost"))
+			fmt.Printf("│ %s\n", FormatDim(fmt.Sprintf("ERROR: %v", localErr)))
+			fmt.Println("└────────────┘")
 		} else {
-			displaySummary("localhost", localStatuses)
-		}
-	} else {
-		fmt.Printf("=== %s ===\n", "localhost")
-		if localErr != nil {
-			fmt.Printf("ERROR: %v\n", localErr)
-		} else {
+			fmt.Printf("┌─ %s ─┐\n", FormatHost("localhost"))
 			displayGPUStatusTable(localStatuses)
 		}
 	}
@@ -167,22 +168,77 @@ func runStatusAllHosts(ctx context.Context, config *types.Config) error {
 	for _, host := range config.RemoteHosts {
 		statuses, err := getRemoteStatus(ctx, host)
 
-		if showSummary {
-			if err != nil {
-				fmt.Printf("%s: ERROR - %v\n", host, err)
-			} else {
-				displaySummary(host, statuses)
-			}
+		fmt.Println()
+		if err != nil {
+			fmt.Printf("┌─ %s ─┐\n", FormatHost(host))
+			fmt.Printf("│ %s\n", FormatDim(fmt.Sprintf("ERROR: %v", err)))
+			fmt.Println("└────────────┘")
 		} else {
-			fmt.Println() // Blank line between hosts
-			fmt.Printf("=== %s ===\n", host)
-			if err != nil {
-				fmt.Printf("ERROR: %v\n", err)
-			} else {
-				displayGPUStatusTable(statuses)
-			}
+			fmt.Printf("┌─ %s ─┐\n", FormatHost(host))
+			displayGPUStatusTable(statuses)
 		}
 	}
+
+	return nil
+}
+
+// runStatusAllHostsSummary collects all results then displays summary table
+func runStatusAllHostsSummary(ctx context.Context, config *types.Config) error {
+	if len(config.RemoteHosts) == 0 {
+		return fmt.Errorf("no remote hosts configured in ~/.canhazgpu.yaml")
+	}
+
+	// Get local status first
+	localStatuses, localErr := getLocalStatus(ctx, config)
+
+	// Create table
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleLight)
+	t.Style().Options.SeparateRows = false
+	t.Style().Options.DrawBorder = false
+
+	// Set header
+	t.AppendHeader(table.Row{
+		FormatHeader("HOST"),
+		FormatHeader("TOTAL"),
+		FormatHeader("GPU MODELS"),
+		FormatHeader("AVAILABLE"),
+		FormatHeader("IN USE"),
+	})
+
+	// Add localhost
+	if localErr != nil {
+		t.AppendRow(table.Row{
+			FormatHost("localhost"),
+			FormatDim("ERR"),
+			FormatDim(fmt.Sprintf("ERROR: %v", localErr)),
+			FormatDim("-"),
+			FormatDim("-"),
+		})
+	} else {
+		addSummaryRow(t, "localhost", localStatuses)
+	}
+
+	// Get and add each remote host
+	for _, host := range config.RemoteHosts {
+		statuses, err := getRemoteStatus(ctx, host)
+		if err != nil {
+			t.AppendRow(table.Row{
+				FormatHost(host),
+				FormatDim("ERR"),
+				FormatDim(fmt.Sprintf("ERROR: %v", err)),
+				FormatDim("-"),
+				FormatDim("-"),
+			})
+		} else {
+			addSummaryRow(t, host, statuses)
+		}
+	}
+
+	fmt.Println()
+	t.Render()
+	fmt.Println()
 
 	return nil
 }
@@ -366,14 +422,38 @@ type hostSummary struct {
 	unreserved string
 }
 
-func displaySummary(host string, statuses []gpu.GPUStatusInfo) {
+func displaySingleHostSummary(host string, statuses []gpu.GPUStatusInfo) {
+	// Create table
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleLight)
+	t.Style().Options.SeparateRows = false
+	t.Style().Options.DrawBorder = false
+
+	// Set header
+	t.AppendHeader(table.Row{
+		FormatHeader("HOST"),
+		FormatHeader("TOTAL"),
+		FormatHeader("GPU MODELS"),
+		FormatHeader("AVAILABLE"),
+		FormatHeader("IN USE"),
+	})
+
+	// Add single row
+	addSummaryRow(t, host, statuses)
+
+	fmt.Println()
+	t.Render()
+	fmt.Println()
+}
+
+func addSummaryRow(t table.Writer, host string, statuses []gpu.GPUStatusInfo) {
 	totalGPUs := len(statuses)
 	availableCount := 0
 	inUseCount := 0
 
 	// Count by GPU model type
 	modelCounts := make(map[string]int)
-	availableByModel := make(map[string]int)
 
 	for _, status := range statuses {
 		// Get GPU model from provider info
@@ -389,9 +469,6 @@ func displaySummary(host string, statuses []gpu.GPUStatusInfo) {
 		switch status.Status {
 		case "AVAILABLE":
 			availableCount++
-			if gpuModel != "" {
-				availableByModel[gpuModel]++
-			}
 		case "IN_USE", "UNRESERVED":
 			// Combine reserved and unreserved usage into IN_USE
 			inUseCount++
@@ -419,17 +496,27 @@ func displaySummary(host string, statuses []gpu.GPUStatusInfo) {
 		modelsStr = strings.Join(parts, ", ")
 	}
 
-	fmt.Printf("%-20s %5d  %-30s %9d  %6d\n",
-		host, totalGPUs, modelsStr, availableCount, inUseCount)
+	// Format available column: show checkmark if > 0, X if 0
+	var availStr string
+	if availableCount > 0 {
+		availStr = fmt.Sprintf("%s %d", colorSuccess.Sprint("✓"), availableCount)
+	} else {
+		availStr = fmt.Sprintf("%s %d", colorError.Sprint("✗"), availableCount)
+	}
+
+	// Format in-use column: just the number, no symbol
+	inUseStr := fmt.Sprintf("%d", inUseCount)
+
+	t.AppendRow(table.Row{
+		FormatHost(host),
+		FormatMetric(totalGPUs),
+		FormatDim(modelsStr),
+		availStr,
+		inUseStr,
+	})
 }
 
 func displayGPUStatusTable(statuses []gpu.GPUStatusInfo) {
-	// Create a new tabwriter for aligned columns
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	defer func() {
-		_ = w.Flush()
-	}()
-
 	// Check if any GPU has model information
 	hasModels := false
 	for _, status := range statuses {
@@ -439,23 +526,40 @@ func displayGPUStatusTable(statuses []gpu.GPUStatusInfo) {
 		}
 	}
 
-	// Print header - exclude MODEL column if no models detected
+	// Create table
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+
+	// Set style
+	t.SetStyle(table.StyleLight)
+	t.Style().Options.SeparateRows = false
+	t.Style().Options.DrawBorder = false
+
+	// Set header
 	if hasModels {
-		_, _ = fmt.Fprintln(w, "GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION\tMODEL")
-		_, _ = fmt.Fprintln(w, "---\t------\t----\t--------\t----\t-------\t----------\t-----")
+		t.AppendHeader(table.Row{
+			FormatHeader("GPU"), FormatHeader("STATUS"), FormatHeader("USER"),
+			FormatHeader("DURATION"), FormatHeader("TYPE"), FormatHeader("DETAILS"),
+			FormatHeader("VALIDATION"), FormatHeader("MODEL"),
+		})
 	} else {
-		_, _ = fmt.Fprintln(w, "GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION")
-		_, _ = fmt.Fprintln(w, "---\t------\t----\t--------\t----\t-------\t----------")
+		t.AppendHeader(table.Row{
+			FormatHeader("GPU"), FormatHeader("STATUS"), FormatHeader("USER"),
+			FormatHeader("DURATION"), FormatHeader("TYPE"), FormatHeader("DETAILS"),
+			FormatHeader("VALIDATION"),
+		})
 	}
 
-	// Print each GPU status
+	// Add rows
 	for _, status := range statuses {
-		displaySingleGPUStatus(w, status, hasModels)
+		addGPUStatusRow(t, status, hasModels)
 	}
+
+	t.Render()
 }
 
-func displaySingleGPUStatus(w *tabwriter.Writer, status gpu.GPUStatusInfo, includeModel bool) {
-	gpu := fmt.Sprintf("%d", status.GPUID)
+func addGPUStatusRow(t table.Writer, status gpu.GPUStatusInfo, includeModel bool) {
+	gpuID := fmt.Sprintf("%d", status.GPUID)
 
 	switch status.Status {
 	case "AVAILABLE":
@@ -477,11 +581,15 @@ func displaySingleGPUStatus(w *tabwriter.Writer, status gpu.GPUStatusInfo, inclu
 		}
 
 		if includeModel {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "AVAILABLE", "-", "-", "-", details, validation, model)
+			t.AppendRow(table.Row{
+				gpuID, FormatStatus("AVAILABLE"), FormatDim("-"), FormatDim("-"), FormatDim("-"),
+				details, FormatDim(validation), model,
+			})
 		} else {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "AVAILABLE", "-", "-", "-", details, validation)
+			t.AppendRow(table.Row{
+				gpuID, FormatStatus("AVAILABLE"), FormatDim("-"), FormatDim("-"), FormatDim("-"),
+				details, FormatDim(validation),
+			})
 		}
 
 	case "IN_USE":
@@ -516,11 +624,13 @@ func displaySingleGPUStatus(w *tabwriter.Writer, status gpu.GPUStatusInfo, inclu
 		}
 
 		if includeModel {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "IN_USE", user, duration, reservationType, details, validation, model)
+			t.AppendRow(table.Row{
+				gpuID, FormatStatus("IN_USE"), user, duration, reservationType, details, FormatDim(validation), model,
+			})
 		} else {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "IN_USE", user, duration, reservationType, details, validation)
+			t.AppendRow(table.Row{
+				gpuID, FormatStatus("IN_USE"), user, duration, reservationType, details, FormatDim(validation),
+			})
 		}
 
 	case "UNRESERVED":
@@ -534,29 +644,41 @@ func displaySingleGPUStatus(w *tabwriter.Writer, status gpu.GPUStatusInfo, inclu
 		}
 
 		if includeModel {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "UNRESERVED", userList, "-", "-", details, "-", model)
+			t.AppendRow(table.Row{
+				gpuID, FormatStatus("UNRESERVED"), userList, FormatDim("-"), FormatDim("-"),
+				details, FormatDim("-"), model,
+			})
 		} else {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "UNRESERVED", userList, "-", "-", details, "-")
+			t.AppendRow(table.Row{
+				gpuID, FormatStatus("UNRESERVED"), userList, FormatDim("-"), FormatDim("-"),
+				details, FormatDim("-"),
+			})
 		}
 
 	case "ERROR":
 		if includeModel {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "ERROR", "-", "-", "-", status.Error, "-", "-")
+			t.AppendRow(table.Row{
+				gpuID, FormatStatus("ERROR"), FormatDim("-"), FormatDim("-"), FormatDim("-"),
+				status.Error, FormatDim("-"), FormatDim("-"),
+			})
 		} else {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "ERROR", "-", "-", "-", status.Error, "-")
+			t.AppendRow(table.Row{
+				gpuID, FormatStatus("ERROR"), FormatDim("-"), FormatDim("-"), FormatDim("-"),
+				status.Error, FormatDim("-"),
+			})
 		}
 
 	default:
 		if includeModel {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "UNKNOWN", "-", "-", "-", "unknown status", "-", "-")
+			t.AppendRow(table.Row{
+				gpuID, "UNKNOWN", FormatDim("-"), FormatDim("-"), FormatDim("-"),
+				"unknown status", FormatDim("-"), FormatDim("-"),
+			})
 		} else {
-			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				gpu, "UNKNOWN", "-", "-", "-", "unknown status", "-")
+			t.AppendRow(table.Row{
+				gpuID, "UNKNOWN", FormatDim("-"), FormatDim("-"), FormatDim("-"),
+				"unknown status", FormatDim("-"),
+			})
 		}
 	}
 }

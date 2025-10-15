@@ -2,12 +2,11 @@ package cli
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 	"testing"
-	"text/tabwriter"
 	"time"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/stretchr/testify/assert"
 )
@@ -40,21 +39,19 @@ func TestDisplayGPUStatusTable(t *testing.T) {
 
 	// Test that the function doesn't panic and produces expected output structure
 	var buf bytes.Buffer
-	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	tbl := table.NewWriter()
+	tbl.SetOutputMirror(&buf)
+	tbl.SetStyle(table.StyleLight)
 
-	// Print header like the actual function does
-	_, err := w.Write([]byte("GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION\tMODEL\n"))
-	assert.NoError(t, err)
-
-	_, err = w.Write([]byte("---\t------\t----\t--------\t----\t-------\t----------\t-----\n"))
-	assert.NoError(t, err)
+	// Set header
+	tbl.AppendHeader(table.Row{"GPU", "STATUS", "USER", "DURATION", "TYPE", "DETAILS", "VALIDATION", "MODEL"})
 
 	// Test each status type
 	for _, status := range statuses {
-		displaySingleGPUStatus(w, status, true)
+		addGPUStatusRow(tbl, status, true)
 	}
 
-	_ = w.Flush()
+	tbl.Render()
 	output := buf.String()
 
 	// Verify the output contains expected elements
@@ -67,24 +64,16 @@ func TestDisplayGPUStatusTable(t *testing.T) {
 	assert.Contains(t, output, "testuser", "Should show user name")
 	assert.Contains(t, output, "baduser", "Should show unreserved user")
 
-	// Check that it's formatted as a table (has tab separators)
+	// Check that it's formatted as a table
 	lines := strings.Split(output, "\n")
-	assert.True(t, len(lines) >= 5, "Should have header, separator, and data lines")
-
-	// Verify structured format (tabwriter converts tabs to spaces for alignment)
-	for i, line := range lines[:4] { // Check first 4 lines (header, separator, and first two data lines)
-		if strings.TrimSpace(line) != "" {
-			// Check that line has multiple columns separated by spaces
-			fields := strings.Fields(line)
-			assert.True(t, len(fields) >= 4, "Line %d should have multiple columns: %s", i, line)
-		}
-	}
+	assert.True(t, len(lines) >= 5, "Should have multiple lines of output")
+	assert.NotEmpty(t, output, "Output should not be empty")
 }
 
 func TestDisplayGPUStatusTable_Structure(t *testing.T) {
 	// Test that the table structure is maintained
 	assert.NotNil(t, displayGPUStatusTable)
-	assert.NotNil(t, displaySingleGPUStatus)
+	assert.NotNil(t, addGPUStatusRow)
 
 	// Test with empty status list (should not panic)
 	var emptyStatuses []gpu.GPUStatusInfo
@@ -109,10 +98,12 @@ func TestDisplaySingleGPUStatus_ModelInfo(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	tbl := table.NewWriter()
+	tbl.SetOutputMirror(&buf)
+	tbl.SetStyle(table.StyleLight)
 
-	displaySingleGPUStatus(w, status, true)
-	_ = w.Flush()
+	addGPUStatusRow(tbl, status, true)
+	tbl.Render()
 
 	output := buf.String()
 	assert.Contains(t, output, "meta-llama/Llama-2-7b-chat-hf", "Should display model information in MODEL column")
@@ -139,7 +130,9 @@ func TestDisplayGPUStatusTable_ConditionalModelColumn(t *testing.T) {
 	}
 
 	var bufNoModel bytes.Buffer
-	w1 := tabwriter.NewWriter(&bufNoModel, 0, 0, 2, ' ', 0)
+	tbl1 := table.NewWriter()
+	tbl1.SetOutputMirror(&bufNoModel)
+	tbl1.SetStyle(table.StyleLight)
 
 	// Check if any GPU has model information
 	hasModels := false
@@ -152,29 +145,23 @@ func TestDisplayGPUStatusTable_ConditionalModelColumn(t *testing.T) {
 
 	// Print header - exclude MODEL column if no models detected
 	if hasModels {
-		_, _ = fmt.Fprintln(w1, "GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION\tMODEL")
-		_, _ = fmt.Fprintln(w1, "---\t------\t----\t--------\t----\t-------\t----------\t-----")
+		tbl1.AppendHeader(table.Row{"GPU", "STATUS", "USER", "DURATION", "TYPE", "DETAILS", "VALIDATION", "MODEL"})
 	} else {
-		_, _ = fmt.Fprintln(w1, "GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION")
-		_, _ = fmt.Fprintln(w1, "---\t------\t----\t--------\t----\t-------\t----------")
+		tbl1.AppendHeader(table.Row{"GPU", "STATUS", "USER", "DURATION", "TYPE", "DETAILS", "VALIDATION"})
 	}
 
 	for _, status := range statusesNoModel {
-		displaySingleGPUStatus(w1, status, hasModels)
+		addGPUStatusRow(tbl1, status, hasModels)
 	}
-	_ = w1.Flush()
+	tbl1.Render()
 
 	outputNoModel := bufNoModel.String()
 	assert.NotContains(t, outputNoModel, "MODEL", "Should not include MODEL column when no models detected")
 	// Check that the output has the expected columns without MODEL
-	lines := strings.Split(outputNoModel, "\n")
-	if len(lines) > 0 {
-		headerLine := lines[0]
-		assert.Contains(t, headerLine, "GPU", "Should have GPU column")
-		assert.Contains(t, headerLine, "STATUS", "Should have STATUS column")
-		assert.Contains(t, headerLine, "DETAILS", "Should have DETAILS column")
-		assert.Contains(t, headerLine, "VALIDATION", "Should have VALIDATION column")
-	}
+	assert.Contains(t, outputNoModel, "GPU", "Should have GPU column")
+	assert.Contains(t, outputNoModel, "STATUS", "Should have STATUS column")
+	assert.Contains(t, outputNoModel, "DETAILS", "Should have DETAILS column")
+	assert.Contains(t, outputNoModel, "VALIDATION", "Should have VALIDATION column")
 
 	// Test with GPUs that have model information - MODEL column should be included
 	statusesWithModel := []gpu.GPUStatusInfo{
@@ -199,7 +186,9 @@ func TestDisplayGPUStatusTable_ConditionalModelColumn(t *testing.T) {
 	}
 
 	var bufWithModel bytes.Buffer
-	w2 := tabwriter.NewWriter(&bufWithModel, 0, 0, 2, ' ', 0)
+	tbl2 := table.NewWriter()
+	tbl2.SetOutputMirror(&bufWithModel)
+	tbl2.SetStyle(table.StyleLight)
 
 	// Check if any GPU has model information
 	hasModels2 := false
@@ -212,29 +201,23 @@ func TestDisplayGPUStatusTable_ConditionalModelColumn(t *testing.T) {
 
 	// Print header - include MODEL column if models detected
 	if hasModels2 {
-		_, _ = fmt.Fprintln(w2, "GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION\tMODEL")
-		_, _ = fmt.Fprintln(w2, "---\t------\t----\t--------\t----\t-------\t----------\t-----")
+		tbl2.AppendHeader(table.Row{"GPU", "STATUS", "USER", "DURATION", "TYPE", "DETAILS", "VALIDATION", "MODEL"})
 	} else {
-		_, _ = fmt.Fprintln(w2, "GPU\tSTATUS\tUSER\tDURATION\tTYPE\tDETAILS\tVALIDATION")
-		_, _ = fmt.Fprintln(w2, "---\t------\t----\t--------\t----\t-------\t----------")
+		tbl2.AppendHeader(table.Row{"GPU", "STATUS", "USER", "DURATION", "TYPE", "DETAILS", "VALIDATION"})
 	}
 
 	for _, status := range statusesWithModel {
-		displaySingleGPUStatus(w2, status, hasModels2)
+		addGPUStatusRow(tbl2, status, hasModels2)
 	}
-	_ = w2.Flush()
+	tbl2.Render()
 
 	outputWithModel := bufWithModel.String()
 	assert.Contains(t, outputWithModel, "MODEL", "Should include MODEL column when models detected")
 	// Check that the output has the expected columns including MODEL
-	lines2 := strings.Split(outputWithModel, "\n")
-	if len(lines2) > 0 {
-		headerLine2 := lines2[0]
-		assert.Contains(t, headerLine2, "GPU", "Should have GPU column")
-		assert.Contains(t, headerLine2, "STATUS", "Should have STATUS column")
-		assert.Contains(t, headerLine2, "MODEL", "Should have MODEL column")
-		assert.Contains(t, headerLine2, "DETAILS", "Should have DETAILS column")
-		assert.Contains(t, headerLine2, "VALIDATION", "Should have VALIDATION column")
-	}
+	assert.Contains(t, outputWithModel, "GPU", "Should have GPU column")
+	assert.Contains(t, outputWithModel, "STATUS", "Should have STATUS column")
+	assert.Contains(t, outputWithModel, "MODEL", "Should have MODEL column")
+	assert.Contains(t, outputWithModel, "DETAILS", "Should have DETAILS column")
+	assert.Contains(t, outputWithModel, "VALIDATION", "Should have VALIDATION column")
 	assert.Contains(t, outputWithModel, "meta-llama/Llama-2-7b-chat-hf", "Should display the detected model")
 }
