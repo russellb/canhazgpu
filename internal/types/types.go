@@ -164,6 +164,7 @@ type Config struct {
 	RedisPort       int
 	RedisDB         int
 	MemoryThreshold int
+	RemoteHosts     []string // SSH addresses (can use ~/.ssh/config entries for friendly names)
 }
 
 // Constants

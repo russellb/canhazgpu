@@ -1,7 +1,10 @@
 package utils
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"os/exec"
 	"os/user"
 	"strconv"
 	"strings"
@@ -170,4 +173,38 @@ func FormatProcessList(processes []string, maxProcesses int) string {
 	displayed := processes[:maxProcesses]
 	remaining := len(processes) - maxProcesses
 	return strings.Join(displayed, ", ") + fmt.Sprintf(" and %d more", remaining)
+}
+
+// ExecuteRemoteCommand executes a command on a remote host via SSH
+// Returns stdout, stderr, and error
+func ExecuteRemoteCommand(ctx context.Context, host string, command string) (string, string, error) {
+	// Build SSH command
+	// Use -o BatchMode=yes to prevent interactive prompts
+	// Use -o ConnectTimeout=10 to timeout connection attempts
+	sshArgs := []string{
+		"-o", "BatchMode=yes",
+		"-o", "ConnectTimeout=10",
+		"-o", "StrictHostKeyChecking=accept-new",
+		host,
+		command,
+	}
+
+	cmd := exec.CommandContext(ctx, "ssh", sshArgs...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+
+	return stdout.String(), stderr.String(), err
+}
+
+// ExecuteRemoteCanHazGPU executes a canhazgpu command on a remote host
+// Automatically adds the full path to canhazgpu if needed
+func ExecuteRemoteCanHazGPU(ctx context.Context, host string, args []string) (string, string, error) {
+	// Build the command - try to use canhazgpu from PATH
+	// The remote host should have canhazgpu installed
+	command := "canhazgpu " + strings.Join(args, " ")
+	return ExecuteRemoteCommand(ctx, host, command)
 }

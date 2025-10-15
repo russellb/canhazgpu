@@ -79,9 +79,7 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	// If a config file is found, read it in
-	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintf(os.Stderr, "Using config file: %s\n", viper.ConfigFileUsed())
-	}
+	_ = viper.ReadInConfig()
 
 	// Bind all flags to viper for automatic config file support
 	bindAllFlags()
@@ -91,6 +89,7 @@ func initConfig() {
 		RedisPort:       viper.GetInt("redis.port"),
 		RedisDB:         viper.GetInt("redis.db"),
 		MemoryThreshold: viper.GetInt("memory.threshold"),
+		RemoteHosts:     viper.GetStringSlice("remote_hosts"),
 	}
 }
 
