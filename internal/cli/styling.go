@@ -219,7 +219,8 @@ func FormatSummaryMetric(label string, value int, total int) string {
 	}
 
 	var colorFunc *color.Color
-	if label == "AVAILABLE" {
+	switch label {
+	case "AVAILABLE":
 		if percentage > 50 {
 			colorFunc = colorSuccess
 		} else if percentage > 25 {
@@ -227,7 +228,7 @@ func FormatSummaryMetric(label string, value int, total int) string {
 		} else {
 			colorFunc = colorError
 		}
-	} else if label == "IN_USE" {
+	case "IN_USE":
 		if percentage < 50 {
 			colorFunc = colorSuccess
 		} else if percentage < 75 {
@@ -235,7 +236,7 @@ func FormatSummaryMetric(label string, value int, total int) string {
 		} else {
 			colorFunc = colorError
 		}
-	} else {
+	default:
 		colorFunc = color.New(color.FgWhite)
 	}
 

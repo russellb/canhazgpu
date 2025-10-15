@@ -41,7 +41,7 @@ go install github.com/russellb/canhazgpu@latest
 # Option 2: Build from source
 make build            # Build the Go binary to ./build/canhazgpu
 make install          # Build and install to /usr/local/bin with bash completion
-make test             # Run Go tests (when implemented)
+make test-short       # Run Go tests
 
 # Option 3: Install from local source
 go install .          # Installs to $GOPATH/bin or $HOME/go/bin

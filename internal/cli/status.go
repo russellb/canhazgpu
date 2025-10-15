@@ -290,7 +290,9 @@ func runStatusAllHostsJSON(ctx context.Context, config *types.Config) error {
 
 func getLocalStatus(ctx context.Context, config *types.Config) ([]gpu.GPUStatusInfo, error) {
 	client := redis_client.NewClient(config)
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	if err := client.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("failed to connect to Redis: %v", err)
@@ -411,15 +413,6 @@ func convertJSONToStatusInfo(j JSONGPUStatus) gpu.GPUStatusInfo {
 	status.GPUModel = j.GPUModel
 
 	return status
-}
-
-type hostSummary struct {
-	host       string
-	totalGPUs  string
-	gpuModels  string
-	available  string
-	inUse      string
-	unreserved string
 }
 
 func displaySingleHostSummary(host string, statuses []gpu.GPUStatusInfo) {
