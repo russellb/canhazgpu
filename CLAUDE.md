@@ -26,7 +26,7 @@ The tool is a Go application structured as a CLI with internal packages that imp
 - **Auto-cleanup**: GPUs are automatically released when heartbeat expires (15 min timeout), manual reservations expire, or processes terminate
 - **Unreserved Usage Detection**: Provider-specific integration detects GPUs in use without proper reservations
 - **User Accountability**: Process ownership detection identifies which users are running unreserved processes
-- **LRU Allocation**: Least Recently Used strategy ensures fair GPU distribution over time
+- **MRU-per-User Allocation**: Most Recently Used per user strategy provides GPU affinity with LRU fallback for fair distribution
 - **Specific GPU Reservation**: Users can reserve exact GPU IDs (e.g., --gpu-ids 1,3) when specific hardware is needed
 - **Race Condition Protection**: Redis-based distributed locking prevents allocation conflicts
 
@@ -142,7 +142,7 @@ redis-cli get "canhazgpu:provider"
 │   │   ├── release.go              # release command implementation
 │   │   └── report.go               # report command implementation
 │   ├── gpu/                        # GPU management logic
-│   │   ├── allocation.go           # LRU allocation and coordination
+│   │   ├── allocation.go           # MRU-per-user allocation and coordination
 │   │   ├── validation.go           # GPU usage validation and process detection
 │   │   ├── model_detection.go      # AI model detection from process commands
 │   │   ├── heartbeat.go            # Background heartbeat system
@@ -181,7 +181,7 @@ redis-cli get "canhazgpu:provider"
 
 ### Allocation Strategy
 
-- `GetAvailableGPUsSortedByLRU()` in `internal/gpu/allocation.go`: LRU allocation with unreserved usage exclusion
+- `AtomicReserveGPUs()` in `internal/redis_client/client.go`: MRU-per-user allocation with unreserved usage exclusion and LRU fallback
 - `AtomicReserveGPUs()` in `internal/redis_client/client.go`: Race-condition-safe reservation with Lua scripts
 - Enhanced Redis Lua scripts validate unreserved usage list during atomic operations
 - Detailed error messages when allocation fails due to unreserved usage
@@ -190,7 +190,8 @@ redis-cli get "canhazgpu:provider"
 
 - **Run-type**: Maintained by heartbeat, auto-released when process ends
 - **Manual-type**: Time-based expiry, explicit release required
-- `LastReleased` timestamp tracking for LRU allocation decisions  
+- `LastReleased` timestamp tracking for global LRU fallback allocation
+- Usage history tracking for MRU-per-user preferences  
 - Support for flexible duration formats (30m, 2h, 1d) via `ParseDuration()`
 
 ### Locking and Concurrency
@@ -251,7 +252,7 @@ Reserved state:
 ### Validation Integration
 
 - Unreserved usage detection runs during allocation
-- LRU allocation excludes GPUs in unreserved use
+- MRU-per-user allocation excludes GPUs in unreserved use
 - Redis Lua scripts receive unreserved GPU lists for atomic validation
 - Process ownership data enriches status display but not stored in Redis
 

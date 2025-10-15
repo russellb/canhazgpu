@@ -37,7 +37,7 @@ canhazgpu web --port 8080
 - ✅ **Race condition protection**: Uses Redis-based distributed locking
 - ✅ **Manual reservations**: Reserve GPUs for specific durations  
 - ✅ **Automatic cleanup**: GPUs auto-released when processes end or reservations expire
-- ✅ **LRU allocation**: Fair distribution using least recently used strategy
+- ✅ **MRU-per-user allocation**: Smart GPU affinity using most recently used per-user strategy with LRU fallback
 - ✅ **Heartbeat monitoring**: Detects crashed processes and reclaims GPUs
 - ✅ **Unreserved usage detection**: Identifies GPUs in use without proper reservations
 - ✅ **User accountability**: Shows which users are running unreserved processes
@@ -90,7 +90,7 @@ GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS             
 ### Key Features
 - **[GPU Validation](features-validation.md)** - Real-time usage validation
 - **[Unreserved Detection](features-unreserved.md)** - Find unauthorized GPU usage
-- **[LRU Allocation](features-lru.md)** - Fair GPU distribution strategy
+- **[MRU-per-User Allocation](features-mru-per-user.md)** - Smart GPU affinity strategy
 
 ### Administration
 - **[Installation Guide](installation.md)** - Dependencies and installation

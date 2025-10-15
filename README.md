@@ -61,7 +61,7 @@ canhazgpu web --port 8080
 
 - **Race condition protection**: Uses Redis-based distributed locking
 - **Automatic cleanup**: GPUs auto-released when processes end or reservations expire
-- **LRU allocation**: Fair distribution using least recently used strategy
+- **MRU-per-user allocation**: Smart GPU affinity using most recently used per-user strategy with LRU fallback
 - **Specific GPU reservation**: Reserve exact GPU IDs when needed (e.g., --gpu-ids 1,3)
 - **Unreserved usage detection**: Identifies GPUs in use without proper reservations
 - **Real-time validation**: Uses nvidia-smi or amd-smi to verify actual GPU usage
@@ -140,7 +140,7 @@ canhazgpu admin --gpus 8 --provider amd
 
 1. **Validation**: Uses nvidia-smi or amd-smi to detect actual GPU usage and identify conflicts
 2. **Coordination**: Uses Redis for distributed state management and race condition prevention  
-3. **Allocation**: LRU (Least Recently Used) strategy ensures fair resource distribution
+3. **Allocation**: MRU-per-user (Most Recently Used per user) strategy provides GPU affinity with LRU fallback for fair distribution
 4. **Monitoring**: Heartbeat system tracks active reservations and handles cleanup
 5. **Enforcement**: Automatically excludes unreserved GPU usage from allocation
 

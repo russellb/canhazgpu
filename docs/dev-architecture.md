@@ -17,7 +17,7 @@ canhazgpu is designed as a Go CLI application that uses Redis for distributed co
 │ - run           │    │ - GPU tracking  │    │ - Usage detection│
 │ - reserve       │    │ - Heartbeats    │    │ - Process owner │
 │ - release       │    │ - Locking       │    │ - Memory usage  │
-│ - status        │    │ - LRU tracking  │    │ - Conflict check│
+│ - status        │    │ - MRU-per-user  │    │ - Conflict check│
 │ - admin         │    │ - Expiry        │    │ - Real-time scan│
 │ - report        │    │ - Usage history │    │ - GPU processes │
 │ - web           │    │ - Time tracking │    │ - Memory usage  │
@@ -109,7 +109,7 @@ def detect_gpu_usage():
 
 ### 4. Allocation Engine (`canhazgpu:lines 303-444`)
 
-LRU-based GPU allocation with race condition protection:
+MRU-per-user GPU allocation with LRU fallback and race condition protection:
 
 ```python
 def atomic_reserve_gpus(requested_gpus, user, reservation_type, expiry_time=None):
@@ -124,10 +124,11 @@ def atomic_reserve_gpus(requested_gpus, user, reservation_type, expiry_time=None
         local current_time = tonumber(ARGV[5])
         local expiry_time = ARGV[6] ~= "None" and tonumber(ARGV[6]) or nil
         
-        -- Get available GPUs with LRU ranking
+        -- Get available GPUs with MRU-per-user ranking
         local available_gpus = {}
         for i = 0, gpu_count - 1 do
-            -- Check GPU availability and LRU ranking
+            -- Check GPU availability and MRU-per-user ranking
+            -- Query user's usage history for GPU preferences
             -- Implementation details...
         end
         
@@ -148,7 +149,7 @@ def atomic_reserve_gpus(requested_gpus, user, reservation_type, expiry_time=None
 
 **Key responsibilities:**
 - Atomic GPU allocation to prevent race conditions
-- LRU (Least Recently Used) allocation strategy
+- MRU-per-user (Most Recently Used per user) allocation strategy with LRU fallback
 - Integration with validation layer for unreserved usage exclusion
 - Rollback on partial allocation failures
 
@@ -369,9 +370,9 @@ GPU usage could change between validation and allocation.
 
 ### 1. Alternative Allocation Strategies
 
-Current LRU allocation could be replaced with:
-- Round-robin allocation
-- Thermal-aware allocation
+Current MRU-per-user allocation could be enhanced with:
+- Thermal-aware allocation (prefer cooler GPUs)
+- Performance-based allocation (prefer faster GPUs)
 - Performance-based allocation
 - User priority-based allocation
 
@@ -425,7 +426,7 @@ internal/
 │   ├── report.go          # Usage reporting
 │   └── web.go             # Web dashboard server
 ├── gpu/                    # GPU management logic
-│   ├── allocation.go      # LRU allocation engine
+│   ├── allocation.go      # MRU-per-user allocation engine
 │   ├── validation.go      # nvidia-smi integration
 │   └── heartbeat.go       # Heartbeat manager
 ├── redis_client/          # Redis operations
@@ -475,11 +476,13 @@ type UsageRecord struct {
 - Dark theme for developer-friendly interface
 - Progressive enhancement approach
 
-#### 3. Enhanced LRU Implementation
+#### 3. Enhanced MRU-per-User Implementation
 
 **Improvements:**
+- Efficient usage history queries (last 100 records)
+- Per-user GPU preference tracking
 - Proper RFC3339 timestamp parsing in Lua scripts
-- Better handling of never-used GPUs (last_released = 0)
+- Better handling of never-used GPUs (fallback to global LRU)
 - Atomic operations prevent allocation races
 
 ### Performance Optimizations

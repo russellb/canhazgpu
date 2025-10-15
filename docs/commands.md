@@ -273,7 +273,7 @@ canhazgpu run --gpus 1 --timeout 30m -- python test_model.py
 **Behavior:**
 1. Validates actual GPU availability using nvidia-smi
 2. Excludes GPUs that are in use without reservation
-3. Reserves the requested number of GPUs using LRU allocation
+3. Reserves the requested number of GPUs using MRU-per-user allocation (with LRU fallback)
 4. Sets `CUDA_VISIBLE_DEVICES` to the allocated GPU IDs
 5. Runs your command
 6. Automatically releases GPUs when the command finishes
@@ -478,13 +478,14 @@ All allocation commands (`run` and `reserve`) automatically:
 2. **Exclude unreserved GPUs** from the available pool
 3. **Provide detailed error messages** if insufficient GPUs remain
 
-### LRU Allocation
+### MRU-per-User Allocation
 
-When multiple GPUs are available, the system uses **Least Recently Used** allocation:
+When multiple GPUs are available, the system uses **Most Recently Used per User** allocation:
 
-- GPUs that were released longest ago are allocated first
-- Ensures fair distribution of GPU usage over time
-- Helps with thermal management and hardware wear leveling
+- Prioritizes GPUs that you have used most recently (based on your usage history)
+- Falls back to global LRU (Least Recently Used) for GPUs you haven't used
+- Provides GPU affinity for better cache locality and workflow continuity
+- Ensures fair distribution across all users while respecting individual preferences
 
 ### Reservation Types
 
