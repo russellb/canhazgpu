@@ -12,31 +12,31 @@ var (
 	noColor = false
 
 	// Status colors
-	colorAvailable   = color.New(color.FgGreen, color.Bold)
-	colorInUse       = color.New(color.FgBlue)
-	colorUnreserved  = color.New(color.FgYellow, color.Bold)
-	colorError       = color.New(color.FgRed, color.Bold)
+	colorAvailable  = color.New(color.FgGreen, color.Bold)
+	colorInUse      = color.New(color.FgBlue)
+	colorUnreserved = color.New(color.FgYellow, color.Bold)
+	colorError      = color.New(color.FgRed, color.Bold)
 
 	// UI element colors
-	colorHeader      = color.New(color.FgCyan, color.Bold)
-	colorHost        = color.New(color.FgMagenta, color.Bold)
-	colorMetric      = color.New(color.FgWhite, color.Bold)
-	colorDim         = color.New(color.Faint)
-	colorSuccess     = color.New(color.FgGreen)
-	colorWarning     = color.New(color.FgYellow)
+	colorHeader  = color.New(color.FgCyan, color.Bold)
+	colorHost    = color.New(color.FgMagenta, color.Bold)
+	colorMetric  = color.New(color.FgWhite, color.Bold)
+	colorDim     = color.New(color.Faint)
+	colorSuccess = color.New(color.FgGreen)
+	colorWarning = color.New(color.FgYellow)
 
 	// Box drawing characters
-	boxHorizontal     = "─"
-	boxVertical       = "│"
-	boxTopLeft        = "┌"
-	boxTopRight       = "┐"
-	boxBottomLeft     = "└"
-	boxBottomRight    = "┘"
-	boxCross          = "┼"
-	boxTDown          = "┬"
-	boxTUp            = "┴"
-	boxTRight         = "├"
-	boxTLeft          = "┤"
+	boxHorizontal  = "─"
+	boxVertical    = "│"
+	boxTopLeft     = "┌"
+	boxTopRight    = "┐"
+	boxBottomLeft  = "└"
+	boxBottomRight = "┘"
+	boxCross       = "┼"
+	boxTDown       = "┬"
+	boxTUp         = "┴"
+	boxTRight      = "├"
+	boxTLeft       = "┤"
 )
 
 func init() {
