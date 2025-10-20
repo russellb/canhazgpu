@@ -377,6 +377,7 @@ func convertJSONToStatusInfo(j JSONGPUStatus) gpu.GPUStatusInfo {
 		GPUID:  j.GPUID,
 		Status: j.Status,
 		User:   j.User,
+		Note:   j.Note,
 	}
 
 	// Parse duration if present
@@ -533,13 +534,13 @@ func displayGPUStatusTable(statuses []gpu.GPUStatusInfo) {
 		t.AppendHeader(table.Row{
 			FormatHeader("GPU"), FormatHeader("STATUS"), FormatHeader("USER"),
 			FormatHeader("DURATION"), FormatHeader("TYPE"), FormatHeader("DETAILS"),
-			FormatHeader("VALIDATION"), FormatHeader("MODEL"),
+			FormatHeader("VALIDATION"), FormatHeader("MODEL"), FormatHeader("NOTE"),
 		})
 	} else {
 		t.AppendHeader(table.Row{
 			FormatHeader("GPU"), FormatHeader("STATUS"), FormatHeader("USER"),
 			FormatHeader("DURATION"), FormatHeader("TYPE"), FormatHeader("DETAILS"),
-			FormatHeader("VALIDATION"),
+			FormatHeader("VALIDATION"), FormatHeader("NOTE"),
 		})
 	}
 
@@ -576,12 +577,12 @@ func addGPUStatusRow(t table.Writer, status gpu.GPUStatusInfo, includeModel bool
 		if includeModel {
 			t.AppendRow(table.Row{
 				gpuID, FormatStatus("AVAILABLE"), FormatDim("-"), FormatDim("-"), FormatDim("-"),
-				details, FormatDim(validation), model,
+				details, FormatDim(validation), model, FormatDim("-"),
 			})
 		} else {
 			t.AppendRow(table.Row{
 				gpuID, FormatStatus("AVAILABLE"), FormatDim("-"), FormatDim("-"), FormatDim("-"),
-				details, FormatDim(validation),
+				details, FormatDim(validation), FormatDim("-"),
 			})
 		}
 
@@ -616,13 +617,19 @@ func addGPUStatusRow(t table.Writer, status gpu.GPUStatusInfo, includeModel bool
 			model = status.ModelInfo.Model
 		}
 
+		// Format note
+		note := "-"
+		if status.Note != "" {
+			note = status.Note
+		}
+
 		if includeModel {
 			t.AppendRow(table.Row{
-				gpuID, FormatStatus("IN_USE"), user, duration, reservationType, details, FormatDim(validation), model,
+				gpuID, FormatStatus("IN_USE"), user, duration, reservationType, details, FormatDim(validation), model, note,
 			})
 		} else {
 			t.AppendRow(table.Row{
-				gpuID, FormatStatus("IN_USE"), user, duration, reservationType, details, FormatDim(validation),
+				gpuID, FormatStatus("IN_USE"), user, duration, reservationType, details, FormatDim(validation), note,
 			})
 		}
 
@@ -639,12 +646,12 @@ func addGPUStatusRow(t table.Writer, status gpu.GPUStatusInfo, includeModel bool
 		if includeModel {
 			t.AppendRow(table.Row{
 				gpuID, FormatStatus("UNRESERVED"), userList, FormatDim("-"), FormatDim("-"),
-				details, FormatDim("-"), model,
+				details, FormatDim("-"), model, FormatDim("-"),
 			})
 		} else {
 			t.AppendRow(table.Row{
 				gpuID, FormatStatus("UNRESERVED"), userList, FormatDim("-"), FormatDim("-"),
-				details, FormatDim("-"),
+				details, FormatDim("-"), FormatDim("-"),
 			})
 		}
 
@@ -652,12 +659,12 @@ func addGPUStatusRow(t table.Writer, status gpu.GPUStatusInfo, includeModel bool
 		if includeModel {
 			t.AppendRow(table.Row{
 				gpuID, FormatStatus("ERROR"), FormatDim("-"), FormatDim("-"), FormatDim("-"),
-				status.Error, FormatDim("-"), FormatDim("-"),
+				status.Error, FormatDim("-"), FormatDim("-"), FormatDim("-"),
 			})
 		} else {
 			t.AppendRow(table.Row{
 				gpuID, FormatStatus("ERROR"), FormatDim("-"), FormatDim("-"), FormatDim("-"),
-				status.Error, FormatDim("-"),
+				status.Error, FormatDim("-"), FormatDim("-"),
 			})
 		}
 
@@ -665,12 +672,12 @@ func addGPUStatusRow(t table.Writer, status gpu.GPUStatusInfo, includeModel bool
 		if includeModel {
 			t.AppendRow(table.Row{
 				gpuID, "UNKNOWN", FormatDim("-"), FormatDim("-"), FormatDim("-"),
-				"unknown status", FormatDim("-"), FormatDim("-"),
+				"unknown status", FormatDim("-"), FormatDim("-"), FormatDim("-"),
 			})
 		} else {
 			t.AppendRow(table.Row{
 				gpuID, "UNKNOWN", FormatDim("-"), FormatDim("-"), FormatDim("-"),
-				"unknown status", FormatDim("-"),
+				"unknown status", FormatDim("-"), FormatDim("-"),
 			})
 		}
 	}
@@ -683,6 +690,7 @@ type JSONGPUStatus struct {
 	User            string         `json:"user,omitempty"`
 	Duration        string         `json:"duration,omitempty"`
 	ReservationType string         `json:"type,omitempty"`
+	Note            string         `json:"note,omitempty"`
 	Details         string         `json:"details,omitempty"`
 	ValidationInfo  string         `json:"validation,omitempty"`
 	ModelInfo       *JSONModelInfo `json:"model,omitempty"`
@@ -721,6 +729,10 @@ func displayGPUStatusJSON(statuses []gpu.GPUStatusInfo) error {
 
 		if status.ReservationType != "" {
 			jsonStatus.ReservationType = strings.ToUpper(status.ReservationType)
+		}
+
+		if status.Note != "" {
+			jsonStatus.Note = status.Note
 		}
 
 		// Add details based on status type

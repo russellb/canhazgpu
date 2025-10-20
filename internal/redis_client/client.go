@@ -157,10 +157,12 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		local gpu_count = tonumber(ARGV[1])
 		local requested = tonumber(ARGV[2])
 		local user = ARGV[3]
-		local reservation_type = ARGV[4]
-		local current_time = tonumber(ARGV[5])
-		local expiry_time = ARGV[6]
-		local unreserved_gpus_json = ARGV[7]
+		local actual_user = ARGV[4]
+		local reservation_type = ARGV[5]
+		local current_time = tonumber(ARGV[6])
+		local expiry_time = ARGV[7]
+		local unreserved_gpus_json = ARGV[8]
+		local note = ARGV[9]
 
 		-- Parse unreserved GPUs
 		local unreserved_gpus = {}
@@ -278,20 +280,26 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		for i = 1, requested do
 			local gpu_id = available_gpus[i].id
 			table.insert(allocated, gpu_id)
-			
+
 			-- Create reservation state
 			local state = {
 				user = user,
+				actual_user = actual_user,
 				start_time = current_time,
 				type = reservation_type
 			}
-			
+
 			if reservation_type == "run" then
 				state.last_heartbeat = current_time
 			elseif reservation_type == "manual" and expiry_time ~= "nil" then
 				state.expiry_time = tonumber(expiry_time)
 			end
-			
+
+			-- Add note if provided
+			if note and note ~= "" then
+				state.note = note
+			end
+
 			-- Set GPU state
 			local key = "canhazgpu:gpu:" .. gpu_id
 			redis.call('SET', key, cjson.encode(state))
@@ -324,10 +332,12 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		gpuCount,
 		request.GPUCount,
 		request.User,
+		request.ActualUser,
 		request.ReservationType,
 		currentTime,
 		expiryTime,
 		string(unreservedJSON),
+		request.Note,
 	).Result()
 
 	if err != nil {
@@ -370,11 +380,13 @@ func (c *Client) atomicReserveSpecificGPUs(ctx context.Context, request *types.A
 	luaScript := `
 		local requested_gpus_json = ARGV[1]
 		local user = ARGV[2]
-		local reservation_type = ARGV[3]
-		local current_time = tonumber(ARGV[4])
-		local expiry_time = ARGV[5]
-		local unreserved_gpus_json = ARGV[6]
-		local gpu_count = tonumber(ARGV[7])
+		local actual_user = ARGV[3]
+		local reservation_type = ARGV[4]
+		local current_time = tonumber(ARGV[5])
+		local expiry_time = ARGV[6]
+		local unreserved_gpus_json = ARGV[7]
+		local gpu_count = tonumber(ARGV[8])
+		local note = ARGV[9]
 		
 		-- Parse requested GPU IDs
 		local requested_gpus = {}
@@ -438,20 +450,26 @@ func (c *Client) atomicReserveSpecificGPUs(ctx context.Context, request *types.A
 		for _, gpu_id in ipairs(requested_gpus) do
 			local gpu_id_num = tonumber(gpu_id)
 			table.insert(allocated, gpu_id_num)
-			
+
 			-- Create reservation state
 			local state = {
 				user = user,
+				actual_user = actual_user,
 				start_time = current_time,
 				type = reservation_type
 			}
-			
+
 			if reservation_type == "run" then
 				state.last_heartbeat = current_time
 			elseif reservation_type == "manual" and expiry_time ~= "nil" then
 				state.expiry_time = tonumber(expiry_time)
 			end
-			
+
+			-- Add note if provided
+			if note and note ~= "" then
+				state.note = note
+			end
+
 			-- Set GPU state
 			local key = "canhazgpu:gpu:" .. gpu_id
 			redis.call('SET', key, cjson.encode(state))
@@ -489,11 +507,13 @@ func (c *Client) atomicReserveSpecificGPUs(ctx context.Context, request *types.A
 	result, err := c.rdb.Eval(ctx, luaScript, []string{},
 		string(requestedGPUsJSON),
 		request.User,
+		request.ActualUser,
 		request.ReservationType,
 		currentTime,
 		expiryTime,
 		string(unreservedJSON),
 		gpuCount,
+		request.Note,
 	).Result()
 
 	if err != nil {

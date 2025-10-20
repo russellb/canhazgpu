@@ -8,12 +8,14 @@ import (
 
 // GPUState represents the state of a GPU in Redis
 type GPUState struct {
-	User          string       `json:"user,omitempty"`
+	User          string       `json:"user,omitempty"`        // Display name (custom user if provided, otherwise OS user)
+	ActualUser    string       `json:"actual_user,omitempty"` // Actual OS account name
 	StartTime     FlexibleTime `json:"start_time,omitempty"`
 	LastHeartbeat FlexibleTime `json:"last_heartbeat,omitempty"`
 	Type          string       `json:"type,omitempty"` // "run" or "manual"
 	ExpiryTime    FlexibleTime `json:"expiry_time,omitempty"`
 	LastReleased  FlexibleTime `json:"last_released,omitempty"`
+	Note          string       `json:"note,omitempty"`
 }
 
 // FlexibleTime handles both Unix timestamps and RFC3339 time strings
@@ -85,12 +87,14 @@ type GPUProcessInfo struct {
 
 // AllocationRequest represents a request to allocate GPUs
 type AllocationRequest struct {
-	GPUCount        int   // Number of GPUs to allocate (ignored if GPUIDs is specified)
-	GPUIDs          []int // Specific GPU IDs to allocate (mutually exclusive with GPUCount)
-	User            string
+	GPUCount        int    // Number of GPUs to allocate (ignored if GPUIDs is specified)
+	GPUIDs          []int  // Specific GPU IDs to allocate (mutually exclusive with GPUCount)
+	User            string // Display name (custom user if --user flag provided)
+	ActualUser      string // Actual OS account name
 	ReservationType string
 	ExpiryTime      *time.Time
-	Force           bool // If true, allow reserving GPUs that are in unreserved use
+	Force           bool   // If true, allow reserving GPUs that are in unreserved use
+	Note            string // Optional note describing the reservation purpose
 }
 
 // Validate checks if the allocation request is valid
