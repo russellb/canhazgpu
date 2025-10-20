@@ -228,6 +228,7 @@ type GPUStatusInfo struct {
 	ModelInfo       *ModelInfo `json:"model_info,omitempty"` // Detected AI model information
 	Provider        string     `json:"provider,omitempty"`   // GPU provider (e.g., "NVIDIA", "AMD")
 	GPUModel        string     `json:"gpu_model,omitempty"`  // GPU model (e.g., "H100", "RTX 4090")
+	Note            string     `json:"note,omitempty"`       // Optional note describing the reservation purpose
 }
 
 func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usage *types.GPUUsage) GPUStatusInfo {
@@ -236,11 +237,17 @@ func (ae *AllocationEngine) buildGPUStatus(gpuID int, state *types.GPUState, usa
 	// Check if GPU is reserved first - if it has a valid reservation, it's not unauthorized
 	if state.User != "" {
 		status.Status = "IN_USE"
-		status.User = state.User
+		// If user and actual_user differ, show "user (actual_user)" format
+		if state.ActualUser != "" && state.User != state.ActualUser {
+			status.User = fmt.Sprintf("%s (%s)", state.ActualUser, state.User)
+		} else {
+			status.User = state.User
+		}
 		status.ReservationType = state.Type
 		status.Duration = time.Since(state.StartTime.ToTime())
 		status.LastHeartbeat = state.LastHeartbeat.ToTime()
 		status.ExpiryTime = state.ExpiryTime.ToTime()
+		status.Note = state.Note
 
 		// Build validation info
 		if usage != nil && usage.MemoryMB > ae.config.MemoryThreshold {

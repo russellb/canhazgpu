@@ -16,12 +16,16 @@ import (
 // getProcessOwner determines the owner of a process
 func getProcessOwner(pid int) (string, error) {
 	// Try /proc filesystem first
-	if user, err := getProcessOwnerFromProc(pid); err == nil {
-		return user, nil
+	user, err := getProcessOwnerFromProc(pid)
+	if err != nil {
+		// Fallback to ps command
+		user, err = getProcessOwnerFromPS(pid)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	// Fallback to ps command
-	return getProcessOwnerFromPS(pid)
+	return user, nil
 }
 
 // GetProcessOwner is the exported version for tests

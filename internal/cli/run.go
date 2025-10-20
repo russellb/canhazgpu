@@ -80,6 +80,8 @@ and your command begins.`,
 		gpuCount := viper.GetInt("run.gpus")
 		gpuIDs := viper.GetIntSlice("run.gpu-ids")
 		timeoutStr := viper.GetString("run.timeout")
+		note := viper.GetString("run.note")
+		customUser := viper.GetString("run.user")
 
 		// Check if "--" separator was used
 		dashIndex := cmd.ArgsLenAtDash()
@@ -89,7 +91,7 @@ and your command begins.`,
 			return err
 		}
 
-		err := runRun(cmd.Context(), gpuCount, gpuIDs, timeoutStr, args)
+		err := runRun(cmd.Context(), gpuCount, gpuIDs, timeoutStr, note, customUser, args)
 
 		// Handle exit code errors
 		if exitErr, ok := err.(*ExitCodeError); ok {
@@ -105,6 +107,8 @@ func init() {
 	runCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
 	runCmd.Flags().IntSliceP("gpu-ids", "G", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
 	runCmd.Flags().StringP("timeout", "t", "", "Timeout duration for graceful command termination (e.g., 30m, 2h, 1d). Disabled by default.")
+	runCmd.Flags().StringP("note", "n", "", "Optional note describing the reservation purpose")
+	runCmd.Flags().StringP("user", "u", "", "Custom user identifier (e.g., your name when using a shared account)")
 
 	// Require explicit -- separator: only parse flags before --, everything after is treated as opaque args
 	runCmd.Flags().SetInterspersed(false)
@@ -151,7 +155,7 @@ func killProcessGroup(cmd *exec.Cmd) error {
 	return nil
 }
 
-func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, command []string) error {
+func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, note string, customUser string, command []string) error {
 	// Cobra has already processed the "--" separator and given us just the command args
 
 	// If neither is specified, default to 1 GPU
@@ -188,14 +192,22 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	// Create allocation engine
 	engine := gpu.NewAllocationEngine(client, config)
 
+	// Get actual OS user and determine display user
+	actualUser := getCurrentUser()
+	displayUser := actualUser
+	if customUser != "" {
+		displayUser = customUser
+	}
+
 	// Create allocation request
-	user := getCurrentUser()
 	request := &types.AllocationRequest{
 		GPUCount:        gpuCount,
 		GPUIDs:          gpuIDs,
-		User:            user,
+		User:            displayUser,
+		ActualUser:      actualUser,
 		ReservationType: types.ReservationTypeRun,
 		ExpiryTime:      nil, // No expiry for run-type reservations
+		Note:            note,
 	}
 
 	// Allocate GPUs
@@ -222,10 +234,10 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	}
 
 	// Start heartbeat manager
-	heartbeat := gpu.NewHeartbeatManager(client, allocatedGPUs, user)
+	heartbeat := gpu.NewHeartbeatManager(client, allocatedGPUs, displayUser)
 	if err := heartbeat.Start(); err != nil {
 		// Release GPUs on failure
-		if _, releaseErr := engine.ReleaseSpecificGPUs(ctx, user, allocatedGPUs); releaseErr != nil {
+		if _, releaseErr := engine.ReleaseSpecificGPUs(ctx, displayUser, allocatedGPUs); releaseErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to release GPUs after heartbeat failure: %v\n", releaseErr)
 		}
 		return fmt.Errorf("failed to initialize heartbeat: %v", err)
