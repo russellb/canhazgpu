@@ -69,7 +69,7 @@ automatically expire after the specified duration.`,
 func init() {
 	reserveCmd.Flags().IntP("gpus", "g", 1, "Number of GPUs to reserve")
 	reserveCmd.Flags().IntSliceP("gpu-ids", "G", nil, "Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)")
-	reserveCmd.Flags().StringP("duration", "d", "8h", "Duration to reserve GPUs (e.g., 30m, 2h, 1d)")
+	reserveCmd.Flags().StringP("duration", "d", "30m", "Duration to reserve GPUs (e.g., 30m, 2h, 1d)")
 	reserveCmd.Flags().BoolP("force", "f", false, "Force reservation even if GPU is in unreserved use")
 	reserveCmd.Flags().StringP("note", "n", "", "Optional note describing the reservation purpose")
 	reserveCmd.Flags().StringP("user", "u", "", "Custom user identifier (e.g., your name when using a shared account)")
