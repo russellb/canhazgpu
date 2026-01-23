@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -148,34 +149,19 @@ func runStatusAllHosts(ctx context.Context, config *types.Config) error {
 		return runStatusAllHostsSummary(ctx, config)
 	}
 
-	// For table mode, display progressively
-	// Get and display local status first
-	localStatuses, localErr := getLocalStatus(ctx, config)
+	// Fetch all host statuses in parallel
+	results := getAllHostStatuses(ctx, config)
 
-	if true { // Always table mode here
+	// Display results in order
+	for _, result := range results {
 		fmt.Println()
-		if localErr != nil {
-			fmt.Printf("┌─ %s ─┐\n", FormatHost("localhost"))
-			fmt.Printf("│ %s\n", FormatDim(fmt.Sprintf("ERROR: %v", localErr)))
+		if result.err != nil {
+			fmt.Printf("┌─ %s ─┐\n", FormatHost(result.host))
+			fmt.Printf("│ %s\n", FormatDim(fmt.Sprintf("ERROR: %v", result.err)))
 			fmt.Println("└────────────┘")
 		} else {
-			fmt.Printf("┌─ %s ─┐\n", FormatHost("localhost"))
-			displayGPUStatusTable(localStatuses)
-		}
-	}
-
-	// Get and display each remote host progressively
-	for _, host := range config.RemoteHosts {
-		statuses, err := getRemoteStatus(ctx, host)
-
-		fmt.Println()
-		if err != nil {
-			fmt.Printf("┌─ %s ─┐\n", FormatHost(host))
-			fmt.Printf("│ %s\n", FormatDim(fmt.Sprintf("ERROR: %v", err)))
-			fmt.Println("└────────────┘")
-		} else {
-			fmt.Printf("┌─ %s ─┐\n", FormatHost(host))
-			displayGPUStatusTable(statuses)
+			fmt.Printf("┌─ %s ─┐\n", FormatHost(result.host))
+			displayGPUStatusTable(result.statuses)
 		}
 	}
 
@@ -188,8 +174,8 @@ func runStatusAllHostsSummary(ctx context.Context, config *types.Config) error {
 		return fmt.Errorf("no remote hosts configured in ~/.canhazgpu.yaml")
 	}
 
-	// Get local status first
-	localStatuses, localErr := getLocalStatus(ctx, config)
+	// Fetch all host statuses in parallel
+	results := getAllHostStatuses(ctx, config)
 
 	// Create table
 	t := table.NewWriter()
@@ -207,32 +193,18 @@ func runStatusAllHostsSummary(ctx context.Context, config *types.Config) error {
 		FormatHeader("IN USE"),
 	})
 
-	// Add localhost
-	if localErr != nil {
-		t.AppendRow(table.Row{
-			FormatHost("localhost"),
-			FormatDim("ERR"),
-			FormatDim(fmt.Sprintf("ERROR: %v", localErr)),
-			FormatDim("-"),
-			FormatDim("-"),
-		})
-	} else {
-		addSummaryRow(t, "localhost", localStatuses)
-	}
-
-	// Get and add each remote host
-	for _, host := range config.RemoteHosts {
-		statuses, err := getRemoteStatus(ctx, host)
-		if err != nil {
+	// Add rows for all hosts
+	for _, result := range results {
+		if result.err != nil {
 			t.AppendRow(table.Row{
-				FormatHost(host),
+				FormatHost(result.host),
 				FormatDim("ERR"),
-				FormatDim(fmt.Sprintf("ERROR: %v", err)),
+				FormatDim(fmt.Sprintf("ERROR: %v", result.err)),
 				FormatDim("-"),
 				FormatDim("-"),
 			})
 		} else {
-			addSummaryRow(t, host, statuses)
+			addSummaryRow(t, result.host, result.statuses)
 		}
 	}
 
@@ -245,37 +217,11 @@ func runStatusAllHostsSummary(ctx context.Context, config *types.Config) error {
 
 // runStatusAllHostsJSON collects all results then outputs JSON
 func runStatusAllHostsJSON(ctx context.Context, config *types.Config) error {
-	// Get local status first
-	localStatuses, localErr := getLocalStatus(ctx, config)
-
-	// Collect results from all hosts
-	type hostResult struct {
-		host     string
-		statuses []gpu.GPUStatusInfo
-		err      error
-	}
-
-	results := make([]hostResult, 0, len(config.RemoteHosts)+1)
-
-	// Add localhost result
-	results = append(results, hostResult{
-		host:     "localhost",
-		statuses: localStatuses,
-		err:      localErr,
-	})
-
-	// Get status from each remote host
-	for _, host := range config.RemoteHosts {
-		statuses, err := getRemoteStatus(ctx, host)
-		results = append(results, hostResult{
-			host:     host,
-			statuses: statuses,
-			err:      err,
-		})
-	}
+	// Fetch all host statuses in parallel
+	results := getAllHostStatuses(ctx, config)
 
 	// Output all statuses as JSON
-	allStatuses := make(map[string]interface{})
+	allStatuses := make(map[string]any)
 	for _, result := range results {
 		if result.err != nil {
 			allStatuses[result.host] = map[string]string{"error": result.err.Error()}
@@ -304,6 +250,50 @@ func getLocalStatus(ctx context.Context, config *types.Config) ([]gpu.GPUStatusI
 	_ = engine.CleanupExpiredReservations(ctx)
 
 	return engine.GetGPUStatus(ctx)
+}
+
+// hostResult holds the status result for a single host
+type hostResult struct {
+	host     string
+	statuses []gpu.GPUStatusInfo
+	err      error
+}
+
+// getAllHostStatuses fetches status from localhost and all remote hosts in parallel
+func getAllHostStatuses(ctx context.Context, config *types.Config) []hostResult {
+	// Total hosts = localhost + remote hosts
+	totalHosts := 1 + len(config.RemoteHosts)
+	results := make([]hostResult, totalHosts)
+
+	var wg sync.WaitGroup
+	wg.Add(totalHosts)
+
+	// Fetch localhost status in parallel
+	go func() {
+		defer wg.Done()
+		statuses, err := getLocalStatus(ctx, config)
+		results[0] = hostResult{
+			host:     "localhost",
+			statuses: statuses,
+			err:      err,
+		}
+	}()
+
+	// Fetch each remote host status in parallel
+	for i, host := range config.RemoteHosts {
+		go func(index int, h string) {
+			defer wg.Done()
+			statuses, err := getRemoteStatus(ctx, h)
+			results[index+1] = hostResult{
+				host:     h,
+				statuses: statuses,
+				err:      err,
+			}
+		}(i, host)
+	}
+
+	wg.Wait()
+	return results
 }
 
 func getRemoteStatus(ctx context.Context, host string) ([]gpu.GPUStatusInfo, error) {
