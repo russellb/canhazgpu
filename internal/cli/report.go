@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,7 +14,8 @@ import (
 )
 
 var (
-	reportDays int
+	reportDays       int
+	reportJSONOutput bool
 )
 
 var reportCmd = &cobra.Command{
@@ -25,6 +27,7 @@ var reportCmd = &cobra.Command{
 
 func init() {
 	reportCmd.Flags().IntVarP(&reportDays, "days", "d", 30, "Number of days to include in the report")
+	reportCmd.Flags().BoolVarP(&reportJSONOutput, "json", "j", false, "Output report as JSON")
 	rootCmd.AddCommand(reportCmd)
 }
 
@@ -67,7 +70,11 @@ func runReport(cmd *cobra.Command, args []string) error {
 	allRecords := append(historicalRecords, currentRecords...)
 
 	// Generate and display report
-	displayReport(allRecords, startTime, endTime)
+	if reportJSONOutput {
+		displayReportJSON(allRecords, startTime, endTime)
+	} else {
+		displayReport(allRecords, startTime, endTime)
+	}
 
 	return nil
 }
@@ -165,4 +172,89 @@ func displayReport(records []*types.UsageRecord, startTime, endTime time.Time) {
 	fmt.Printf("\nTotal reservations: %d\n", len(records))
 	fmt.Printf("Unique users: %d\n", len(users))
 	fmt.Printf("\n")
+}
+
+// ReportJSON is the JSON output structure for the report command
+type ReportJSON struct {
+	Users             []ReportUserJSON `json:"users"`
+	TotalGPUHours     float64          `json:"total_gpu_hours"`
+	TotalReservations int              `json:"total_reservations"`
+	UniqueUsers       int              `json:"unique_users"`
+	StartDate         string           `json:"start_date"`
+	EndDate           string           `json:"end_date"`
+	Days              int              `json:"days"`
+}
+
+// ReportUserJSON is the JSON output structure for per-user report data
+type ReportUserJSON struct {
+	Name        string  `json:"name"`
+	GPUHours    float64 `json:"gpu_hours"`
+	Percentage  float64 `json:"percentage"`
+	RunCount    int     `json:"run_count"`
+	ManualCount int     `json:"manual_count"`
+}
+
+func displayReportJSON(records []*types.UsageRecord, startTime, endTime time.Time) {
+	// Aggregate usage by user
+	userUsage := make(map[string]float64)
+	userGPUHours := make(map[string]float64)
+	userRunCount := make(map[string]int)
+	userManualCount := make(map[string]int)
+
+	var totalDuration float64
+
+	for _, record := range records {
+		userUsage[record.User] += record.Duration
+		userGPUHours[record.User] += record.Duration / 3600.0
+		totalDuration += record.Duration
+
+		if record.ReservationType == types.ReservationTypeRun {
+			userRunCount[record.User]++
+		} else {
+			userManualCount[record.User]++
+		}
+	}
+
+	// Sort users by usage
+	var users []string
+	for user := range userUsage {
+		users = append(users, user)
+	}
+	sort.Slice(users, func(i, j int) bool {
+		return userUsage[users[i]] > userUsage[users[j]]
+	})
+
+	totalGPUHours := totalDuration / 3600.0
+
+	// Build JSON output
+	report := ReportJSON{
+		TotalGPUHours:     totalGPUHours,
+		TotalReservations: len(records),
+		UniqueUsers:       len(users),
+		StartDate:         startTime.Format("2006-01-02"),
+		EndDate:           endTime.Format("2006-01-02"),
+		Days:              reportDays,
+	}
+
+	for _, user := range users {
+		percentage := 0.0
+		if totalDuration > 0 {
+			percentage = (userUsage[user] / totalDuration) * 100
+		}
+		report.Users = append(report.Users, ReportUserJSON{
+			Name:        user,
+			GPUHours:    userGPUHours[user],
+			Percentage:  percentage,
+			RunCount:    userRunCount[user],
+			ManualCount: userManualCount[user],
+		})
+	}
+
+	// Output JSON
+	jsonData, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		fmt.Printf("Error encoding JSON: %v\n", err)
+		return
+	}
+	fmt.Println(string(jsonData))
 }

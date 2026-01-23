@@ -422,12 +422,13 @@ Unique users: 3
 Start a web server providing a dashboard for real-time monitoring and reports.
 
 ```bash
-canhazgpu web [--port <port>] [--host <host>]
+canhazgpu web [--port <port>] [--host <host>] [--demo]
 ```
 
 **Options:**
-- `--port`: Port to run the web server on (default: 8080)
+- `--port, -p`: Port to run the web server on (default: 8080)
 - `--host`: Host to bind the web server to (default: 0.0.0.0)
+- `--demo`: Run in demo mode with simulated data (no Redis required)
 
 **Examples:**
 ```bash
@@ -442,6 +443,9 @@ canhazgpu web --host 127.0.0.1 --port 8080
 
 # Run on a specific interface
 canhazgpu web --host 192.168.1.100 --port 8888
+
+# Run in demo mode for testing
+canhazgpu web --demo
 ```
 
 ![Web Dashboard Screenshot](images/web-screenshot.png)
@@ -456,15 +460,42 @@ The dashboard displays:
 **Dashboard Features:**
 - **Real-time GPU Status**: Automatically refreshes every 30 seconds
 - **Interactive Reservation Reports**: Customizable time periods (1-90 days)
-- **Visual Design**: Dark theme with color-coded status indicators
+- **Visual Design**: Dark/light theme toggle with color-coded status indicators
 - **Mobile Responsive**: Works on desktop and mobile devices
-- **API Endpoints**: 
+- **Multi-Host Support**: View all configured remote hosts in one dashboard
+- **API Endpoints**:
   - `/api/status` - Current GPU status as JSON
+  - `/api/hosts` - List of configured hosts
+  - `/api/hosts/status` - Status for all hosts (multi-host view)
+  - `/api/hosts/status?host=<name>` - Status for a specific host
   - `/api/report?days=N` - Usage report as JSON
+
+### Multi-Host Support
+
+When remote hosts are configured in `~/.canhazgpu.yaml`, the web dashboard automatically enables a multi-host view:
+
+```yaml
+# ~/.canhazgpu.yaml
+remote_hosts:
+  - gpu-server-1
+  - gpu-server-2
+  - workstation-3
+```
+
+**Multi-Host Features:**
+- **Hosts Overview**: Summary cards showing GPU availability for each host
+- **Click to Expand**: Select a host to view detailed GPU status
+- **Parallel Fetching**: Status is fetched from all hosts concurrently
+- **Error Handling**: Failed hosts show error messages without blocking others
+- **Graceful Degradation**: If localhost Redis is unavailable but remote hosts are configured, the dashboard continues with remote hosts only
+
+**Single-Host Behavior:**
+When no remote hosts are configured, the dashboard shows the traditional single-host view with GPU cards and reservation reports.
 
 **Use Cases:**
 - Team dashboards on shared displays
 - Remote monitoring without SSH access
+- Multi-system GPU cluster monitoring
 - Integration with monitoring systems via API
 - Mobile access for on-the-go checks
 

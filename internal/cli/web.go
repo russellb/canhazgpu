@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -8,11 +9,13 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/russellb/canhazgpu/internal/gpu"
 	"github.com/russellb/canhazgpu/internal/redis_client"
 	"github.com/russellb/canhazgpu/internal/types"
+	"github.com/russellb/canhazgpu/internal/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -44,40 +47,72 @@ func runWeb(cmd *cobra.Command, args []string) error {
 
 	var server *webServer
 
+	// Get config (needed for both demo and normal mode for remote hosts)
+	config := getConfig()
+
 	if webDemo {
 		// Demo mode - no Redis connection needed
 		fmt.Println("Starting web server in DEMO mode")
 		server = &webServer{
-			client: nil,
-			engine: nil,
-			demo:   true,
+			client:         nil,
+			engine:         nil,
+			config:         config,
+			demo:           true,
+			localhostAvail: true, // Demo mode simulates localhost
 		}
 	} else {
 		// Initialize Redis client
-		config := getConfig()
 		client := redis_client.NewClient(config)
-		defer func() {
-			if err := client.Close(); err != nil {
-				fmt.Printf("Warning: failed to close Redis client: %v\n", err)
-			}
-		}()
+		localhostAvail := true
 
 		// Test connection
 		if err := client.Ping(ctx); err != nil {
-			return fmt.Errorf("failed to connect to Redis: %v", err)
+			// Redis not available - check if we have remote hosts
+			if len(config.RemoteHosts) > 0 {
+				// We have remote hosts, continue without localhost
+				fmt.Printf("Warning: Redis not available locally (%v), continuing with remote hosts only\n", err)
+				localhostAvail = false
+				if closeErr := client.Close(); closeErr != nil {
+					fmt.Printf("Warning: failed to close Redis client: %v\n", closeErr)
+				}
+				client = nil
+			} else {
+				// No remote hosts configured, fail
+				if closeErr := client.Close(); closeErr != nil {
+					fmt.Printf("Warning: failed to close Redis client: %v\n", closeErr)
+				}
+				return fmt.Errorf("failed to connect to Redis: %v", err)
+			}
+		}
+
+		// Set up deferred close only if client is not nil
+		if client != nil {
+			defer func() {
+				if err := client.Close(); err != nil {
+					fmt.Printf("Warning: failed to close Redis client: %v\n", err)
+				}
+			}()
 		}
 
 		// Create server
+		var engine *gpu.AllocationEngine
+		if client != nil {
+			engine = gpu.NewAllocationEngine(client, config)
+		}
 		server = &webServer{
-			client: client,
-			engine: gpu.NewAllocationEngine(client, config),
-			demo:   false,
+			client:         client,
+			engine:         engine,
+			config:         config,
+			demo:           false,
+			localhostAvail: localhostAvail,
 		}
 	}
 
 	// Set up routes
 	http.HandleFunc("/", server.handleIndex)
 	http.HandleFunc("/api/status", server.handleAPIStatus)
+	http.HandleFunc("/api/hosts", server.handleAPIHosts)
+	http.HandleFunc("/api/hosts/status", server.handleAPIHostsStatus)
 	http.HandleFunc("/api/report", server.handleAPIReport)
 	http.Handle("/static/", http.FileServer(http.FS(staticFiles)))
 
@@ -88,9 +123,11 @@ func runWeb(cmd *cobra.Command, args []string) error {
 }
 
 type webServer struct {
-	client *redis_client.Client
-	engine *gpu.AllocationEngine
-	demo   bool
+	client         *redis_client.Client
+	engine         *gpu.AllocationEngine
+	config         *types.Config
+	demo           bool
+	localhostAvail bool // Whether localhost Redis is available
 }
 
 func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -465,6 +502,169 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             animation: skeleton-pulse 1.5s ease-in-out infinite;
             border-radius: 6px;
         }
+        /* Multi-host table styles */
+        .hosts-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .hosts-table th,
+        .hosts-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .hosts-table th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-size: 0.85em;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        .hosts-table th:hover {
+            background: var(--bg-secondary);
+        }
+        .hosts-table th.sorted {
+            color: var(--accent-color);
+        }
+        .hosts-table th .sort-indicator {
+            margin-left: 5px;
+            opacity: 0.5;
+        }
+        .hosts-table th.sorted .sort-indicator {
+            opacity: 1;
+        }
+        .hosts-table tbody tr {
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .hosts-table tbody tr:hover {
+            background: var(--bg-tertiary);
+        }
+        .hosts-table tbody tr.error {
+            opacity: 0.7;
+        }
+        .hosts-table tbody tr.error td {
+            color: #f44336;
+        }
+        .host-name-cell {
+            font-weight: 600;
+            color: var(--accent-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .host-name-cell.availability-low {
+            color: #f44336;
+        }
+        .host-name-cell.availability-medium {
+            color: #FF9800;
+        }
+        .host-name-cell.availability-good {
+            color: var(--accent-color);
+        }
+        .host-name-cell svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+            flex-shrink: 0;
+        }
+        .available-cell {
+            font-weight: 600;
+        }
+        .available-cell.availability-good {
+            color: var(--accent-color);
+        }
+        .available-cell.availability-medium {
+            color: #FF9800;
+        }
+        .available-cell.availability-low {
+            color: #f44336;
+        }
+        .availability-bar-small {
+            width: 60px;
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+        .availability-fill {
+            height: 100%;
+            background: var(--accent-color);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        .availability-fill.low {
+            background: #f44336;
+        }
+        .availability-fill.medium {
+            background: #FF9800;
+        }
+        .gpu-models-cell {
+            color: var(--text-secondary);
+            font-size: 0.9em;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        @media (max-width: 768px) {
+            .hosts-table th,
+            .hosts-table td {
+                padding: 8px 10px;
+                font-size: 0.9em;
+            }
+            .gpu-models-cell {
+                max-width: 120px;
+            }
+            .availability-bar-small {
+                display: none;
+            }
+        }
+        .back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-right: 15px;
+        }
+        .back-button:hover {
+            border-color: var(--accent-color);
+            background: var(--bg-secondary);
+        }
+        .back-button svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .section-header h2 {
+            margin-bottom: 0;
+        }
+        .host-error {
+            color: #f44336;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -497,8 +697,27 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
     </header>
     
     <div class="container">
-        <div class="section">
-            <h2>GPU Status</h2>
+        <!-- Multi-host summary view (shown when remote hosts configured and no host selected) -->
+        <div class="section{{if not .MultiHost}} hidden{{end}}" id="hosts-section">
+            <div class="section-header">
+                <h2>Hosts Overview</h2>
+            </div>
+            <div class="controls">
+                <button onclick="refreshHosts()">↻ Refresh All</button>
+                <div class="timestamp" id="hosts-timestamp"></div>
+            </div>
+            <div id="hosts-grid" class="loading">Loading hosts...</div>
+        </div>
+
+        <!-- Single host GPU status view -->
+        <div class="section" id="gpu-section">
+            <div class="section-header">
+                <button class="back-button hidden" id="back-to-hosts" onclick="showHostsView()">
+                    <svg viewBox="0 0 24 24"><path d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/></svg>
+                    All Hosts
+                </button>
+                <h2 id="gpu-section-title">GPU Status</h2>
+            </div>
             <div class="controls">
                 <button onclick="refreshStatus()">↻ Refresh</button>
                 <button onclick="toggleExpandAll()" id="expand-all-btn">⤧ Expand All</button>
@@ -507,7 +726,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             <div id="gpu-status" class="loading">Loading GPU status...</div>
         </div>
 
-        <div class="section">
+        <div class="section{{if .MultiHost}} hidden{{end}}" id="report-section">
             <h2>GPU Reservation Report</h2>
             <div class="controls">
                 <div class="control-group">
@@ -532,22 +751,58 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
     <script>
         let statusRefreshInterval;
         let reportRefreshInterval;
+        let hostsRefreshInterval;
 
-        async function fetchStatus() {
+        // Multi-host state
+        const isMultiHost = {{.MultiHost}};
+        const localhostAvail = {{.LocalhostAvail}};
+        let selectedHost = null;
+        let hostsData = [];
+
+        async function fetchStatus(host = null) {
             try {
-                const response = await fetch('/api/status');
+                let url = '/api/status';
+                if (host && host !== 'localhost') {
+                    url = '/api/hosts/status?host=' + encodeURIComponent(host);
+                } else if (host === 'localhost') {
+                    url = '/api/hosts/status?host=localhost';
+                }
+                const response = await fetch(url);
                 if (!response.ok) throw new Error('Failed to fetch status');
-                return await response.json();
+                const data = await response.json();
+                // If fetching for a specific host, extract statuses from response
+                if (host && data.statuses) {
+                    return data.statuses;
+                }
+                return data;
             } catch (error) {
                 console.error('Error fetching status:', error);
                 throw error;
             }
         }
 
-        async function fetchReport(days) {
+        async function fetchHostsStatus() {
             try {
-                const response = await fetch('/api/report?days=' + days);
-                if (!response.ok) throw new Error('Failed to fetch report');
+                const response = await fetch('/api/hosts/status');
+                if (!response.ok) throw new Error('Failed to fetch hosts status');
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching hosts status:', error);
+                throw error;
+            }
+        }
+
+        async function fetchReport(days, host) {
+            try {
+                let url = '/api/report?days=' + days;
+                if (host) {
+                    url += '&host=' + encodeURIComponent(host);
+                }
+                const response = await fetch(url);
+                if (!response.ok) {
+                    const text = await response.text();
+                    throw new Error(text || 'Failed to fetch report');
+                }
                 return await response.json();
             } catch (error) {
                 console.error('Error fetching report:', error);
@@ -627,6 +882,179 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                     return '<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 129 91" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Mistral AI</title><g fill="currentColor"><rect x="18.292" y="0" width="18.293" height="18.123"/><rect x="91.473" y="0" width="18.293" height="18.123"/><rect x="18.292" y="18.121" width="36.586" height="18.123"/><rect x="73.181" y="18.121" width="36.586" height="18.123"/><rect x="18.292" y="36.243" width="91.476" height="18.122"/><rect x="18.292" y="54.37" width="18.293" height="18.123"/><rect x="54.883" y="54.37" width="18.293" height="18.123"/><rect x="91.473" y="54.37" width="18.293" height="18.123"/><rect x="0" y="72.504" width="54.89" height="18.123"/><rect x="73.181" y="72.504" width="54.89" height="18.123"/></g></svg>';
                 default:
                     return '';
+            }
+        }
+
+        // Hosts table sorting state
+        let hostsSortColumn = 'host';
+        let hostsSortAsc = true;
+
+        // Sort hosts data
+        function sortHostsData(data, column, asc) {
+            return [...data].sort((a, b) => {
+                const summaryA = a.summary || { total: 0, available: 0, in_use: 0, gpu_models: '-' };
+                const summaryB = b.summary || { total: 0, available: 0, in_use: 0, gpu_models: '-' };
+
+                let valA, valB;
+                switch (column) {
+                    case 'host':
+                        valA = a.host.toLowerCase();
+                        valB = b.host.toLowerCase();
+                        break;
+                    case 'total':
+                        valA = summaryA.total;
+                        valB = summaryB.total;
+                        break;
+                    case 'available':
+                        valA = summaryA.available;
+                        valB = summaryB.available;
+                        break;
+                    case 'in_use':
+                        valA = summaryA.in_use;
+                        valB = summaryB.in_use;
+                        break;
+                    case 'models':
+                        valA = (summaryA.gpu_models || '-').toLowerCase();
+                        valB = (summaryB.gpu_models || '-').toLowerCase();
+                        break;
+                    default:
+                        return 0;
+                }
+
+                // Handle errors - push to bottom
+                if (a.error && !b.error) return 1;
+                if (!a.error && b.error) return -1;
+
+                if (valA < valB) return asc ? -1 : 1;
+                if (valA > valB) return asc ? 1 : -1;
+                return 0;
+            });
+        }
+
+        // Handle column header click for sorting
+        function sortHosts(column) {
+            if (hostsSortColumn === column) {
+                hostsSortAsc = !hostsSortAsc;
+            } else {
+                hostsSortColumn = column;
+                hostsSortAsc = true;
+            }
+            renderHosts(hostsData);
+        }
+
+        // Render hosts table for multi-host view
+        function renderHosts(data) {
+            const container = document.getElementById('hosts-grid');
+            hostsData = data;
+
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="error">No hosts data available</div>';
+                return;
+            }
+
+            // Sort the data
+            const sortedData = sortHostsData(data, hostsSortColumn, hostsSortAsc);
+            const sortIndicator = hostsSortAsc ? '↑' : '↓';
+
+            let html = '<table class="hosts-table">';
+            html += '<thead><tr>';
+            html += '<th class="' + (hostsSortColumn === 'host' ? 'sorted' : '') + '" onclick="sortHosts(\'host\')">Host<span class="sort-indicator">' + (hostsSortColumn === 'host' ? sortIndicator : '↕') + '</span></th>';
+            html += '<th class="' + (hostsSortColumn === 'total' ? 'sorted' : '') + '" onclick="sortHosts(\'total\')">Total<span class="sort-indicator">' + (hostsSortColumn === 'total' ? sortIndicator : '↕') + '</span></th>';
+            html += '<th class="' + (hostsSortColumn === 'available' ? 'sorted' : '') + '" onclick="sortHosts(\'available\')">Available<span class="sort-indicator">' + (hostsSortColumn === 'available' ? sortIndicator : '↕') + '</span></th>';
+            html += '<th class="' + (hostsSortColumn === 'in_use' ? 'sorted' : '') + '" onclick="sortHosts(\'in_use\')">In Use<span class="sort-indicator">' + (hostsSortColumn === 'in_use' ? sortIndicator : '↕') + '</span></th>';
+            html += '<th class="' + (hostsSortColumn === 'models' ? 'sorted' : '') + '" onclick="sortHosts(\'models\')">GPU Models<span class="sort-indicator">' + (hostsSortColumn === 'models' ? sortIndicator : '↕') + '</span></th>';
+            html += '</tr></thead>';
+            html += '<tbody>';
+
+            sortedData.forEach(host => {
+                const hasError = host.error;
+                const rowClass = hasError ? 'error' : '';
+                const summary = host.summary || { total: 0, available: 0, in_use: 0, gpu_models: '-' };
+
+                // Calculate availability percentage for mini bar and host name color
+                const availPercent = summary.total > 0 ? (summary.available / summary.total) * 100 : 0;
+                let availClass = 'good';
+                if (availPercent < 25) availClass = 'low';
+                else if (availPercent < 50) availClass = 'medium';
+
+                html += '<tr class="' + rowClass + '" onclick="selectHost(\'' + host.host + '\')">';
+
+                // Host name with icon, colored by availability
+                const hostNameClass = hasError ? 'host-name-cell' : 'host-name-cell availability-' + availClass;
+                html += '<td><div class="' + hostNameClass + '">';
+                html += '<svg viewBox="0 0 24 24"><path d="M4,1H20A1,1 0 0,1 21,2V6A1,1 0 0,1 20,7H4A1,1 0 0,1 3,6V2A1,1 0 0,1 4,1M4,9H20A1,1 0 0,1 21,10V14A1,1 0 0,1 20,15H4A1,1 0 0,1 3,14V10A1,1 0 0,1 4,9M4,17H20A1,1 0 0,1 21,18V22A1,1 0 0,1 20,23H4A1,1 0 0,1 3,22V18A1,1 0 0,1 4,17M9,5H10V3H9V5M9,13H10V11H9V13M9,21H10V19H9V21M5,3V5H7V3H5M5,11V13H7V11H5M5,19V21H7V19H5Z"/></svg>';
+                html += host.host;
+                html += '</div></td>';
+
+                if (hasError) {
+                    html += '<td colspan="4">Error: ' + host.error + '</td>';
+                } else {
+                    html += '<td>' + summary.total + '</td>';
+                    html += '<td class="available-cell availability-' + availClass + '">' + summary.available;
+                    html += '<div class="availability-bar-small"><div class="availability-fill ' + availClass + '" style="width: ' + availPercent + '%"></div></div>';
+                    html += '</td>';
+                    html += '<td>' + summary.in_use + '</td>';
+                    html += '<td class="gpu-models-cell" title="' + summary.gpu_models + '">' + summary.gpu_models + '</td>';
+                }
+
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+
+            document.getElementById('hosts-timestamp').textContent = 'Last updated: ' + formatCompactTime(new Date());
+        }
+
+        // Select a host to view detailed GPU status
+        function selectHost(hostName) {
+            selectedHost = hostName;
+
+            // Update UI
+            document.getElementById('hosts-section').classList.add('hidden');
+            document.getElementById('gpu-section').classList.remove('hidden');
+            document.getElementById('report-section').classList.remove('hidden');
+            document.getElementById('back-to-hosts').classList.remove('hidden');
+            document.getElementById('gpu-section-title').textContent = 'GPU Status - ' + hostName;
+
+            // Switch from hosts refresh to status/report refresh
+            clearInterval(hostsRefreshInterval);
+            refreshStatus();
+            refreshReport();
+            statusRefreshInterval = setInterval(refreshStatus, 30000);
+            reportRefreshInterval = setInterval(refreshReport, 300000);
+        }
+
+        // Go back to hosts overview
+        function showHostsView() {
+            selectedHost = null;
+
+            // Update UI
+            document.getElementById('hosts-section').classList.remove('hidden');
+            document.getElementById('gpu-section').classList.add('hidden');
+            document.getElementById('report-section').classList.add('hidden');
+            document.getElementById('back-to-hosts').classList.add('hidden');
+            document.getElementById('gpu-section-title').textContent = 'GPU Status';
+
+            // Switch from status/report refresh to hosts refresh
+            clearInterval(statusRefreshInterval);
+            clearInterval(reportRefreshInterval);
+            refreshHosts();
+            hostsRefreshInterval = setInterval(refreshHosts, 30000);
+        }
+
+        // Refresh hosts data
+        async function refreshHosts() {
+            const container = document.getElementById('hosts-grid');
+            container.classList.add('refreshing');
+
+            try {
+                const data = await fetchHostsStatus();
+                renderHosts(data);
+            } catch (error) {
+                container.innerHTML = '<div class="error">Failed to load hosts: ' + error.message + '</div>';
+            } finally {
+                container.classList.remove('refreshing');
             }
         }
 
@@ -846,9 +1274,11 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         async function refreshStatus() {
             const container = document.getElementById('gpu-status');
             container.classList.add('refreshing');
-            
+
             try {
-                const data = await fetchStatus();
+                // In multi-host mode with a selected host, fetch for that host
+                // Otherwise fetch local status
+                const data = await fetchStatus(isMultiHost ? selectedHost : null);
                 renderStatus(data);
             } catch (error) {
                 container.innerHTML = '<div class="error">Failed to load GPU status: ' + error.message + '</div>';
@@ -861,9 +1291,10 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             const container = document.getElementById('usage-report');
             const days = document.getElementById('days-select').value;
             container.classList.add('refreshing');
-            
+
             try {
-                const data = await fetchReport(days);
+                // Pass selectedHost for multi-host mode
+                const data = await fetchReport(days, selectedHost);
                 renderReport(data);
             } catch (error) {
                 container.innerHTML = '<div class="error">Failed to load reservation report: ' + error.message + '</div>';
@@ -873,25 +1304,42 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         }
 
         // Initial load
-        refreshStatus();
-        refreshReport();
+        if (isMultiHost) {
+            // Multi-host mode: start with hosts view, hide GPU section and report
+            document.getElementById('gpu-section').classList.add('hidden');
+            refreshHosts();
 
-        // Auto-refresh status every 30 seconds
-        statusRefreshInterval = setInterval(refreshStatus, 30000);
+            // Auto-refresh hosts every 30 seconds
+            hostsRefreshInterval = setInterval(refreshHosts, 30000);
+        } else {
+            // Single-host mode: standard behavior
+            refreshStatus();
+            refreshReport();
 
-        // Auto-refresh report every 5 minutes
-        reportRefreshInterval = setInterval(refreshReport, 300000);
+            // Auto-refresh status every 30 seconds
+            statusRefreshInterval = setInterval(refreshStatus, 30000);
+            // Auto-refresh report every 5 minutes
+            reportRefreshInterval = setInterval(refreshReport, 300000);
+        }
 
         // Clean up intervals when page is hidden
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 clearInterval(statusRefreshInterval);
                 clearInterval(reportRefreshInterval);
+                clearInterval(hostsRefreshInterval);
             } else {
-                refreshStatus();
-                refreshReport();
-                statusRefreshInterval = setInterval(refreshStatus, 30000);
-                reportRefreshInterval = setInterval(refreshReport, 300000);
+                if (isMultiHost && !selectedHost) {
+                    // Multi-host mode with no host selected: only refresh hosts
+                    refreshHosts();
+                    hostsRefreshInterval = setInterval(refreshHosts, 30000);
+                } else {
+                    // Single-host mode or host selected: refresh status and report
+                    refreshStatus();
+                    refreshReport();
+                    statusRefreshInterval = setInterval(refreshStatus, 30000);
+                    reportRefreshInterval = setInterval(refreshReport, 300000);
+                }
             }
         });
 
@@ -1007,13 +1455,23 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Determine if multi-host mode is enabled
+	// Enable multi-host view if:
+	// 1. Remote hosts are configured, OR
+	// 2. Localhost is not available (only remote hosts can be shown)
+	multiHost := ws.config != nil && len(ws.config.RemoteHosts) > 0
+
 	w.Header().Set("Content-Type", "text/html")
 	if err := t.Execute(w, struct {
-		Hostname string
-		Demo     bool
+		Hostname       string
+		Demo           bool
+		MultiHost      bool
+		LocalhostAvail bool
 	}{
-		Hostname: hostname,
-		Demo:     ws.demo,
+		Hostname:       hostname,
+		Demo:           ws.demo,
+		MultiHost:      multiHost,
+		LocalhostAvail: ws.localhostAvail,
 	}); err != nil {
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
@@ -1022,6 +1480,12 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// Check if localhost is available
+	if !ws.localhostAvail && !ws.demo {
+		http.Error(w, "localhost not available (Redis connection failed)", http.StatusServiceUnavailable)
+		return
+	}
 
 	var statuses []gpu.GPUStatusInfo
 	var err error
@@ -1043,25 +1507,212 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Convert to JSON-friendly format
-	type jsonGPUStatus struct {
-		GPUID           int            `json:"gpu_id"`
-		Status          string         `json:"status"`
-		User            string         `json:"user,omitempty"`
-		ReservationType string         `json:"reservation_type,omitempty"`
-		Duration        int64          `json:"duration,omitempty"`
-		LastHeartbeat   *time.Time     `json:"last_heartbeat,omitempty"`
-		ExpiryTime      *time.Time     `json:"expiry_time,omitempty"`
-		LastReleased    *time.Time     `json:"last_released,omitempty"`
-		ValidationInfo  string         `json:"validation_info,omitempty"`
-		UnreservedUsers []string       `json:"unreserved_users,omitempty"`
-		ProcessInfo     string         `json:"process_info,omitempty"`
-		Error           string         `json:"error,omitempty"`
-		ModelInfo       *gpu.ModelInfo `json:"model_info,omitempty"`
-		Provider        string         `json:"provider,omitempty"`
-		GPUModel        string         `json:"gpu_model,omitempty"`
+	// Convert to JSON-friendly format using shared function
+	jsonStatuses := convertToJSONStatuses(statuses)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(jsonStatuses); err != nil {
+		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleAPIHosts returns the list of configured hosts
+func (ws *webServer) handleAPIHosts(w http.ResponseWriter, r *http.Request) {
+	type hostInfo struct {
+		Name      string `json:"name"`
+		IsLocal   bool   `json:"is_local"`
 	}
 
+	var hosts []hostInfo
+
+	// Include localhost only if available
+	if ws.localhostAvail {
+		hosts = append(hosts, hostInfo{Name: "localhost", IsLocal: true})
+	}
+
+	// Add remote hosts if configured
+	if ws.config != nil && len(ws.config.RemoteHosts) > 0 {
+		for _, h := range ws.config.RemoteHosts {
+			hosts = append(hosts, hostInfo{Name: h, IsLocal: false})
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(hosts); err != nil {
+		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleAPIHostsStatus returns status for all hosts (multi-host view)
+func (ws *webServer) handleAPIHostsStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Check if a specific host is requested
+	hostParam := r.URL.Query().Get("host")
+
+	type hostSummary struct {
+		Total     int    `json:"total"`
+		Available int    `json:"available"`
+		InUse     int    `json:"in_use"`
+		GPUModels string `json:"gpu_models"`
+	}
+
+	type hostStatusResponse struct {
+		Host     string           `json:"host"`
+		Statuses []jsonGPUStatus  `json:"statuses,omitempty"`
+		Summary  *hostSummary     `json:"summary,omitempty"`
+		Error    string           `json:"error,omitempty"`
+	}
+
+	// If specific host requested, return detailed status for that host
+	if hostParam != "" {
+		var statuses []gpu.GPUStatusInfo
+		var err error
+
+		if hostParam == "localhost" {
+			if !ws.localhostAvail {
+				response := hostStatusResponse{Host: hostParam, Error: "localhost not available (Redis connection failed)"}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(response)
+				return
+			}
+			if ws.demo {
+				statuses = ws.generateDemoStatus()
+			} else {
+				statuses, err = getLocalStatus(ctx, ws.config)
+			}
+		} else {
+			statuses, err = getRemoteStatus(ctx, hostParam)
+		}
+
+		response := hostStatusResponse{Host: hostParam}
+		if err != nil {
+			response.Error = err.Error()
+		} else {
+			response.Statuses = convertToJSONStatuses(statuses)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Return summary for all hosts
+	var results []hostResult
+
+	if ws.demo {
+		// In demo mode, generate demo data for localhost and fake remote hosts
+		results = []hostResult{
+			{host: "localhost", statuses: ws.generateDemoStatus()},
+		}
+		// Add demo remote hosts if configured
+		if ws.config != nil && len(ws.config.RemoteHosts) > 0 {
+			for _, h := range ws.config.RemoteHosts {
+				results = append(results, hostResult{
+					host:     h,
+					statuses: ws.generateDemoRemoteStatus(h),
+				})
+			}
+		}
+	} else {
+		// Get all host statuses, but filter out localhost if not available
+		allResults := getAllHostStatuses(ctx, ws.config)
+		if ws.localhostAvail {
+			results = allResults
+		} else {
+			// Filter out localhost
+			for _, r := range allResults {
+				if r.host != "localhost" {
+					results = append(results, r)
+				}
+			}
+		}
+	}
+
+	// Build response with summaries
+	var responses []hostStatusResponse
+	for _, result := range results {
+		resp := hostStatusResponse{Host: result.host}
+		if result.err != nil {
+			resp.Error = result.err.Error()
+		} else {
+			// Calculate summary
+			total := len(result.statuses)
+			available := 0
+			inUse := 0
+			modelCounts := make(map[string]int)
+
+			for _, s := range result.statuses {
+				switch s.Status {
+				case "AVAILABLE":
+					available++
+				case "IN_USE", "UNRESERVED":
+					inUse++
+				}
+				if s.GPUModel != "" {
+					modelCounts[s.GPUModel]++
+				}
+			}
+
+			// Build GPU models string
+			var modelsStr string
+			if len(modelCounts) == 0 {
+				modelsStr = "-"
+			} else if len(modelCounts) == 1 {
+				for model := range modelCounts {
+					modelsStr = model
+				}
+			} else {
+				var parts []string
+				for model, count := range modelCounts {
+					parts = append(parts, fmt.Sprintf("%d× %s", count, model))
+				}
+				modelsStr = strings.Join(parts, ", ")
+			}
+
+			resp.Summary = &hostSummary{
+				Total:     total,
+				Available: available,
+				InUse:     inUse,
+				GPUModels: modelsStr,
+			}
+			resp.Statuses = convertToJSONStatuses(result.statuses)
+		}
+		responses = append(responses, resp)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(responses); err != nil {
+		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+	}
+}
+
+// jsonGPUStatus is a JSON-friendly GPU status (reused from handleAPIStatus)
+type jsonGPUStatus struct {
+	GPUID           int            `json:"gpu_id"`
+	Status          string         `json:"status"`
+	User            string         `json:"user,omitempty"`
+	ReservationType string         `json:"reservation_type,omitempty"`
+	Duration        int64          `json:"duration,omitempty"`
+	LastHeartbeat   *time.Time     `json:"last_heartbeat,omitempty"`
+	ExpiryTime      *time.Time     `json:"expiry_time,omitempty"`
+	LastReleased    *time.Time     `json:"last_released,omitempty"`
+	ValidationInfo  string         `json:"validation_info,omitempty"`
+	UnreservedUsers []string       `json:"unreserved_users,omitempty"`
+	ProcessInfo     string         `json:"process_info,omitempty"`
+	Error           string         `json:"error,omitempty"`
+	ModelInfo       *gpu.ModelInfo `json:"model_info,omitempty"`
+	Provider        string         `json:"provider,omitempty"`
+	GPUModel        string         `json:"gpu_model,omitempty"`
+	Note            string         `json:"note,omitempty"`
+}
+
+// convertToJSONStatuses converts GPU statuses to JSON-friendly format
+func convertToJSONStatuses(statuses []gpu.GPUStatusInfo) []jsonGPUStatus {
 	jsonStatuses := make([]jsonGPUStatus, len(statuses))
 	for i, status := range statuses {
 		js := jsonGPUStatus{
@@ -1077,6 +1728,7 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 			ModelInfo:       status.ModelInfo,
 			Provider:        status.Provider,
 			GPUModel:        status.GPUModel,
+			Note:            status.Note,
 		}
 
 		if !status.LastHeartbeat.IsZero() {
@@ -1091,18 +1743,70 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 
 		jsonStatuses[i] = js
 	}
+	return jsonStatuses
+}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(jsonStatuses); err != nil {
-		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
-		return
+// generateDemoRemoteStatus generates demo data for a remote host
+func (ws *webServer) generateDemoRemoteStatus(host string) []gpu.GPUStatusInfo {
+	now := time.Now()
+
+	// Generate different demo data based on host name hash
+	hashVal := 0
+	for _, c := range host {
+		hashVal += int(c)
 	}
+
+	numGPUs := 4 + (hashVal % 5) // 4-8 GPUs
+	statuses := make([]gpu.GPUStatusInfo, numGPUs)
+
+	users := []string{"alice", "bob", "charlie", "david", "eve"}
+	models := []string{"meta-llama/Llama-3.1-70B", "qwen/Qwen2.5-72B", "mistralai/Mistral-Large-2"}
+	gpuModels := []string{"H100", "A100", "RTX 4090"}
+
+	for i := 0; i < numGPUs; i++ {
+		gpuModel := gpuModels[hashVal%len(gpuModels)]
+
+		if (i+hashVal)%3 == 0 {
+			// Available
+			statuses[i] = gpu.GPUStatusInfo{
+				GPUID:          i,
+				Status:         "AVAILABLE",
+				LastReleased:   now.Add(-time.Duration(i+1) * time.Hour),
+				ValidationInfo: "[validated: 0MB used]",
+				Provider:       "NVIDIA",
+				GPUModel:       gpuModel,
+			}
+		} else {
+			// In use
+			user := users[(i+hashVal)%len(users)]
+			model := models[(i+hashVal)%len(models)]
+			provider := strings.Split(model, "/")[0]
+
+			statuses[i] = gpu.GPUStatusInfo{
+				GPUID:           i,
+				Status:          "IN_USE",
+				User:            user,
+				ReservationType: types.ReservationTypeRun,
+				LastHeartbeat:   now.Add(-time.Duration(i*15) * time.Second),
+				Duration:        time.Duration(30+i*15) * time.Minute,
+				ValidationInfo:  fmt.Sprintf("[validated: %dMB, 1 processes]", 8000+i*1000),
+				Provider:        "NVIDIA",
+				GPUModel:        gpuModel,
+				ModelInfo: &gpu.ModelInfo{
+					Model:    model,
+					Provider: provider,
+				},
+			}
+		}
+	}
+
+	return statuses
 }
 
 func (ws *webServer) handleAPIReport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Parse days parameter
+	// Parse parameters
 	daysStr := r.URL.Query().Get("days")
 	days := 30
 	if daysStr != "" {
@@ -1111,11 +1815,34 @@ func (ws *webServer) handleAPIReport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var reportData reportData
+	host := r.URL.Query().Get("host")
+	isRemoteHost := host != "" && host != "localhost"
+
+	// For remote hosts, fetch via SSH
+	if isRemoteHost {
+		report, err := getRemoteReport(ctx, host, days)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get report from %s: %v", host, err), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(report); err != nil {
+			http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Check if localhost is available for local report
+	if !ws.localhostAvail && !ws.demo {
+		http.Error(w, "localhost not available (Redis connection failed)", http.StatusServiceUnavailable)
+		return
+	}
+
+	var report reportData
 
 	if ws.demo {
 		// Use demo data
-		reportData = ws.generateDemoReport(days)
+		report = ws.generateDemoReport(days)
 	} else {
 		// Calculate time range
 		endTime := time.Now()
@@ -1140,14 +1867,38 @@ func (ws *webServer) handleAPIReport(w http.ResponseWriter, r *http.Request) {
 		allRecords := append(historicalRecords, currentRecords...)
 
 		// Generate report data
-		reportData = generateReportData(allRecords, startTime, endTime, days)
+		report = generateReportData(allRecords, startTime, endTime, days)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(reportData); err != nil {
+	if err := json.NewEncoder(w).Encode(report); err != nil {
 		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
 		return
 	}
+}
+
+// getRemoteReport fetches report data from a remote host via SSH
+func getRemoteReport(ctx context.Context, host string, days int) (*reportData, error) {
+	// Execute remote report command with JSON output
+	stdout, stderr, err := utils.ExecuteRemoteCanHazGPU(ctx, host, []string{"report", "--json", "--days", strconv.Itoa(days)})
+	if err != nil {
+		// Check if the remote host has an older canhazgpu without --json support
+		if strings.Contains(stderr, "unknown flag: --json") {
+			return nil, fmt.Errorf("remote host canhazgpu too old to provide GPU utilization report")
+		}
+		if stderr != "" {
+			return nil, fmt.Errorf("%v: %s", err, stderr)
+		}
+		return nil, err
+	}
+
+	// Parse JSON output
+	var report reportData
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON output: %v", err)
+	}
+
+	return &report, nil
 }
 
 type reportData struct {
