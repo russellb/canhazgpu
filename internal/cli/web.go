@@ -1754,7 +1754,9 @@ func (ws *webServer) handleAPIHostsStatus(w http.ResponseWriter, r *http.Request
 			if !ws.localhostAvail {
 				response := hostStatusResponse{Host: hostParam, Error: "localhost not available (Redis connection failed)"}
 				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(response)
+				if err := json.NewEncoder(w).Encode(response); err != nil {
+					http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+				}
 				return
 			}
 			if ws.demo {

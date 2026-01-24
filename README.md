@@ -36,10 +36,20 @@ canhazgpu status
 
 # Run vLLM with an automatic 2 GPU reservation.
 # - CUDA_VISIBLE_DEVICES is set in the environment before running the command.
+# - If GPUs are unavailable, waits in queue until they become available.
 canhazgpu run --gpus 2 -- vllm serve my/model --tensor-parallel-size 2
 
-# Reserve specific GPUs by ID
+# Reserve specific GPUs by ID (waits if unavailable)
 canhazgpu run --gpu-ids 1,3 -- python train.py
+
+# Fail immediately if GPUs unavailable (no queueing)
+canhazgpu run --nonblock --gpus 2 -- python train.py
+
+# Wait up to 30 minutes for GPUs, then fail
+canhazgpu run --wait 30m --gpus 4 -- python train.py
+
+# Check the reservation queue
+canhazgpu queue
 
 # Reserve a single GPU manually for development
 canhazgpu reserve --gpus 1 --duration 4h
@@ -59,6 +69,7 @@ canhazgpu web --port 8080
 
 ## Key Features
 
+- **Fair queueing**: FCFS queue ensures fair access when GPUs are busy - requests wait automatically
 - **Race condition protection**: Uses Redis-based distributed locking
 - **Automatic cleanup**: GPUs auto-released when processes end or reservations expire
 - **MRU-per-user allocation**: Smart GPU affinity using most recently used per-user strategy with LRU fallback
@@ -76,6 +87,7 @@ canhazgpu web --port 8080
 
 The web dashboard provides:
 - Real-time GPU status monitoring with automatic refresh
+- Queue status with wait times and allocation progress
 - Interactive reservation reports with customizable time periods
 - Visual status indicators and usage visualization
 - Quick access to documentation and source code
@@ -139,10 +151,11 @@ canhazgpu admin --gpus 8 --provider amd
 ## How It Works
 
 1. **Validation**: Uses nvidia-smi or amd-smi to detect actual GPU usage and identify conflicts
-2. **Coordination**: Uses Redis for distributed state management and race condition prevention  
-3. **Allocation**: MRU-per-user (Most Recently Used per user) strategy provides GPU affinity with LRU fallback for fair distribution
-4. **Monitoring**: Heartbeat system tracks active reservations and handles cleanup
-5. **Enforcement**: Automatically excludes unreserved GPU usage from allocation
+2. **Coordination**: Uses Redis for distributed state management and race condition prevention
+3. **Queueing**: FCFS (First Come First Served) queue with greedy partial allocation for the first waiter
+4. **Allocation**: MRU-per-user (Most Recently Used per user) strategy provides GPU affinity with LRU fallback for fair distribution
+5. **Monitoring**: Heartbeat system tracks active reservations and handles cleanup
+6. **Enforcement**: Automatically excludes unreserved GPU usage from allocation
 
 ## Contributing
 

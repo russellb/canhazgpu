@@ -421,7 +421,7 @@ func (ae *AllocationEngine) AllocateGPUsWithQueue(ctx context.Context, request *
 	// Start queue heartbeat
 	queueHeartbeat := NewQueueHeartbeatManager(ae.client, queueEntry.ID)
 	if err := queueHeartbeat.Start(); err != nil {
-		ae.client.RemoveFromQueue(ctx, queueEntry.ID)
+		_ = ae.client.RemoveFromQueue(ctx, queueEntry.ID)
 		return nil, fmt.Errorf("failed to start queue heartbeat: %v", err)
 	}
 
@@ -553,7 +553,7 @@ func (ae *AllocationEngine) tryAllocateForQueueEntry(ctx context.Context, queueE
 	if err := ae.client.AcquireAllocationLock(ctx); err != nil {
 		return nil, err
 	}
-	defer ae.client.ReleaseAllocationLock(ctx)
+	defer func() { _ = ae.client.ReleaseAllocationLock(ctx) }()
 
 	// Re-fetch the queue entry to get latest allocated GPUs
 	entry, err := ae.client.GetQueueEntry(ctx, queueEntry.ID)
