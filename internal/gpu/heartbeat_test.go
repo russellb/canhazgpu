@@ -138,6 +138,10 @@ func TestHeartbeatManager_SendHeartbeat(t *testing.T) {
 }
 
 func TestHeartbeatManager_DoubleStop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	t.Log("Testing double-stop behavior (should handle gracefully)")
 
 	config := &types.Config{
