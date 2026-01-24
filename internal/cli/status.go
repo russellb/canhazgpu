@@ -135,22 +135,31 @@ func runStatusRemoteHost(ctx context.Context, host string) error {
 }
 
 func runStatusAllHosts(ctx context.Context, config *types.Config) error {
-	if len(config.RemoteHosts) == 0 {
-		return fmt.Errorf("no remote hosts configured in ~/.canhazgpu.yaml")
+	// Check if localhost Redis is available
+	localhostAvail := checkLocalhostAvailable(ctx, config)
+
+	// If localhost is not available and no remote hosts, fail
+	if !localhostAvail && len(config.RemoteHosts) == 0 {
+		return fmt.Errorf("failed to connect to Redis and no remote hosts configured")
+	}
+
+	// Warn if localhost is not available but we have remote hosts
+	if !localhostAvail {
+		fmt.Println("Warning: Redis not available locally, showing remote hosts only")
 	}
 
 	// JSON mode needs to collect all results first
 	if jsonOutput {
-		return runStatusAllHostsJSON(ctx, config)
+		return runStatusAllHostsJSON(ctx, config, localhostAvail)
 	}
 
 	// For summary mode, collect all results first then display in table
 	if showSummary {
-		return runStatusAllHostsSummary(ctx, config)
+		return runStatusAllHostsSummary(ctx, config, localhostAvail)
 	}
 
 	// Fetch all host statuses in parallel
-	results := getAllHostStatuses(ctx, config)
+	results := getAllHostStatuses(ctx, config, localhostAvail)
 
 	// Display results in order
 	for _, result := range results {
@@ -169,13 +178,9 @@ func runStatusAllHosts(ctx context.Context, config *types.Config) error {
 }
 
 // runStatusAllHostsSummary collects all results then displays summary table
-func runStatusAllHostsSummary(ctx context.Context, config *types.Config) error {
-	if len(config.RemoteHosts) == 0 {
-		return fmt.Errorf("no remote hosts configured in ~/.canhazgpu.yaml")
-	}
-
+func runStatusAllHostsSummary(ctx context.Context, config *types.Config, localhostAvail bool) error {
 	// Fetch all host statuses in parallel
-	results := getAllHostStatuses(ctx, config)
+	results := getAllHostStatuses(ctx, config, localhostAvail)
 
 	// Create table
 	t := table.NewWriter()
@@ -216,9 +221,9 @@ func runStatusAllHostsSummary(ctx context.Context, config *types.Config) error {
 }
 
 // runStatusAllHostsJSON collects all results then outputs JSON
-func runStatusAllHostsJSON(ctx context.Context, config *types.Config) error {
+func runStatusAllHostsJSON(ctx context.Context, config *types.Config, localhostAvail bool) error {
 	// Fetch all host statuses in parallel
-	results := getAllHostStatuses(ctx, config)
+	results := getAllHostStatuses(ctx, config, localhostAvail)
 
 	// Output all statuses as JSON
 	allStatuses := make(map[string]any)
@@ -259,37 +264,60 @@ type hostResult struct {
 	err      error
 }
 
+// checkLocalhostAvailable tests if local Redis is available
+func checkLocalhostAvailable(ctx context.Context, config *types.Config) bool {
+	client := redis_client.NewClient(config)
+	defer func() {
+		_ = client.Close()
+	}()
+	return client.Ping(ctx) == nil
+}
+
 // getAllHostStatuses fetches status from localhost and all remote hosts in parallel
-func getAllHostStatuses(ctx context.Context, config *types.Config) []hostResult {
-	// Total hosts = localhost + remote hosts
-	totalHosts := 1 + len(config.RemoteHosts)
+// If includeLocalhost is false, localhost is skipped
+func getAllHostStatuses(ctx context.Context, config *types.Config, includeLocalhost bool) []hostResult {
+	// Calculate total hosts
+	totalHosts := len(config.RemoteHosts)
+	if includeLocalhost {
+		totalHosts++
+	}
+
+	if totalHosts == 0 {
+		return nil
+	}
+
 	results := make([]hostResult, totalHosts)
 
 	var wg sync.WaitGroup
 	wg.Add(totalHosts)
 
-	// Fetch localhost status in parallel
-	go func() {
-		defer wg.Done()
-		statuses, err := getLocalStatus(ctx, config)
-		results[0] = hostResult{
-			host:     "localhost",
-			statuses: statuses,
-			err:      err,
-		}
-	}()
+	resultIndex := 0
+
+	// Fetch localhost status in parallel (if included)
+	if includeLocalhost {
+		go func() {
+			defer wg.Done()
+			statuses, err := getLocalStatus(ctx, config)
+			results[0] = hostResult{
+				host:     "localhost",
+				statuses: statuses,
+				err:      err,
+			}
+		}()
+		resultIndex = 1
+	}
 
 	// Fetch each remote host status in parallel
 	for i, host := range config.RemoteHosts {
 		go func(index int, h string) {
 			defer wg.Done()
 			statuses, err := getRemoteStatus(ctx, h)
-			results[index+1] = hostResult{
+			results[index] = hostResult{
 				host:     h,
 				statuses: statuses,
 				err:      err,
 			}
-		}(i, host)
+		}(resultIndex+i, host)
 	}
 
 	wg.Wait()

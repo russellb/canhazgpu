@@ -1798,18 +1798,8 @@ func (ws *webServer) handleAPIHostsStatus(w http.ResponseWriter, r *http.Request
 			}
 		}
 	} else {
-		// Get all host statuses, but filter out localhost if not available
-		allResults := getAllHostStatuses(ctx, ws.config)
-		if ws.localhostAvail {
-			results = allResults
-		} else {
-			// Filter out localhost
-			for _, r := range allResults {
-				if r.host != "localhost" {
-					results = append(results, r)
-				}
-			}
-		}
+		// Get all host statuses, excluding localhost if not available
+		results = getAllHostStatuses(ctx, ws.config, ws.localhostAvail)
 	}
 
 	// Build response with summaries
