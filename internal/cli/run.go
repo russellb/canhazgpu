@@ -240,7 +240,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	}
 
 	// Close Redis client before spawning supervisor (supervisor will create its own)
-	client.Close()
+	_ = client.Close()
 
 	// Get our own executable path for spawning supervisor
 	executable, err := os.Executable()
