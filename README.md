@@ -57,6 +57,9 @@ canhazgpu reserve --gpus 1 --duration 4h
 # Reserve specific GPU IDs manually
 canhazgpu reserve --gpu-ids 0,2 --duration 2h
 
+# Reserve GPUs and set CUDA_VISIBLE_DEVICES in one step (for scripting)
+export CUDA_VISIBLE_DEVICES=$(canhazgpu reserve --gpus 2 --short)
+
 # Release manual reservations when done
 canhazgpu release
 

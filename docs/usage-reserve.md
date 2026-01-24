@@ -16,6 +16,7 @@ canhazgpu reserve [--gpus <count> | --gpu-ids <ids>] [--duration <time>]
 - `--gpus, -g`: Number of GPUs to reserve
 - `--gpu-ids`: Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)
 - `--duration, -d`: How long to reserve the GPUs
+- `--short, -s`: Output only GPU IDs (for use with command substitution)
 
 !!! note "GPU Selection"
     - Use `--gpus` to let canhazgpu select GPUs using the LRU algorithm
@@ -267,13 +268,17 @@ canhazgpu release                         # Clean up immediately
 ## Integration Examples
 
 ### Shell Scripts
+
+The `--short` flag outputs only the GPU IDs, making it easy to set `CUDA_VISIBLE_DEVICES` in scripts:
+
 ```bash
 #!/bin/bash
 set -e
 
-echo "Reserving GPUs for data processing..."
-canhazgpu reserve --gpus 2 --duration 3h
+# Reserve GPUs and set environment variable in one step
+export CUDA_VISIBLE_DEVICES=$(canhazgpu reserve --gpus 2 --duration 3h --short)
 
+echo "Using GPUs: $CUDA_VISIBLE_DEVICES"
 echo "Starting data processing pipeline..."
 python preprocess.py
 python feature_extraction.py
@@ -286,30 +291,25 @@ echo "Processing complete!"
 ```
 
 ### Python Integration
+
+Using the `--short` flag simplifies Python integration:
+
 ```python
 import subprocess
 import os
 
 def reserve_gpus(count=1, duration="2h"):
-    """Reserve GPUs and return allocated GPU IDs"""
+    """Reserve GPUs and set CUDA_VISIBLE_DEVICES"""
     result = subprocess.run([
-        "canhazgpu", "reserve", 
+        "canhazgpu", "reserve",
         "--gpus", str(count),
-        "--duration", duration
-    ], capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        raise RuntimeError(f"GPU reservation failed: {result.stderr}")
-    
-    # Parse GPU IDs from output
-    # "Reserved 2 GPU(s): [1, 3] for 2h 0m 0s"
-    import re
-    match = re.search(r'Reserved \d+ GPU\(s\): \[([^\]]+)\]', result.stdout)
-    if match:
-        gpu_ids = [int(x.strip()) for x in match.group(1).split(',')]
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(map(str, gpu_ids))
-        return gpu_ids
-    return []
+        "--duration", duration,
+        "--short"
+    ], capture_output=True, text=True, check=True)
+
+    gpu_ids = result.stdout.strip()
+    os.environ['CUDA_VISIBLE_DEVICES'] = gpu_ids
+    return gpu_ids
 
 def release_gpus():
     """Release all manual reservations"""
@@ -317,13 +317,13 @@ def release_gpus():
 
 # Usage
 try:
-    gpu_ids = reserve_gpus(2, "1h")  
+    gpu_ids = reserve_gpus(2, "1h")
     print(f"Using GPUs: {gpu_ids}")
-    
+
     # Your GPU work here
     import torch
     print(f"PyTorch sees {torch.cuda.device_count()} GPUs")
-    
+
 finally:
     release_gpus()
 ```

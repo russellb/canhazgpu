@@ -57,6 +57,7 @@ Example usage:
   canhazgpu reserve --gpu-ids 0,1,2 --duration 8h --force
   canhazgpu reserve --nonblock --gpus 4 --duration 2h  # Fail if unavailable
   canhazgpu reserve --wait 30m --gpus 4 --duration 2h  # Wait up to 30 minutes
+  export CUDA_VISIBLE_DEVICES=$(canhazgpu reserve --gpus 2 --short)  # For scripting
 
 The reserved GPUs must be manually released with 'canhazgpu release' or will
 automatically expire after the specified duration.`,
@@ -69,8 +70,9 @@ automatically expire after the specified duration.`,
 		customUser := viper.GetString("reserve.user")
 		nonblock := viper.GetBool("reserve.nonblock")
 		waitStr := viper.GetString("reserve.wait")
+		short := viper.GetBool("reserve.short")
 
-		return runReserve(cmd.Context(), gpuCount, gpuIDs, durationStr, force, note, customUser, nonblock, waitStr)
+		return runReserve(cmd.Context(), gpuCount, gpuIDs, durationStr, force, note, customUser, nonblock, waitStr, short)
 	},
 }
 
@@ -83,11 +85,12 @@ func init() {
 	reserveCmd.Flags().StringP("user", "u", "", "Custom user identifier (e.g., your name when using a shared account)")
 	reserveCmd.Flags().Bool("nonblock", false, "Fail immediately if GPUs are unavailable instead of waiting in queue")
 	reserveCmd.Flags().StringP("wait", "w", "", "Maximum time to wait for GPUs (e.g., 30m, 2h). Default: wait forever.")
+	reserveCmd.Flags().BoolP("short", "s", false, "Output only the GPU IDs (for use with command substitution)")
 
 	rootCmd.AddCommand(reserveCmd)
 }
 
-func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr string, force bool, note string, customUser string, nonblock bool, waitStr string) error {
+func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr string, force bool, note string, customUser string, nonblock bool, waitStr string, short bool) error {
 	// If neither is specified, default to 1 GPU
 	if gpuCount == 0 && len(gpuIDs) == 0 {
 		gpuCount = 1
@@ -156,14 +159,20 @@ func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr str
 	}
 	allocatedGPUs := result.AllocatedGPUs
 
-	fmt.Printf("Reserved %d GPU(s): %v for %s\n",
-		len(allocatedGPUs), allocatedGPUs, utils.FormatDuration(duration))
-
 	// Build list for CUDA_VISIBLE_DEVICES
 	ids := make([]string, len(allocatedGPUs))
 	for i, id := range allocatedGPUs {
 		ids[i] = strconv.Itoa(id)
 	}
+
+	if short {
+		// Short output: just the GPU IDs for command substitution
+		fmt.Print(strings.Join(ids, ","))
+		return nil
+	}
+
+	fmt.Printf("Reserved %d GPU(s): %v for %s\n",
+		len(allocatedGPUs), allocatedGPUs, utils.FormatDuration(duration))
 
 	fmt.Printf(
 		"\nRun the following command to run only on these GPUs:\nexport CUDA_VISIBLE_DEVICES=%s\n",

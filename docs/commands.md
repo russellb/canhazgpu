@@ -333,6 +333,7 @@ canhazgpu reserve [--gpus <count> | --gpu-ids <ids>] [--duration <time>] [--nonb
 - `--duration`: Duration to reserve GPUs (default: 30m)
 - `--nonblock`: Fail immediately if GPUs are unavailable instead of waiting in queue
 - `--wait`: Maximum time to wait for GPUs (e.g., 30m, 2h). Default: wait forever.
+- `--short`: Output only GPU IDs (for use with command substitution)
 
 !!! note "GPU Selection Options"
     You can use `--gpus` alone, `--gpu-ids` alone, or both together if:
@@ -369,7 +370,10 @@ canhazgpu reserve --gpus 1 --duration 2d
 ```
 
 **Important Note:**
-Unlike the `run` command, `reserve` does NOT automatically set `CUDA_VISIBLE_DEVICES`. You must manually set it based on the GPU IDs shown in the output.
+Unlike the `run` command, `reserve` does NOT automatically set `CUDA_VISIBLE_DEVICES`. You can use `--short` for easy shell integration:
+```bash
+export CUDA_VISIBLE_DEVICES=$(canhazgpu reserve --gpus 2 --short)
+```
 
 **Use Cases:**
 - Interactive development sessions
