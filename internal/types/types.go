@@ -8,11 +8,11 @@ import (
 
 // GPUState represents the state of a GPU in Redis
 type GPUState struct {
-	User           string       `json:"user,omitempty"`             // Display name (custom user if provided, otherwise OS user)
-	ActualUser     string       `json:"actual_user,omitempty"`      // Actual OS account name
+	User           string       `json:"user,omitempty"`        // Display name (custom user if provided, otherwise OS user)
+	ActualUser     string       `json:"actual_user,omitempty"` // Actual OS account name
 	StartTime      FlexibleTime `json:"start_time,omitempty"`
 	LastHeartbeat  FlexibleTime `json:"last_heartbeat,omitempty"`
-	Type           string       `json:"type,omitempty"`             // "run" or "manual"
+	Type           string       `json:"type,omitempty"` // "run" or "manual"
 	ExpiryTime     FlexibleTime `json:"expiry_time,omitempty"`
 	LastReleased   FlexibleTime `json:"last_released,omitempty"`
 	Note           string       `json:"note,omitempty"`
@@ -204,10 +204,10 @@ func (qe *QueueEntry) IsComplete() bool {
 
 // QueueStatus represents the current queue status for display
 type QueueStatus struct {
-	Entries     []*QueueEntry `json:"entries"`
-	TotalWaiting int          `json:"total_waiting"`
-	TotalGPUsRequested int   `json:"total_gpus_requested"`
-	TotalGPUsAllocated int   `json:"total_gpus_allocated"`
+	Entries            []*QueueEntry `json:"entries"`
+	TotalWaiting       int           `json:"total_waiting"`
+	TotalGPUsRequested int           `json:"total_gpus_requested"`
+	TotalGPUsAllocated int           `json:"total_gpus_allocated"`
 }
 
 // Constants

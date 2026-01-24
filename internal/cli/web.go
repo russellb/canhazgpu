@@ -1699,8 +1699,8 @@ func (ws *webServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
 // handleAPIHosts returns the list of configured hosts
 func (ws *webServer) handleAPIHosts(w http.ResponseWriter, r *http.Request) {
 	type hostInfo struct {
-		Name      string `json:"name"`
-		IsLocal   bool   `json:"is_local"`
+		Name    string `json:"name"`
+		IsLocal bool   `json:"is_local"`
 	}
 
 	var hosts []hostInfo
@@ -1739,10 +1739,10 @@ func (ws *webServer) handleAPIHostsStatus(w http.ResponseWriter, r *http.Request
 	}
 
 	type hostStatusResponse struct {
-		Host     string           `json:"host"`
-		Statuses []jsonGPUStatus  `json:"statuses,omitempty"`
-		Summary  *hostSummary     `json:"summary,omitempty"`
-		Error    string           `json:"error,omitempty"`
+		Host     string          `json:"host"`
+		Statuses []jsonGPUStatus `json:"statuses,omitempty"`
+		Summary  *hostSummary    `json:"summary,omitempty"`
+		Error    string          `json:"error,omitempty"`
 	}
 
 	// If specific host requested, return detailed status for that host
