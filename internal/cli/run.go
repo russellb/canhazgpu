@@ -37,11 +37,15 @@ var runCmd = &cobra.Command{
 
 The command will:
 1. Reserve the requested number of GPUs (or specific GPU IDs)
-2. Set CUDA_VISIBLE_DEVICES to the allocated GPU IDs  
+2. Set CUDA_VISIBLE_DEVICES to the allocated GPU IDs
 3. Run your command
 4. Automatically release GPUs when the command finishes
 5. Maintain a heartbeat while running to keep the reservation active
 6. Forward signals (Ctrl-C/SIGINT) to the child process for graceful shutdown
+
+By default, if GPUs are not available, the command will wait in a queue until
+resources become available (FCFS - First Come First Served). Use --nonblock to
+fail immediately instead.
 
 You can reserve GPUs in two ways:
 - By count: --gpus N (allocates N GPUs using MRU-per-user strategy)
@@ -52,12 +56,12 @@ When using --gpu-ids, the --gpus flag is optional if:
 - It is 1 (the default value)
 
 If specific GPU IDs are requested and any are not available, the entire
-reservation will fail.
+reservation will wait in the queue until those specific IDs become available.
 
 Optionally, you can set a timeout to automatically terminate the command and release
 GPUs after a specified duration. When the timeout is reached, SIGINT will be sent to
-the entire process group (including all child processes) for graceful shutdown, 
-followed by a 30-second grace period. If any processes haven't exited after the 
+the entire process group (including all child processes) for graceful shutdown,
+followed by a 30-second grace period. If any processes haven't exited after the
 grace period, the entire process group will be force-killed with SIGKILL.
 This is useful for preventing runaway processes from holding GPUs indefinitely.
 
@@ -66,11 +70,13 @@ Example usage:
   canhazgpu run --gpus 2 -- python -m torch.distributed.launch train.py
   canhazgpu run --gpu-ids 1,3 -- python train.py
   canhazgpu run --gpus 1 --timeout 2h -- python long_training.py
+  canhazgpu run --nonblock --gpus 4 -- python train.py  # Fail if unavailable
+  canhazgpu run --wait 30m --gpus 4 -- python train.py  # Wait up to 30 minutes
 
 Timeout formats supported:
 - 30s (30 seconds)
 - 30m (30 minutes)
-- 2h (2 hours)  
+- 2h (2 hours)
 - 1d (1 day)
 - 0.5h (30 minutes with decimal)
 
@@ -82,6 +88,8 @@ and your command begins.`,
 		timeoutStr := viper.GetString("run.timeout")
 		note := viper.GetString("run.note")
 		customUser := viper.GetString("run.user")
+		nonblock := viper.GetBool("run.nonblock")
+		waitStr := viper.GetString("run.wait")
 
 		// Check if "--" separator was used
 		dashIndex := cmd.ArgsLenAtDash()
@@ -91,7 +99,7 @@ and your command begins.`,
 			return err
 		}
 
-		err := runRun(cmd.Context(), gpuCount, gpuIDs, timeoutStr, note, customUser, args)
+		err := runRun(cmd.Context(), gpuCount, gpuIDs, timeoutStr, note, customUser, nonblock, waitStr, args)
 
 		// Handle exit code errors
 		if exitErr, ok := err.(*ExitCodeError); ok {
@@ -109,6 +117,8 @@ func init() {
 	runCmd.Flags().StringP("timeout", "t", "", "Timeout duration for graceful command termination (e.g., 30m, 2h, 1d). Disabled by default.")
 	runCmd.Flags().StringP("note", "n", "", "Optional note describing the reservation purpose")
 	runCmd.Flags().StringP("user", "u", "", "Custom user identifier (e.g., your name when using a shared account)")
+	runCmd.Flags().Bool("nonblock", false, "Fail immediately if GPUs are unavailable instead of waiting in queue")
+	runCmd.Flags().StringP("wait", "w", "", "Maximum time to wait for GPUs (e.g., 30m, 2h). Default: wait forever.")
 
 	// Require explicit -- separator: only parse flags before --, everything after is treated as opaque args
 	runCmd.Flags().SetInterspersed(false)
@@ -155,7 +165,7 @@ func killProcessGroup(cmd *exec.Cmd) error {
 	return nil
 }
 
-func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, note string, customUser string, command []string) error {
+func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, note string, customUser string, nonblock bool, waitStr string, command []string) error {
 	// Cobra has already processed the "--" separator and given us just the command args
 
 	// If neither is specified, default to 1 GPU
@@ -177,6 +187,17 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 		}
 		hasTimeout = true
 	}
+
+	// Parse wait timeout if provided
+	var waitTimeout *time.Duration
+	if waitStr != "" {
+		wt, err := utils.ParseDuration(waitStr)
+		if err != nil {
+			return fmt.Errorf("invalid wait timeout format: %v", err)
+		}
+		waitTimeout = &wt
+	}
+
 	client := redis_client.NewClient(config)
 	defer func() {
 		if err := client.Close(); err != nil {
@@ -200,21 +221,26 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	}
 
 	// Create allocation request
-	request := &types.AllocationRequest{
-		GPUCount:        gpuCount,
-		GPUIDs:          gpuIDs,
-		User:            displayUser,
-		ActualUser:      actualUser,
-		ReservationType: types.ReservationTypeRun,
-		ExpiryTime:      nil, // No expiry for run-type reservations
-		Note:            note,
+	request := &gpu.QueuedAllocationRequest{
+		AllocationRequest: &types.AllocationRequest{
+			GPUCount:        gpuCount,
+			GPUIDs:          gpuIDs,
+			User:            displayUser,
+			ActualUser:      actualUser,
+			ReservationType: types.ReservationTypeRun,
+			ExpiryTime:      nil, // No expiry for run-type reservations
+			Note:            note,
+		},
+		Blocking:    !nonblock,
+		WaitTimeout: waitTimeout,
 	}
 
-	// Allocate GPUs
-	allocatedGPUs, err := engine.AllocateGPUs(ctx, request)
+	// Allocate GPUs (with queue support)
+	result, err := engine.AllocateGPUsWithQueue(ctx, request)
 	if err != nil {
 		return fmt.Errorf("%v", err)
 	}
+	allocatedGPUs := result.AllocatedGPUs
 
 	// Verify we got the requested number of GPUs
 	expectedCount := gpuCount

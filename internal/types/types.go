@@ -8,14 +8,15 @@ import (
 
 // GPUState represents the state of a GPU in Redis
 type GPUState struct {
-	User          string       `json:"user,omitempty"`        // Display name (custom user if provided, otherwise OS user)
-	ActualUser    string       `json:"actual_user,omitempty"` // Actual OS account name
-	StartTime     FlexibleTime `json:"start_time,omitempty"`
-	LastHeartbeat FlexibleTime `json:"last_heartbeat,omitempty"`
-	Type          string       `json:"type,omitempty"` // "run" or "manual"
-	ExpiryTime    FlexibleTime `json:"expiry_time,omitempty"`
-	LastReleased  FlexibleTime `json:"last_released,omitempty"`
-	Note          string       `json:"note,omitempty"`
+	User           string       `json:"user,omitempty"`             // Display name (custom user if provided, otherwise OS user)
+	ActualUser     string       `json:"actual_user,omitempty"`      // Actual OS account name
+	StartTime      FlexibleTime `json:"start_time,omitempty"`
+	LastHeartbeat  FlexibleTime `json:"last_heartbeat,omitempty"`
+	Type           string       `json:"type,omitempty"`             // "run" or "manual"
+	ExpiryTime     FlexibleTime `json:"expiry_time,omitempty"`
+	LastReleased   FlexibleTime `json:"last_released,omitempty"`
+	Note           string       `json:"note,omitempty"`
+	PartialQueueID string       `json:"partial_queue_id,omitempty"` // Queue entry ID for partial allocations
 }
 
 // FlexibleTime handles both Unix timestamps and RFC3339 time strings
@@ -172,6 +173,43 @@ type Config struct {
 	RemoteHosts     []string // SSH addresses (can use ~/.ssh/config entries for friendly names)
 }
 
+// QueueEntry represents a request waiting in the queue for GPUs
+type QueueEntry struct {
+	ID              string        `json:"id"`
+	User            string        `json:"user"`
+	ActualUser      string        `json:"actual_user"`
+	RequestedCount  int           `json:"requested_count"`
+	RequestedIDs    []int         `json:"requested_ids,omitempty"`
+	AllocatedGPUs   []int         `json:"allocated_gpus"`
+	ReservationType string        `json:"reservation_type"`
+	ExpiryDuration  time.Duration `json:"expiry_duration,omitempty"`
+	Note            string        `json:"note,omitempty"`
+	EnqueueTime     FlexibleTime  `json:"enqueue_time"`
+	LastHeartbeat   FlexibleTime  `json:"last_heartbeat"`
+	WaitTimeout     *FlexibleTime `json:"wait_timeout,omitempty"`
+}
+
+// GetRequestedGPUCount returns the total number of GPUs requested
+func (qe *QueueEntry) GetRequestedGPUCount() int {
+	if len(qe.RequestedIDs) > 0 {
+		return len(qe.RequestedIDs)
+	}
+	return qe.RequestedCount
+}
+
+// IsComplete returns true if all requested GPUs have been allocated
+func (qe *QueueEntry) IsComplete() bool {
+	return len(qe.AllocatedGPUs) >= qe.GetRequestedGPUCount()
+}
+
+// QueueStatus represents the current queue status for display
+type QueueStatus struct {
+	Entries     []*QueueEntry `json:"entries"`
+	TotalWaiting int          `json:"total_waiting"`
+	TotalGPUsRequested int   `json:"total_gpus_requested"`
+	TotalGPUsAllocated int   `json:"total_gpus_allocated"`
+}
+
 // Constants
 const (
 	ReservationTypeRun    = "run"
@@ -182,11 +220,17 @@ const (
 	RedisKeyProvider       = RedisKeyPrefix + "provider"
 	RedisKeyAllocationLock = RedisKeyPrefix + "allocation_lock"
 	RedisKeyUsageHistory   = RedisKeyPrefix + "usage_history:"
+	RedisKeyQueue          = RedisKeyPrefix + "queue"
+	RedisKeyQueueEntry     = RedisKeyPrefix + "queue:entry:"
 
 	HeartbeatInterval = 60 * time.Second
 	HeartbeatTimeout  = 5 * time.Minute
 	LockTimeout       = 10 * time.Second
 	MaxLockRetries    = 5
+
+	QueueHeartbeatInterval = 30 * time.Second
+	QueueHeartbeatTimeout  = 2 * time.Minute
+	QueuePollInterval      = 2 * time.Second
 
 	MemoryThresholdMB = 1024
 )

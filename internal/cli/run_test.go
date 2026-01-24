@@ -154,7 +154,7 @@ func TestRunRun_Validation(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err := runRun(ctx, tt.gpuCount, nil, "", "", "", tt.command)
+			err := runRun(ctx, tt.gpuCount, nil, "", "", "", true, "", tt.command)
 
 			if tt.wantErr {
 				assert.Error(t, err)

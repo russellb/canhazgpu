@@ -114,6 +114,7 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	http.HandleFunc("/api/hosts", server.handleAPIHosts)
 	http.HandleFunc("/api/hosts/status", server.handleAPIHostsStatus)
 	http.HandleFunc("/api/report", server.handleAPIReport)
+	http.HandleFunc("/api/queue", server.handleAPIQueue)
 	http.Handle("/static/", http.FileServer(http.FS(staticFiles)))
 
 	// Start server
@@ -665,6 +666,72 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .hidden {
             display: none !important;
         }
+        /* Queue section styles */
+        .queue-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .queue-table th,
+        .queue-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .queue-table th {
+            background: var(--background-dark);
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .queue-table tr:hover {
+            background: var(--background-dark);
+        }
+        .queue-position {
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+        .queue-progress {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .queue-progress-bar {
+            width: 80px;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .queue-progress-fill {
+            height: 100%;
+            background: var(--accent-color);
+            border-radius: 4px;
+        }
+        .queue-wait-time {
+            font-family: monospace;
+        }
+        .queue-wait-short {
+            color: #4caf50;
+        }
+        .queue-wait-medium {
+            color: #ff9800;
+        }
+        .queue-wait-long {
+            color: #f44336;
+        }
+        .queue-empty {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+        }
+        .queue-summary {
+            margin-top: 15px;
+            padding: 10px 15px;
+            background: var(--background-dark);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 0.9em;
+        }
     </style>
 </head>
 <body>
@@ -726,6 +793,16 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             <div id="gpu-status" class="loading">Loading GPU status...</div>
         </div>
 
+        <!-- Queue Section -->
+        <div class="section{{if .MultiHost}} hidden{{end}}" id="queue-section">
+            <h2>Reservation Queue</h2>
+            <div class="controls">
+                <button onclick="refreshQueue()">↻ Refresh</button>
+                <div class="timestamp" id="queue-timestamp"></div>
+            </div>
+            <div id="queue-status" class="loading">Loading queue status...</div>
+        </div>
+
         <div class="section{{if .MultiHost}} hidden{{end}}" id="report-section">
             <h2>GPU Reservation Report</h2>
             <div class="controls">
@@ -752,6 +829,7 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         let statusRefreshInterval;
         let reportRefreshInterval;
         let hostsRefreshInterval;
+        let queueRefreshInterval;
 
         // Multi-host state
         const isMultiHost = {{.MultiHost}};
@@ -807,6 +885,95 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             } catch (error) {
                 console.error('Error fetching report:', error);
                 throw error;
+            }
+        }
+
+        async function fetchQueue() {
+            try {
+                const response = await fetch('/api/queue');
+                if (!response.ok) throw new Error('Failed to fetch queue');
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching queue:', error);
+                throw error;
+            }
+        }
+
+        function getWaitTimeClass(seconds) {
+            if (seconds < 300) return 'queue-wait-short';      // < 5 min
+            if (seconds < 1800) return 'queue-wait-medium';    // < 30 min
+            return 'queue-wait-long';                          // >= 30 min
+        }
+
+        function renderQueue(data) {
+            const container = document.getElementById('queue-status');
+
+            if (!data || data.total_waiting === 0) {
+                container.innerHTML = '<div class="queue-empty">No entries waiting in queue.</div>';
+                document.getElementById('queue-timestamp').textContent = 'Last updated: ' + formatCompactTime(new Date());
+                return;
+            }
+
+            let html = '<table class="queue-table">';
+            html += '<thead><tr>';
+            html += '<th>Position</th>';
+            html += '<th>User</th>';
+            html += '<th>Requested</th>';
+            html += '<th>Progress</th>';
+            html += '<th>Waiting</th>';
+            html += '</tr></thead>';
+            html += '<tbody>';
+
+            data.entries.forEach((entry, index) => {
+                const waitSeconds = entry.wait_time_seconds || 0;
+                const waitTimeClass = getWaitTimeClass(waitSeconds);
+                const requested = entry.requested_ids && entry.requested_ids.length > 0
+                    ? 'IDs: ' + entry.requested_ids.join(',')
+                    : entry.requested_count + ' GPUs';
+                const allocated = entry.allocated_gpus ? entry.allocated_gpus.length : 0;
+                const total = entry.requested_ids && entry.requested_ids.length > 0
+                    ? entry.requested_ids.length
+                    : entry.requested_count;
+                const progressPercent = total > 0 ? (allocated / total) * 100 : 0;
+
+                html += '<tr>';
+                html += '<td class="queue-position">' + (index + 1) + '</td>';
+                html += '<td>' + entry.user + '</td>';
+                html += '<td>' + requested + '</td>';
+                html += '<td><div class="queue-progress">';
+                html += '<div class="queue-progress-bar"><div class="queue-progress-fill" style="width: ' + progressPercent + '%"></div></div>';
+                html += '<span>' + allocated + '/' + total + '</span>';
+                html += '</div></td>';
+                html += '<td class="queue-wait-time ' + waitTimeClass + '">' + formatDuration(waitSeconds) + '</td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+
+            // Summary section
+            const remainingGPUs = data.total_gpus_requested - data.total_gpus_allocated;
+            html += '<div class="queue-summary">';
+            html += 'Total: ' + data.total_waiting + ' entries waiting for ' + remainingGPUs + ' GPUs';
+            if (data.total_gpus_allocated > 0) {
+                html += ' (' + data.total_gpus_allocated + ' partially allocated)';
+            }
+            html += '</div>';
+
+            container.innerHTML = html;
+            document.getElementById('queue-timestamp').textContent = 'Last updated: ' + formatCompactTime(new Date());
+        }
+
+        async function refreshQueue() {
+            const container = document.getElementById('queue-status');
+            container.classList.add('refreshing');
+
+            try {
+                const data = await fetchQueue();
+                renderQueue(data);
+            } catch (error) {
+                container.innerHTML = '<div class="error">Failed to load queue: ' + error.message + '</div>';
+            } finally {
+                container.classList.remove('refreshing');
             }
         }
 
@@ -1014,15 +1181,18 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             document.getElementById('hosts-section').classList.add('hidden');
             document.getElementById('gpu-section').classList.remove('hidden');
             document.getElementById('report-section').classList.remove('hidden');
+            document.getElementById('queue-section').classList.remove('hidden');
             document.getElementById('back-to-hosts').classList.remove('hidden');
             document.getElementById('gpu-section-title').textContent = 'GPU Status - ' + hostName;
 
-            // Switch from hosts refresh to status/report refresh
+            // Switch from hosts refresh to status/report/queue refresh
             clearInterval(hostsRefreshInterval);
             refreshStatus();
             refreshReport();
+            refreshQueue();
             statusRefreshInterval = setInterval(refreshStatus, 30000);
             reportRefreshInterval = setInterval(refreshReport, 300000);
+            queueRefreshInterval = setInterval(refreshQueue, 5000);
         }
 
         // Go back to hosts overview
@@ -1033,12 +1203,14 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             document.getElementById('hosts-section').classList.remove('hidden');
             document.getElementById('gpu-section').classList.add('hidden');
             document.getElementById('report-section').classList.add('hidden');
+            document.getElementById('queue-section').classList.add('hidden');
             document.getElementById('back-to-hosts').classList.add('hidden');
             document.getElementById('gpu-section-title').textContent = 'GPU Status';
 
-            // Switch from status/report refresh to hosts refresh
+            // Switch from status/report/queue refresh to hosts refresh
             clearInterval(statusRefreshInterval);
             clearInterval(reportRefreshInterval);
+            clearInterval(queueRefreshInterval);
             refreshHosts();
             hostsRefreshInterval = setInterval(refreshHosts, 30000);
         }
@@ -1305,8 +1477,9 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
 
         // Initial load
         if (isMultiHost) {
-            // Multi-host mode: start with hosts view, hide GPU section and report
+            // Multi-host mode: start with hosts view, hide GPU section, report, and queue
             document.getElementById('gpu-section').classList.add('hidden');
+            document.getElementById('queue-section').classList.add('hidden');
             refreshHosts();
 
             // Auto-refresh hosts every 30 seconds
@@ -1315,11 +1488,14 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             // Single-host mode: standard behavior
             refreshStatus();
             refreshReport();
+            refreshQueue();
 
             // Auto-refresh status every 30 seconds
             statusRefreshInterval = setInterval(refreshStatus, 30000);
             // Auto-refresh report every 5 minutes
             reportRefreshInterval = setInterval(refreshReport, 300000);
+            // Auto-refresh queue every 5 seconds
+            queueRefreshInterval = setInterval(refreshQueue, 5000);
         }
 
         // Clean up intervals when page is hidden
@@ -1328,17 +1504,20 @@ func (ws *webServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 clearInterval(statusRefreshInterval);
                 clearInterval(reportRefreshInterval);
                 clearInterval(hostsRefreshInterval);
+                clearInterval(queueRefreshInterval);
             } else {
                 if (isMultiHost && !selectedHost) {
                     // Multi-host mode with no host selected: only refresh hosts
                     refreshHosts();
                     hostsRefreshInterval = setInterval(refreshHosts, 30000);
                 } else {
-                    // Single-host mode or host selected: refresh status and report
+                    // Single-host mode or host selected: refresh status, report, and queue
                     refreshStatus();
                     refreshReport();
+                    refreshQueue();
                     statusRefreshInterval = setInterval(refreshStatus, 30000);
                     reportRefreshInterval = setInterval(refreshReport, 300000);
+                    queueRefreshInterval = setInterval(refreshQueue, 5000);
                 }
             }
         });
@@ -2187,5 +2366,117 @@ func (ws *webServer) generateDemoReport(days int) reportData {
 		StartDate:         startTime.Format("2006-01-02"),
 		EndDate:           endTime.Format("2006-01-02"),
 		Days:              days,
+	}
+}
+
+// queueEntryJSON represents a queue entry for JSON output
+type queueEntryJSON struct {
+	ID              string  `json:"id"`
+	User            string  `json:"user"`
+	RequestedCount  int     `json:"requested_count"`
+	RequestedIDs    []int   `json:"requested_ids,omitempty"`
+	AllocatedGPUs   []int   `json:"allocated_gpus"`
+	AllocatedCount  int     `json:"allocated_count"`
+	ReservationType string  `json:"reservation_type"`
+	Note            string  `json:"note,omitempty"`
+	WaitTime        string  `json:"wait_time"`
+	WaitTimeSeconds float64 `json:"wait_time_seconds"`
+}
+
+// queueStatusJSON represents the queue status for JSON output
+type queueStatusJSON struct {
+	Entries            []queueEntryJSON `json:"entries"`
+	TotalWaiting       int              `json:"total_waiting"`
+	TotalGPUsRequested int              `json:"total_gpus_requested"`
+	TotalGPUsAllocated int              `json:"total_gpus_allocated"`
+}
+
+// handleAPIQueue returns the current queue status
+func (ws *webServer) handleAPIQueue(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Check if localhost is available
+	if !ws.localhostAvail && !ws.demo {
+		http.Error(w, "localhost not available (Redis connection failed)", http.StatusServiceUnavailable)
+		return
+	}
+
+	var response queueStatusJSON
+
+	if ws.demo {
+		// Generate demo queue data
+		response = ws.generateDemoQueue()
+	} else {
+		// Clean up stale queue entries first
+		if _, err := ws.client.CleanupStaleQueueEntries(ctx); err != nil {
+			fmt.Printf("Warning: Failed to cleanup stale queue entries: %v\n", err)
+		}
+
+		status, err := ws.engine.GetQueueStatus(ctx)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get queue status: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		now := time.Now()
+		response.TotalWaiting = status.TotalWaiting
+		response.TotalGPUsRequested = status.TotalGPUsRequested
+		response.TotalGPUsAllocated = status.TotalGPUsAllocated
+		response.Entries = make([]queueEntryJSON, len(status.Entries))
+
+		for i, entry := range status.Entries {
+			waitTime := now.Sub(entry.EnqueueTime.ToTime())
+			response.Entries[i] = queueEntryJSON{
+				ID:              entry.ID,
+				User:            entry.User,
+				RequestedCount:  entry.GetRequestedGPUCount(),
+				RequestedIDs:    entry.RequestedIDs,
+				AllocatedGPUs:   entry.AllocatedGPUs,
+				AllocatedCount:  len(entry.AllocatedGPUs),
+				ReservationType: entry.ReservationType,
+				Note:            entry.Note,
+				WaitTime:        utils.FormatDuration(waitTime),
+				WaitTimeSeconds: waitTime.Seconds(),
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode JSON", http.StatusInternalServerError)
+		return
+	}
+}
+
+// generateDemoQueue generates demo queue data
+func (ws *webServer) generateDemoQueue() queueStatusJSON {
+	return queueStatusJSON{
+		Entries: []queueEntryJSON{
+			{
+				ID:              "demo-queue-1",
+				User:            "alice",
+				RequestedCount:  4,
+				AllocatedGPUs:   []int{0, 1},
+				AllocatedCount:  2,
+				ReservationType: "run",
+				Note:            "Training large model",
+				WaitTime:        "5m 30s",
+				WaitTimeSeconds: 330,
+			},
+			{
+				ID:              "demo-queue-2",
+				User:            "bob",
+				RequestedCount:  2,
+				AllocatedGPUs:   []int{},
+				AllocatedCount:  0,
+				ReservationType: "manual",
+				Note:            "Inference testing",
+				WaitTime:        "2m 15s",
+				WaitTimeSeconds: 135,
+			},
+		},
+		TotalWaiting:       2,
+		TotalGPUsRequested: 6,
+		TotalGPUsAllocated: 2,
 	}
 }

@@ -8,13 +8,14 @@ This is `canhazgpu`, a GPU reservation tool for single host shared development s
 
 ## Architecture
 
-The tool is a Go application structured as a CLI with internal packages that implements seven main commands:
+The tool is a Go application structured as a CLI with internal packages that implements eight main commands:
 - `admin`: Initialize and configure the GPU pool with optional --force flag and --provider selection
 - `status`: Show current GPU allocation status with automatic provider-specific validation
-- `run`: Reserve GPU(s) and execute a command with `CUDA_VISIBLE_DEVICES` set
-- `reserve`: Manually reserve GPU(s) for a specified duration 
+- `run`: Reserve GPU(s) and execute a command with `CUDA_VISIBLE_DEVICES` set (blocks if GPUs unavailable)
+- `reserve`: Manually reserve GPU(s) for a specified duration (blocks if GPUs unavailable)
 - `release`: Release all manually reserved GPUs for the current user
 - `report`: Generate GPU reservation reports showing historical reservation patterns by user
+- `queue`: Show the GPU reservation queue with wait times and allocation progress
 - `web`: Start a web server providing a dashboard for real-time monitoring and reports
 
 ### Core Components
@@ -29,6 +30,7 @@ The tool is a Go application structured as a CLI with internal packages that imp
 - **MRU-per-User Allocation**: Most Recently Used per user strategy provides GPU affinity with LRU fallback for fair distribution
 - **Specific GPU Reservation**: Users can reserve exact GPU IDs (e.g., --gpu-ids 1,3) when specific hardware is needed
 - **Race Condition Protection**: Redis-based distributed locking prevents allocation conflicts
+- **Fair Queueing System**: FCFS (First Come First Served) queue with greedy partial allocation for first-in-queue, heartbeat-based stale entry cleanup, and queue status monitoring
 
 ## Development Commands
 
@@ -96,6 +98,19 @@ sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 # Use a configuration file
 ./build/canhazgpu --config /path/to/config.yaml status
 ./build/canhazgpu --config config.json run --gpus 2 -- python train.py
+
+# Queueing: wait for GPUs if unavailable (default behavior)
+./build/canhazgpu run --gpus 4 -- python train.py  # Waits in queue until GPUs available
+
+# Fail immediately if GPUs are unavailable (no queueing)
+./build/canhazgpu run --nonblock --gpus 4 -- python train.py
+
+# Wait up to 30 minutes for GPUs, then fail
+./build/canhazgpu run --wait 30m --gpus 4 -- python train.py
+
+# Check the reservation queue
+./build/canhazgpu queue
+./build/canhazgpu queue --json
 ```
 
 ### GPU Provider Examples
@@ -143,12 +158,14 @@ redis-cli get "canhazgpu:provider"
 │   │   ├── run.go                  # run command implementation
 │   │   ├── reserve.go              # reserve command implementation
 │   │   ├── release.go              # release command implementation
-│   │   └── report.go               # report command implementation
+│   │   ├── report.go               # report command implementation
+│   │   └── queue.go                # queue command implementation
 │   ├── gpu/                        # GPU management logic
 │   │   ├── allocation.go           # MRU-per-user allocation and coordination
 │   │   ├── validation.go           # GPU usage validation and process detection
 │   │   ├── model_detection.go      # AI model detection from process commands
 │   │   ├── heartbeat.go            # Background heartbeat system
+│   │   ├── queue_heartbeat.go      # Queue-specific heartbeat system
 │   │   ├── provider.go             # GPU provider interface and manager
 │   │   ├── nvidia_provider.go      # NVIDIA GPU provider implementation
 │   │   ├── amd_provider.go         # AMD GPU provider implementation
@@ -237,6 +254,11 @@ redis-cli get "canhazgpu:provider"
 - `canhazgpu:provider`: Cached GPU provider type ("nvidia", "amd", or "fake")
 - `canhazgpu:allocation_lock`: Global allocation lock for race condition prevention
 - `canhazgpu:usage_history:{timestamp}:{user}:{gpu_id}`: Historical usage records for reporting
+
+### Queue Keys
+
+- `canhazgpu:queue`: Sorted set of queue entries (score = enqueue timestamp)
+- `canhazgpu:queue:entry:{id}`: JSON object for each queue entry details
 
 ### GPU State Objects (`canhazgpu:gpu:{id}`)
 

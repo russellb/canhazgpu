@@ -1,6 +1,6 @@
 # Commands Overview
 
-canhazgpu provides seven main commands for GPU management:
+canhazgpu provides eight main commands for GPU management:
 
 ```bash
 ❯ canhazgpu --help
@@ -8,6 +8,7 @@ Usage: canhazgpu [OPTIONS] COMMAND [ARGS]...
 
 Commands:
   admin    Initialize GPU pool for this machine
+  queue    Show the GPU reservation queue
   release  Release manually reserved GPUs held by the current user
   report   Generate GPU usage reports
   reserve  Reserve GPUs manually for a specified duration
@@ -239,7 +240,7 @@ GPU  STATUS      USER      DURATION     TYPE    MODEL                    DETAILS
 Reserve GPUs and run a command with automatic cleanup.
 
 ```bash
-canhazgpu run [--gpus <count> | --gpu-ids <ids>] [--timeout <duration>] -- <command>
+canhazgpu run [--gpus <count> | --gpu-ids <ids>] [--timeout <duration>] [--nonblock] [--wait <duration>] -- <command>
 ```
 
 **[→ Detailed Run Guide](usage-run.md)**
@@ -248,13 +249,18 @@ canhazgpu run [--gpus <count> | --gpu-ids <ids>] [--timeout <duration>] -- <comm
 - `--gpus`: Number of GPUs to reserve (default: 1)
 - `--gpu-ids`: Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)
 - `--timeout`: Maximum time to run command before killing it (default: none)
+- `--nonblock`: Fail immediately if GPUs are unavailable instead of waiting in queue
+- `--wait`: Maximum time to wait for GPUs (e.g., 30m, 2h). Default: wait forever.
 
 !!! note "GPU Selection Options"
     You can use `--gpus` alone, `--gpu-ids` alone, or both together if:
     - `--gpus` matches the number of GPU IDs specified, or
     - `--gpus` is 1 (the default value)
-    
-    If specific GPU IDs are requested and any are not available, the entire reservation will fail.
+
+    If specific GPU IDs are requested and any are not available, the command will wait in the queue until those specific IDs become available.
+
+!!! tip "Queueing Behavior"
+    By default, if GPUs are not immediately available, `run` will wait in a FCFS (First Come First Served) queue until resources become available. Use `--nonblock` to fail immediately instead, or `--wait` to set a maximum wait time.
 
 **Timeout formats:**
 - `30s` (30 seconds)
@@ -280,23 +286,35 @@ canhazgpu run --gpus 1 -- python train.py --batch-size 32 --epochs 100
 # Training with timeout to prevent runaway processes
 canhazgpu run --gpus 1 --timeout 2h -- python train.py
 
-# Short timeout for testing
-canhazgpu run --gpus 1 --timeout 30m -- python test_model.py
+# Fail immediately if GPUs unavailable (no queuing)
+canhazgpu run --nonblock --gpus 4 -- python train.py
+
+# Wait up to 30 minutes for GPUs, then fail
+canhazgpu run --wait 30m --gpus 4 -- python train.py
 ```
 
 **Behavior:**
 1. Validates actual GPU availability using nvidia-smi
 2. Excludes GPUs that are in use without reservation
-3. Reserves the requested number of GPUs using MRU-per-user allocation (with LRU fallback)
-4. Sets `CUDA_VISIBLE_DEVICES` to the allocated GPU IDs
-5. Runs your command
-6. Automatically releases GPUs when the command finishes
-7. Maintains a heartbeat while running to keep the reservation active
+3. If GPUs unavailable, waits in queue (unless `--nonblock` is set)
+4. Reserves the requested number of GPUs using MRU-per-user allocation (with LRU fallback)
+5. Sets `CUDA_VISIBLE_DEVICES` to the allocated GPU IDs
+6. Runs your command
+7. Automatically releases GPUs when the command finishes
+8. Maintains a heartbeat while running to keep the reservation active
 
-**Error Handling:**
+**With `--nonblock`:**
+```bash
+❯ canhazgpu run --nonblock --gpus 2 -- python train.py
+Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use without reservation - run 'canhazgpu status' for details)
+```
+
+**Default (waiting in queue):**
 ```bash
 ❯ canhazgpu run --gpus 2 -- python train.py
-Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use without reservation - run 'canhazgpu status' for details)
+Waiting for GPUs... (position 1 in queue, 0/2 allocated)
+Reserved 2 GPU(s): [0, 1] for command execution
+...
 ```
 
 ## reserve
@@ -304,7 +322,7 @@ Error: Not enough GPUs available. Requested: 2, Available: 1 (1 GPUs in use with
 Manually reserve GPUs for a specified duration.
 
 ```bash
-canhazgpu reserve [--gpus <count> | --gpu-ids <ids>] [--duration <time>]
+canhazgpu reserve [--gpus <count> | --gpu-ids <ids>] [--duration <time>] [--nonblock] [--wait <duration>]
 ```
 
 **[→ Detailed Reserve Guide](usage-reserve.md)**
@@ -312,14 +330,19 @@ canhazgpu reserve [--gpus <count> | --gpu-ids <ids>] [--duration <time>]
 **Options:**
 - `--gpus`: Number of GPUs to reserve (default: 1)
 - `--gpu-ids`: Specific GPU IDs to reserve (comma-separated, e.g., 1,3,5)
-- `--duration`: Duration to reserve GPUs (default: 8h)
+- `--duration`: Duration to reserve GPUs (default: 30m)
+- `--nonblock`: Fail immediately if GPUs are unavailable instead of waiting in queue
+- `--wait`: Maximum time to wait for GPUs (e.g., 30m, 2h). Default: wait forever.
 
 !!! note "GPU Selection Options"
     You can use `--gpus` alone, `--gpu-ids` alone, or both together if:
     - `--gpus` matches the number of GPU IDs specified, or
     - `--gpus` is 1 (the default value)
-    
-    If specific GPU IDs are requested and any are not available, the entire reservation will fail.
+
+    If specific GPU IDs are requested and any are not available, the command will wait in the queue until those specific IDs become available.
+
+!!! tip "Queueing Behavior"
+    By default, if GPUs are not immediately available, `reserve` will wait in a FCFS (First Come First Served) queue until resources become available. Use `--nonblock` to fail immediately instead, or `--wait` to set a maximum wait time.
 
 **Duration Formats:**
 - `30m`: 30 minutes
@@ -431,6 +454,61 @@ Unique users: 3
 - Total statistics for the period
 - Includes both completed and in-progress reservations
 
+## queue
+
+Show the GPU reservation queue.
+
+```bash
+canhazgpu queue [--json]
+```
+
+**Options:**
+- `--json`: Output queue status as JSON
+
+When GPUs are not immediately available, `run` and `reserve` commands add entries to a queue and wait for resources to become available. This command shows all entries currently waiting in the queue.
+
+**Example Output:**
+```bash
+❯ canhazgpu queue
+GPU Reservation Queue
+=====================
+
+Position  User            Requested       Allocated    Waiting
+--------  ----            ---------       ---------    -------
+1         alice           4 GPUs          2/4          5m 30s
+2         bob             2 GPUs          0/2          2m 15s
+
+Total: 2 entries waiting for 4 GPUs (2 partially allocated)
+```
+
+**Queue Behavior:**
+- **FCFS (First Come First Served)**: Only the first entry in the queue can acquire newly available GPUs
+- **Greedy Partial Allocation**: GPUs are allocated to the first entry as they become available
+- **Heartbeat Cleanup**: Stale queue entries (crashed processes) are automatically cleaned up after 2 minutes
+- **Ctrl+C Handling**: Pressing Ctrl+C while waiting removes the entry from the queue
+
+**JSON Output:**
+```bash
+❯ canhazgpu queue --json
+{
+  "entries": [
+    {
+      "id": "abc123",
+      "user": "alice",
+      "requested_count": 4,
+      "allocated_gpus": [0, 1],
+      "allocated_count": 2,
+      "reservation_type": "run",
+      "wait_time": "5m 30s",
+      "wait_time_seconds": 330
+    }
+  ],
+  "total_waiting": 1,
+  "total_gpus_requested": 4,
+  "total_gpus_allocated": 2
+}
+```
+
 ## web
 
 Start a web server providing a dashboard for real-time monitoring and reports.
@@ -468,17 +546,20 @@ The dashboard displays:
 - System hostname in the header for easy identification
 - GPU cards showing status, user, duration, and validation info
 - Color-coded status badges (green=available, blue=in use, red=unreserved)
+- Reservation queue with wait times and progress bars (when entries are waiting)
 - Reservation report with usage statistics and visual bars
 - Quick links to documentation and GitHub repository
 
 **Dashboard Features:**
 - **Real-time GPU Status**: Automatically refreshes every 30 seconds
+- **Reservation Queue**: Live queue display with progress bars and color-coded wait times (refreshes every 5 seconds)
 - **Interactive Reservation Reports**: Customizable time periods (1-90 days)
 - **Visual Design**: Dark/light theme toggle with color-coded status indicators
 - **Mobile Responsive**: Works on desktop and mobile devices
 - **Multi-Host Support**: View all configured remote hosts in one dashboard
 - **API Endpoints**:
   - `/api/status` - Current GPU status as JSON
+  - `/api/queue` - Current queue status as JSON
   - `/api/hosts` - List of configured hosts
   - `/api/hosts/status` - Status for all hosts (multi-host view)
   - `/api/hosts/status?host=<name>` - Status for a specific host

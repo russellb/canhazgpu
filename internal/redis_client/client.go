@@ -272,7 +272,7 @@ func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.Allocatio
 		
 		-- Check if we have enough GPUs
 		if #available_gpus < requested then
-			return {error = "Not enough GPUs available"}
+			return redis.error_reply("Not enough GPUs available")
 		end
 		
 		-- Allocate requested GPUs
@@ -566,6 +566,12 @@ func (c *Client) ClearAllGPUStates(ctx context.Context) error {
 	return nil
 }
 
+// FlushTestDB flushes the entire test database (DB 15).
+// This should only be used in tests to ensure a clean state.
+func (c *Client) FlushTestDB(ctx context.Context) error {
+	return c.rdb.FlushDB(ctx).Err()
+}
+
 // RecordUsageHistory records a GPU usage entry when a reservation is released
 func (c *Client) RecordUsageHistory(ctx context.Context, record *types.UsageRecord) error {
 	data, err := json.Marshal(record)
@@ -707,4 +713,216 @@ func (c *Client) migrateOldUsageRecords(ctx context.Context, records []*types.Us
 	}
 
 	return nil
+}
+
+// Queue Management Operations
+
+// AddToQueue adds a new entry to the queue
+func (c *Client) AddToQueue(ctx context.Context, entry *types.QueueEntry) error {
+	// Store entry details
+	entryKey := types.RedisKeyQueueEntry + entry.ID
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("failed to marshal queue entry: %v", err)
+	}
+
+	// Use a transaction to add both the sorted set entry and the details atomically
+	pipe := c.rdb.TxPipeline()
+
+	// Add to sorted set with enqueue timestamp as score
+	score := float64(entry.EnqueueTime.ToTime().UnixNano())
+	pipe.ZAdd(ctx, types.RedisKeyQueue, &redis.Z{
+		Score:  score,
+		Member: entry.ID,
+	})
+
+	// Store entry details
+	pipe.Set(ctx, entryKey, data, 0)
+
+	_, err = pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to add to queue: %v", err)
+	}
+
+	return nil
+}
+
+// RemoveFromQueue removes an entry from the queue
+func (c *Client) RemoveFromQueue(ctx context.Context, queueID string) error {
+	entryKey := types.RedisKeyQueueEntry + queueID
+
+	// Use a transaction to remove both atomically
+	pipe := c.rdb.TxPipeline()
+	pipe.ZRem(ctx, types.RedisKeyQueue, queueID)
+	pipe.Del(ctx, entryKey)
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to remove from queue: %v", err)
+	}
+
+	return nil
+}
+
+// GetQueueEntry retrieves a queue entry by ID
+func (c *Client) GetQueueEntry(ctx context.Context, queueID string) (*types.QueueEntry, error) {
+	entryKey := types.RedisKeyQueueEntry + queueID
+	data, err := c.rdb.Get(ctx, entryKey).Result()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get queue entry: %v", err)
+	}
+
+	var entry types.QueueEntry
+	if err := json.Unmarshal([]byte(data), &entry); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal queue entry: %v", err)
+	}
+
+	return &entry, nil
+}
+
+// UpdateQueueEntry updates a queue entry
+func (c *Client) UpdateQueueEntry(ctx context.Context, entry *types.QueueEntry) error {
+	entryKey := types.RedisKeyQueueEntry + entry.ID
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("failed to marshal queue entry: %v", err)
+	}
+
+	return c.rdb.Set(ctx, entryKey, data, 0).Err()
+}
+
+// UpdateQueueEntryHeartbeat updates the heartbeat timestamp for a queue entry
+func (c *Client) UpdateQueueEntryHeartbeat(ctx context.Context, queueID string) error {
+	entry, err := c.GetQueueEntry(ctx, queueID)
+	if err != nil {
+		return err
+	}
+	if entry == nil {
+		return fmt.Errorf("queue entry not found: %s", queueID)
+	}
+
+	entry.LastHeartbeat = types.FlexibleTime{Time: time.Now()}
+	return c.UpdateQueueEntry(ctx, entry)
+}
+
+// GetAllQueueEntries returns all queue entries in order (oldest first)
+func (c *Client) GetAllQueueEntries(ctx context.Context) ([]*types.QueueEntry, error) {
+	// Get all queue IDs in order
+	queueIDs, err := c.rdb.ZRange(ctx, types.RedisKeyQueue, 0, -1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get queue IDs: %v", err)
+	}
+
+	var entries []*types.QueueEntry
+	for _, queueID := range queueIDs {
+		entry, err := c.GetQueueEntry(ctx, queueID)
+		if err != nil {
+			continue
+		}
+		if entry != nil {
+			entries = append(entries, entry)
+		}
+	}
+
+	return entries, nil
+}
+
+// GetQueuePosition returns the 0-based position of an entry in the queue
+// Returns -1 if not found
+func (c *Client) GetQueuePosition(ctx context.Context, queueID string) (int, error) {
+	rank, err := c.rdb.ZRank(ctx, types.RedisKeyQueue, queueID).Result()
+	if err == redis.Nil {
+		return -1, nil
+	}
+	if err != nil {
+		return -1, fmt.Errorf("failed to get queue position: %v", err)
+	}
+
+	return int(rank), nil
+}
+
+// GetQueueLength returns the number of entries in the queue
+func (c *Client) GetQueueLength(ctx context.Context) (int, error) {
+	count, err := c.rdb.ZCard(ctx, types.RedisKeyQueue).Result()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get queue length: %v", err)
+	}
+	return int(count), nil
+}
+
+// IsFirstInQueue checks if the given entry is first in the queue
+func (c *Client) IsFirstInQueue(ctx context.Context, queueID string) (bool, error) {
+	// Get the first entry in the queue
+	firstEntries, err := c.rdb.ZRange(ctx, types.RedisKeyQueue, 0, 0).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to get first queue entry: %v", err)
+	}
+
+	if len(firstEntries) == 0 {
+		return false, nil
+	}
+
+	return firstEntries[0] == queueID, nil
+}
+
+// CleanupStaleQueueEntries removes queue entries with expired heartbeats
+// and releases any partial allocations they held
+func (c *Client) CleanupStaleQueueEntries(ctx context.Context) ([]string, error) {
+	entries, err := c.GetAllQueueEntries(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	var cleanedIDs []string
+
+	for _, entry := range entries {
+		// Check if heartbeat has expired
+		if now.Sub(entry.LastHeartbeat.ToTime()) > types.QueueHeartbeatTimeout {
+			cleanedIDs = append(cleanedIDs, entry.ID)
+
+			// Release partial allocations if any
+			if len(entry.AllocatedGPUs) > 0 {
+				for _, gpuID := range entry.AllocatedGPUs {
+					// Clear the GPU state (release the partial allocation)
+					availableState := &types.GPUState{
+						LastReleased: types.FlexibleTime{Time: now},
+					}
+					if err := c.SetGPUState(ctx, gpuID, availableState); err != nil {
+						fmt.Printf("Warning: failed to release partial allocation for GPU %d: %v\n", gpuID, err)
+					}
+				}
+			}
+
+			// Remove from queue
+			if err := c.RemoveFromQueue(ctx, entry.ID); err != nil {
+				fmt.Printf("Warning: failed to remove stale queue entry %s: %v\n", entry.ID, err)
+			}
+		}
+	}
+
+	return cleanedIDs, nil
+}
+
+// GetQueueStatus returns the current queue status for display
+func (c *Client) GetQueueStatus(ctx context.Context) (*types.QueueStatus, error) {
+	entries, err := c.GetAllQueueEntries(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	status := &types.QueueStatus{
+		Entries:      entries,
+		TotalWaiting: len(entries),
+	}
+
+	for _, entry := range entries {
+		status.TotalGPUsRequested += entry.GetRequestedGPUCount()
+		status.TotalGPUsAllocated += len(entry.AllocatedGPUs)
+	}
+
+	return status, nil
 }
