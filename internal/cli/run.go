@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -38,10 +36,12 @@ var runCmd = &cobra.Command{
 The command will:
 1. Reserve the requested number of GPUs (or specific GPU IDs)
 2. Set CUDA_VISIBLE_DEVICES to the allocated GPU IDs
-3. Run your command
+3. Run your command with full interactive terminal support
 4. Automatically release GPUs when the command finishes
 5. Maintain a heartbeat while running to keep the reservation active
-6. Forward signals (Ctrl-C/SIGINT) to the child process for graceful shutdown
+
+Interactive programs (like Python REPL, codex, vim, etc.) are fully supported.
+Signals like Ctrl-C go directly to your command.
 
 By default, if GPUs are not available, the command will wait in a queue until
 resources become available (FCFS - First Come First Served). Use --nonblock to
@@ -143,28 +143,6 @@ func validateRunCommand(args []string, dashIndex int) error {
 	return nil
 }
 
-// killProcessGroup kills the entire process group (parent and all children)
-func killProcessGroup(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return fmt.Errorf("process not started")
-	}
-
-	// Kill the entire process group by using negative PID
-	pgid, err := syscall.Getpgid(cmd.Process.Pid)
-	if err != nil {
-		// If we can't get the process group, just kill the process itself
-		return cmd.Process.Kill()
-	}
-
-	// Send SIGKILL to the entire process group
-	if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil {
-		// If group kill fails, try to kill just the process
-		return cmd.Process.Kill()
-	}
-
-	return nil
-}
-
 func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, note string, customUser string, nonblock bool, waitStr string, command []string) error {
 	// Cobra has already processed the "--" separator and given us just the command args
 
@@ -175,17 +153,11 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 
 	config := getConfig()
 
-	// Parse timeout if provided
-	var timeout time.Duration
-	var hasTimeout bool
-
+	// Validate timeout format early (before allocating GPUs)
 	if timeoutStr != "" {
-		var err error
-		timeout, err = utils.ParseDuration(timeoutStr)
-		if err != nil {
+		if _, err := utils.ParseDuration(timeoutStr); err != nil {
 			return fmt.Errorf("invalid timeout format: %v", err)
 		}
-		hasTimeout = true
 	}
 
 	// Parse wait timeout if provided
@@ -199,14 +171,11 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	}
 
 	client := redis_client.NewClient(config)
-	defer func() {
-		if err := client.Close(); err != nil {
-			fmt.Printf("Warning: failed to close Redis client: %v\n", err)
-		}
-	}()
+	// Note: We don't defer close here because we'll exec() and the process will be replaced
 
 	// Test Redis connection
 	if err := client.Ping(ctx); err != nil {
+		client.Close()
 		return fmt.Errorf("failed to connect to Redis: %v", err)
 	}
 
@@ -238,6 +207,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	// Allocate GPUs (with queue support)
 	result, err := engine.AllocateGPUsWithQueue(ctx, request)
 	if err != nil {
+		client.Close()
 		return fmt.Errorf("%v", err)
 	}
 	allocatedGPUs := result.AllocatedGPUs
@@ -248,10 +218,20 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 		expectedCount = len(gpuIDs)
 	}
 	if len(allocatedGPUs) != expectedCount {
+		client.Close()
 		return fmt.Errorf("failed to allocate requested GPUs: requested %d, got %d", expectedCount, len(allocatedGPUs))
 	}
 
-	if hasTimeout {
+	// Build GPU list string for supervisor
+	gpuListParts := make([]string, len(allocatedGPUs))
+	for i, gpuID := range allocatedGPUs {
+		gpuListParts[i] = strconv.Itoa(gpuID)
+	}
+	gpuListStr := strings.Join(gpuListParts, ",")
+
+	// Print reservation info
+	if timeoutStr != "" {
+		timeout, _ := utils.ParseDuration(timeoutStr)
 		fmt.Printf("Reserved %d GPU(s): %v for command execution (timeout: %s)\n",
 			len(allocatedGPUs), allocatedGPUs, utils.FormatDuration(timeout))
 	} else {
@@ -259,151 +239,68 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 			len(allocatedGPUs), allocatedGPUs)
 	}
 
-	// Start heartbeat manager
-	heartbeat := gpu.NewHeartbeatManager(client, allocatedGPUs, displayUser)
-	if err := heartbeat.Start(); err != nil {
-		// Release GPUs on failure
-		if _, releaseErr := engine.ReleaseSpecificGPUs(ctx, displayUser, allocatedGPUs); releaseErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to release GPUs after heartbeat failure: %v\n", releaseErr)
-		}
-		return fmt.Errorf("failed to initialize heartbeat: %v", err)
-	}
-	defer heartbeat.Stop()
+	// Close Redis client before spawning supervisor (supervisor will create its own)
+	client.Close()
 
-	// Set CUDA_VISIBLE_DEVICES
-	cudaDevices := make([]string, len(allocatedGPUs))
-	for i, gpuID := range allocatedGPUs {
-		cudaDevices[i] = strconv.Itoa(gpuID)
+	// Get our own executable path for spawning supervisor
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %v", err)
 	}
 
-	// Prepare command (don't use CommandContext to avoid abrupt killing)
-	cmd := exec.Command(command[0], command[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
+	// Build supervisor command arguments
+	supervisorArgs := []string{
+		executable,
+		"supervisor",
+		"--gpus", gpuListStr,
+		"--user", displayUser,
+		"--pid", strconv.Itoa(os.Getpid()),
+	}
+	if timeoutStr != "" {
+		supervisorArgs = append(supervisorArgs, "--timeout", timeoutStr)
+	}
 
-	// Set environment
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, fmt.Sprintf("CUDA_VISIBLE_DEVICES=%s", strings.Join(cudaDevices, ",")))
+	// Start supervisor process (detached, will monitor us)
+	supervisorCmd := exec.Command(supervisorArgs[0], supervisorArgs[1:]...)
+	supervisorCmd.Stdout = nil       // Detach stdout
+	supervisorCmd.Stderr = os.Stderr // Keep stderr for error messages
+	supervisorCmd.Stdin = nil        // No stdin needed
 
-	// Create a new process group so we can kill all child processes if needed.
-	// This ensures that when we send signals (SIGINT or SIGKILL), they reach
-	// all child processes spawned by the command, not just the parent.
-	cmd.SysProcAttr = &syscall.SysProcAttr{
+	// Detach the supervisor from our process group so it survives our exec()
+	supervisorCmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}
 
-	// Start command
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start command: %v", err)
+	if err := supervisorCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start supervisor: %v", err)
 	}
 
-	// Set up signal handling to forward SIGINT to child process
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	// Give supervisor a moment to initialize
+	time.Sleep(50 * time.Millisecond)
 
-	go func() {
-		for sig := range sigChan {
-			// Forward the signal to the child process
-			if cmd.Process != nil {
-				// Send signal directly to the process we created
-				if err := cmd.Process.Signal(sig.(syscall.Signal)); err != nil {
-					// Log error but don't fail - process might have already exited
-					fmt.Fprintf(os.Stderr, "Failed to forward signal to child process: %v\n", err)
-				}
-			}
-		}
-	}()
-	defer func() {
-		signal.Stop(sigChan)
-		close(sigChan)
-	}()
-
-	// Handle timeout with graceful shutdown if specified
-	var timeoutKilled int32 // Use atomic operations for thread safety
-	if hasTimeout {
-		go func() {
-			timer := time.NewTimer(timeout)
-			defer timer.Stop()
-
-			select {
-			case <-timer.C:
-				fmt.Printf("Command timeout reached after %s. Attempting graceful shutdown...\n", utils.FormatDuration(timeout))
-
-				// Send SIGINT to the process group for graceful shutdown
-				if cmd.Process != nil {
-					pgid, err := syscall.Getpgid(cmd.Process.Pid)
-					if err == nil {
-						// Send SIGINT to the entire process group
-						if err := syscall.Kill(-pgid, syscall.SIGINT); err != nil {
-							fmt.Printf("Failed to send SIGINT to process group: %v\n", err)
-							// If SIGINT fails, kill immediately
-							if err := killProcessGroup(cmd); err != nil {
-								fmt.Printf("Failed to kill process group: %v\n", err)
-							}
-							atomic.StoreInt32(&timeoutKilled, 1)
-							return
-						}
-					} else {
-						// Fallback to sending signal to just the process
-						if err := cmd.Process.Signal(syscall.SIGINT); err != nil {
-							fmt.Printf("Failed to send SIGINT: %v\n", err)
-							// If SIGINT fails, kill immediately
-							if err := killProcessGroup(cmd); err != nil {
-								fmt.Printf("Failed to kill process group: %v\n", err)
-							}
-							atomic.StoreInt32(&timeoutKilled, 1)
-							return
-						}
-					}
-				}
-
-				// Wait 30 seconds for graceful shutdown
-				gracePeriod := 30 * time.Second
-				fmt.Printf("Waiting %s for graceful shutdown...\n", gracePeriod)
-
-				graceTimer := time.NewTimer(gracePeriod)
-				defer graceTimer.Stop()
-
-				select {
-				case <-graceTimer.C:
-					// Grace period expired, force kill
-					fmt.Printf("Grace period expired. Force killing process group...\n")
-					if err := killProcessGroup(cmd); err != nil {
-						fmt.Printf("Error killing process group: %v\n", err)
-					}
-					atomic.StoreInt32(&timeoutKilled, 1)
-				case <-ctx.Done():
-					// Parent context cancelled, don't force kill
-					return
-				}
-			case <-ctx.Done():
-				// Parent context cancelled, don't timeout
-				return
-			}
-		}()
-	}
-
-	// Wait for command to complete
-	err = cmd.Wait()
-
-	// Handle exit code properly - ensure cleanup happens before returning
+	// Find the binary to exec
+	binary, err := exec.LookPath(command[0])
 	if err != nil {
-		if atomic.LoadInt32(&timeoutKilled) == 1 {
-			fmt.Printf("Command was terminated due to timeout\n")
-			// Defer will handle cleanup
-			return &ExitCodeError{Code: 124, Message: "command timed out"}
+		// Kill supervisor since we can't exec
+		if supervisorCmd.Process != nil {
+			supervisorCmd.Process.Kill()
 		}
-
-		if exitError, ok := err.(*exec.ExitError); ok {
-			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				// Defer will handle cleanup
-				return &ExitCodeError{Code: status.ExitStatus(), Message: fmt.Sprintf("command exited with code %d", status.ExitStatus())}
-			}
-		}
-		// For other types of errors, the defer will handle cleanup
-		return fmt.Errorf("command failed: %v", err)
+		return fmt.Errorf("command not found: %s", command[0])
 	}
 
-	return nil
+	// Set up environment with CUDA_VISIBLE_DEVICES
+	env := os.Environ()
+	env = append(env, fmt.Sprintf("CUDA_VISIBLE_DEVICES=%s", gpuListStr))
+
+	// Exec the user's command - this replaces the current process
+	// The supervisor will continue running and monitor our PID
+	// When we exit, the supervisor will detect it and release GPUs
+	err = syscall.Exec(binary, command, env)
+
+	// If we get here, exec failed
+	// Kill supervisor since we couldn't exec
+	if supervisorCmd.Process != nil {
+		supervisorCmd.Process.Kill()
+	}
+	return fmt.Errorf("failed to exec command: %v", err)
 }

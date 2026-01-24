@@ -48,6 +48,10 @@ canhazgpu run --nonblock --gpus 2 -- python train.py
 # Wait up to 30 minutes for GPUs, then fail
 canhazgpu run --wait 30m --gpus 4 -- python train.py
 
+# Run interactive programs (full TTY support)
+canhazgpu run --gpus 1 -- python  # Interactive Python REPL
+canhazgpu run --gpus 1 -- codex   # Interactive coding assistant
+
 # Check the reservation queue
 canhazgpu queue
 
@@ -72,6 +76,7 @@ canhazgpu web --port 8080
 
 ## Key Features
 
+- **Interactive program support**: Full TTY support for interactive programs like Python REPL, codex, vim
 - **Fair queueing**: FCFS queue ensures fair access when GPUs are busy - requests wait automatically
 - **Race condition protection**: Uses Redis-based distributed locking
 - **Automatic cleanup**: GPUs auto-released when processes end or reservations expire
