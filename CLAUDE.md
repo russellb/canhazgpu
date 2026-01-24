@@ -106,6 +106,9 @@ canhazgpu admin --gpus $(nvidia-smi --list-gpus | wc -l)
 # AMD GPU setup
 canhazgpu admin --gpus $(amd-smi list --json | jq 'length')
 
+# Fake GPU setup (for development/testing without real GPUs)
+canhazgpu admin --gpus 4 --provider fake
+
 # Check provider availability
 nvidia-smi --help >/dev/null 2>&1 && echo "NVIDIA available" || echo "NVIDIA not available"
 amd-smi --help >/dev/null 2>&1 && echo "AMD available" || echo "AMD not available"
@@ -148,7 +151,8 @@ redis-cli get "canhazgpu:provider"
 │   │   ├── heartbeat.go            # Background heartbeat system
 │   │   ├── provider.go             # GPU provider interface and manager
 │   │   ├── nvidia_provider.go      # NVIDIA GPU provider implementation
-│   │   └── amd_provider.go         # AMD GPU provider implementation
+│   │   ├── amd_provider.go         # AMD GPU provider implementation
+│   │   └── fake_provider.go        # Fake GPU provider for development/testing
 │   ├── redis_client/               # Redis operations
 │   │   └── client.go               # Redis client with Lua scripts
 │   ├── types/                      # Shared types and constants
@@ -164,6 +168,7 @@ redis-cli get "canhazgpu:provider"
 - **Provider Interface**: `GPUProvider` interface in `internal/gpu/provider.go` defines standard operations
 - **NVIDIA Provider**: `nvidia_provider.go` implements NVIDIA GPU management using nvidia-smi commands
 - **AMD Provider**: `amd_provider.go` implements AMD GPU management using amd-smi commands
+- **Fake Provider**: `fake_provider.go` simulates GPU behavior for development and testing without real hardware
 - **Provider Manager**: `ProviderManager` in `provider.go` handles provider detection, caching, and instance management
 - **Auto-detection**: Automatically detects available providers during system initialization
 
@@ -229,7 +234,7 @@ redis-cli get "canhazgpu:provider"
 ### Core Keys
 
 - `canhazgpu:gpu_count`: Total number of available GPUs
-- `canhazgpu:provider`: Cached GPU provider type ("nvidia" or "amd")
+- `canhazgpu:provider`: Cached GPU provider type ("nvidia", "amd", or "fake")
 - `canhazgpu:allocation_lock`: Global allocation lock for race condition prevention
 - `canhazgpu:usage_history:{timestamp}:{user}:{gpu_id}`: Historical usage records for reporting
 
@@ -280,9 +285,17 @@ Reserved state:
 - **Memory Detection**: Uses `amd-smi metric --json` for memory usage
 - **Validation**: Real-time validation of GPU usage and process ownership
 
+### Fake GPUs (Development/Testing)
+- **Requirements**: None - no real GPU hardware or drivers needed
+- **Use Cases**: Development on laptops, CI/CD testing, demonstrations
+- **Process Detection**: Returns empty process list (no real processes)
+- **Memory Detection**: Returns 0 MB usage for all GPUs
+- **Validation**: All GPUs shown as available with "Fake GPU" model name
+- **Setup**: `canhazgpu admin --gpus 4 --provider fake`
+
 ### Provider Selection
 - **Auto-detection**: Automatically detects available providers during initialization
-- **Manual Selection**: Use `--provider nvidia` or `--provider amd` to force specific provider
+- **Manual Selection**: Use `--provider nvidia`, `--provider amd`, or `--provider fake`
 - **Single Provider**: System assumes only one GPU provider type per system
 
 ## Documentation

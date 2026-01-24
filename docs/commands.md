@@ -92,21 +92,35 @@ The `--memory-threshold` flag controls when a GPU is considered "in use without 
 Initialize and configure the GPU pool.
 
 ```bash
-canhazgpu admin --gpus <count> [--force]
+canhazgpu admin --gpus <count> [--force] [--provider <type>]
 ```
 
 **Options:**
 - `--gpus`: Number of GPUs available on this machine (required)
 - `--force`: Force reinitialization even if already initialized
+- `--provider`: GPU provider type (`nvidia`, `amd`, or `fake`). Auto-detected if not specified.
 
 **Examples:**
 ```bash
-# Initial setup
+# Initial setup (auto-detects provider)
 canhazgpu admin --gpus 8
+
+# Explicitly specify NVIDIA provider
+canhazgpu admin --gpus 8 --provider nvidia
+
+# Use AMD GPUs
+canhazgpu admin --gpus 4 --provider amd
+
+# Use fake provider for development/testing (no real GPUs required)
+canhazgpu admin --gpus 4 --provider fake
 
 # Change GPU count (requires --force)
 canhazgpu admin --gpus 4 --force
 ```
+
+!!! tip "Fake Provider for Development"
+    Use `--provider fake` to develop and test canhazgpu on systems without actual GPUs.
+    The fake provider simulates GPU behavior without requiring nvidia-smi or amd-smi.
 
 !!! warning "Destructive Operation"
     Using `--force` will clear all existing reservations. Use with caution in production.

@@ -47,11 +47,24 @@ func NewProviderManagerFromNames(providerNames []string) *ProviderManager {
 			providers = append(providers, NewNVIDIAProvider())
 		case "amd":
 			providers = append(providers, NewAMDProvider())
+		case "fake":
+			// Create with 0 GPUs; count will be set from Redis when used
+			providers = append(providers, NewFakeProvider(0))
 		}
 	}
 
 	return &ProviderManager{
 		providers: providers,
+	}
+}
+
+// NewProviderManagerWithFake creates a provider manager with a fake provider
+// having the specified GPU count
+func NewProviderManagerWithFake(gpuCount int) *ProviderManager {
+	return &ProviderManager{
+		providers: []GPUProvider{
+			NewFakeProvider(gpuCount),
+		},
 	}
 }
 

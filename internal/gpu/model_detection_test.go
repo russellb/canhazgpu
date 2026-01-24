@@ -2,11 +2,20 @@ package gpu
 
 import (
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/russellb/canhazgpu/internal/types"
 	"github.com/stretchr/testify/assert"
 )
+
+// skipIfNotLinux skips the test if not running on Linux
+// (used for tests that require /proc filesystem)
+func skipIfNotLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("Skipping test on %s: requires /proc filesystem (Linux only)", runtime.GOOS)
+	}
+}
 
 func TestDetectModelFromProcesses(t *testing.T) {
 	tests := []struct {
@@ -278,6 +287,8 @@ func TestExtractProviderFromModel(t *testing.T) {
 }
 
 func TestGetParentPID(t *testing.T) {
+	skipIfNotLinux(t)
+
 	tests := []struct {
 		name     string
 		pid      int
@@ -314,6 +325,8 @@ func TestGetParentPID(t *testing.T) {
 }
 
 func TestGetProcessCommandLine(t *testing.T) {
+	skipIfNotLinux(t)
+
 	tests := []struct {
 		name     string
 		pid      int

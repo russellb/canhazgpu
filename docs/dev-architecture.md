@@ -378,15 +378,32 @@ Current MRU-per-user allocation could be enhanced with:
 
 **Implementation:** Modify `get_available_gpus_sorted_by_lru()` function
 
-### 2. Additional Validation Sources
+### 2. GPU Provider System
 
-Beyond nvidia-smi, could integrate:
-- ROCm tools for AMD GPUs
-- Intel GPU tools
-- Container runtime APIs
-- Custom monitoring tools
+The system supports multiple GPU providers through a unified interface:
 
-**Implementation:** Extend `detect_gpu_usage()` function
+**Available Providers:**
+- **NVIDIA**: Uses nvidia-smi for NVIDIA GPU management
+- **AMD**: Uses amd-smi (ROCm 5.7+) for AMD GPU management
+- **Fake**: Simulated provider for development and testing without real GPUs
+
+**Provider Architecture:**
+```go
+type GPUProvider interface {
+    Name() string
+    IsAvailable() bool
+    DetectGPUUsage(ctx context.Context) (map[int]*types.GPUUsage, error)
+    GetGPUCount(ctx context.Context) (int, error)
+}
+```
+
+**Fake Provider Use Cases:**
+- Development on laptops/desktops without GPUs
+- CI/CD pipeline testing
+- Testing reservation logic without hardware
+- Demonstration and documentation
+
+**Implementation:** See `internal/gpu/provider.go` and individual provider files
 
 ### 3. Alternative State Backends
 

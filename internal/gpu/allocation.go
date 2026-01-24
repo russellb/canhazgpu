@@ -27,7 +27,19 @@ func (ae *AllocationEngine) detectGPUUsage(ctx context.Context) (map[int]*types.
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cached provider information: %v", err)
 	}
-	pm := NewProviderManagerFromNames([]string{providerName})
+
+	var pm *ProviderManager
+	if providerName == "fake" {
+		// For fake provider, get GPU count from Redis to configure the provider
+		gpuCount, err := ae.client.GetGPUCount(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get GPU count for fake provider: %v", err)
+		}
+		pm = NewProviderManagerWithFake(gpuCount)
+	} else {
+		pm = NewProviderManagerFromNames([]string{providerName})
+	}
+
 	return pm.DetectAllGPUUsageWithoutChecks(ctx)
 }
 
