@@ -175,7 +175,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 
 	// Test Redis connection
 	if err := client.Ping(ctx); err != nil {
-		client.Close()
+		_ = client.Close()
 		return fmt.Errorf("failed to connect to Redis: %v", err)
 	}
 
@@ -207,7 +207,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	// Allocate GPUs (with queue support)
 	result, err := engine.AllocateGPUsWithQueue(ctx, request)
 	if err != nil {
-		client.Close()
+		_ = client.Close()
 		return fmt.Errorf("%v", err)
 	}
 	allocatedGPUs := result.AllocatedGPUs
@@ -218,7 +218,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 		expectedCount = len(gpuIDs)
 	}
 	if len(allocatedGPUs) != expectedCount {
-		client.Close()
+		_ = client.Close()
 		return fmt.Errorf("failed to allocate requested GPUs: requested %d, got %d", expectedCount, len(allocatedGPUs))
 	}
 
@@ -283,7 +283,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	if err != nil {
 		// Kill supervisor since we can't exec
 		if supervisorCmd.Process != nil {
-			supervisorCmd.Process.Kill()
+			_ = supervisorCmd.Process.Kill()
 		}
 		return fmt.Errorf("command not found: %s", command[0])
 	}
@@ -300,7 +300,7 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 	// If we get here, exec failed
 	// Kill supervisor since we couldn't exec
 	if supervisorCmd.Process != nil {
-		supervisorCmd.Process.Kill()
+		_ = supervisorCmd.Process.Kill()
 	}
 	return fmt.Errorf("failed to exec command: %v", err)
 }
