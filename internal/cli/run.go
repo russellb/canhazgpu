@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -221,6 +222,9 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 		_ = client.Close()
 		return fmt.Errorf("failed to allocate requested GPUs: requested %d, got %d", expectedCount, len(allocatedGPUs))
 	}
+
+	// Sort GPU IDs for consistent ordering in output and environment variable
+	sort.Ints(allocatedGPUs)
 
 	// Build GPU list string for supervisor
 	gpuListParts := make([]string, len(allocatedGPUs))

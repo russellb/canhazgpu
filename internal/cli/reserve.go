@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -158,6 +159,9 @@ func runReserve(ctx context.Context, gpuCount int, gpuIDs []int, durationStr str
 		return err
 	}
 	allocatedGPUs := result.AllocatedGPUs
+
+	// Sort GPU IDs for consistent ordering in output and environment variable
+	sort.Ints(allocatedGPUs)
 
 	// Build list for CUDA_VISIBLE_DEVICES
 	ids := make([]string, len(allocatedGPUs))
