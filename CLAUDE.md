@@ -235,8 +235,8 @@ redis-cli get "canhazgpu:provider"
 
 ### Time Handling
 
-- `FlexibleTime` type in `internal/types/types.go` handles both Unix timestamps (Python compatibility) and RFC3339 strings (Go native)
-- Ensures backward compatibility with existing Python-created Redis data
+- `FlexibleTime` type in `internal/types/types.go` handles both Unix timestamps and RFC3339 strings
+- Supports multiple timestamp formats for flexibility and data migration scenarios
 
 ### Configuration Management
 

@@ -409,84 +409,92 @@ func TestNewCommand(t *testing.T) {
 
 To add alternative allocation strategies:
 
-1. **Create strategy function:**
-```python
-def get_available_gpus_thermal_aware(
-    gpu_count: int, 
-    requested: int,
-    redis_client: redis.Redis
-) -> List[int]:
-    """Allocate GPUs based on thermal conditions.
-    
-    Args:
-        gpu_count: Total number of GPUs
-        requested: Number of GPUs requested
-        redis_client: Redis connection
-        
-    Returns:
-        List of GPU IDs sorted by thermal preference
-    """
-    # Query GPU temperatures
-    temperatures = get_gpu_temperatures()
-    
-    # Sort by coolest first
-    available = get_available_gpus(gpu_count, redis_client)
-    return sorted(available, key=lambda gpu_id: temperatures[gpu_id])[:requested]
+1. **Add strategy to Lua script in `internal/redis_client/client.go`:**
+```go
+// Modify the Lua script in AtomicReserveGPUs to support different strategies
+const luaScriptWithStrategy = `
+    local strategy = ARGV[6]
+
+    -- Get available GPUs based on strategy
+    local available_gpus = {}
+    if strategy == "thermal" then
+        -- Query GPU temperatures and sort by coolest first
+        -- Implementation for thermal-aware allocation
+    elseif strategy == "mru" then
+        -- Existing MRU-per-user allocation logic
+    end
+
+    -- Allocate requested GPUs
+    ...
+`
 ```
 
-2. **Integrate with allocation logic:**
-```python
-# Add strategy selection parameter
-def atomic_reserve_gpus(
-    requested_gpus: int,
-    user: str,
-    reservation_type: str,
-    strategy: str = "lru",
-    expiry_time: Optional[float] = None
-) -> List[int]:
-    """Reserve GPUs using specified allocation strategy."""
-    
-    if strategy == "lru":
-        available = get_available_gpus_sorted_by_lru(...)
-    elif strategy == "thermal":
-        available = get_available_gpus_thermal_aware(...)
-    else:
-        raise ValueError(f"Unknown strategy: {strategy}")
+2. **Add strategy option to allocation request:**
+```go
+// internal/types/types.go
+type AllocationRequest struct {
+    GPUCount int
+    User     string
+    Type     string
+    Strategy string // "mru", "thermal", "performance"
+    // ...
+}
+
+// internal/gpu/allocation.go
+func (e *AllocationEngine) AllocateGPUs(ctx context.Context, req *AllocationRequest) ([]int, error) {
+    if req.Strategy == "" {
+        req.Strategy = "mru" // Default strategy
+    }
+    return e.client.AtomicReserveGPUs(ctx, req)
+}
 ```
 
-### 3. Adding New Validation Sources
+### 3. Adding New GPU Providers
 
-To add support for AMD GPUs or other hardware:
+The system already supports NVIDIA, AMD, and Fake providers. To add support for new GPU hardware:
 
-1. **Create validation module:**
-```python
-def detect_amd_gpu_usage() -> Dict[int, Dict]:
-    """Detect AMD GPU usage via rocm-smi."""
-    try:
-        result = subprocess.run([
-            'rocm-smi', '--showuse', '--csv'
-        ], capture_output=True, text=True, check=True)
-        
-        return parse_amd_usage(result.stdout)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return {}
+1. **Implement the GPUProvider interface:**
+```go
+// internal/gpu/new_provider.go
+type NewProvider struct {
+    // Provider-specific fields
+}
+
+func (p *NewProvider) Name() string {
+    return "newgpu"
+}
+
+func (p *NewProvider) IsAvailable() bool {
+    _, err := exec.LookPath("newgpu-smi")
+    return err == nil
+}
+
+func (p *NewProvider) DetectGPUUsage(ctx context.Context) (map[int]*types.GPUUsage, error) {
+    cmd := exec.CommandContext(ctx, "newgpu-smi", "--query-processes", "--json")
+    output, err := cmd.Output()
+    if err != nil {
+        return nil, fmt.Errorf("newgpu-smi failed: %w", err)
+    }
+    return parseNewGPUOutput(output)
+}
+
+func (p *NewProvider) GetGPUCount(ctx context.Context) (int, error) {
+    // Implementation
+}
 ```
 
-2. **Integrate with main validation:**
-```python
-def detect_gpu_usage() -> Dict[int, Dict]:
-    """Detect GPU usage from all available sources."""
-    usage = {}
-    
-    # NVIDIA GPUs
-    nvidia_usage = detect_nvidia_gpu_usage()
-    usage.update(nvidia_usage)
-    
-    # AMD GPUs  
-    amd_usage = detect_amd_gpu_usage()
-    usage.update(amd_usage)
-    
-    return usage
+2. **Register the provider in the manager:**
+```go
+// internal/gpu/provider.go
+func (m *ProviderManager) detectProvider() GPUProvider {
+    // Check for new provider
+    newProvider := &NewProvider{}
+    if newProvider.IsAvailable() {
+        return newProvider
+    }
+
+    // Existing provider detection...
+}
 ```
 
 ## Documentation
@@ -592,9 +600,9 @@ Relates to #456
 **Include in bug reports:**
 - canhazgpu version
 - Operating system and version
-- Python version
+- Go version (for development issues)
 - Redis version
-- NVIDIA driver version
+- GPU driver version (NVIDIA or AMD)
 - Complete error messages
 - Steps to reproduce
 - Expected vs actual behavior
@@ -605,10 +613,11 @@ Relates to #456
 Clear description of the bug
 
 ## Environment
-- OS: Ubuntu 20.04
-- Python: 3.8.10
-- Redis: 6.0.16
-- NVIDIA Driver: 470.129.06
+- OS: Ubuntu 22.04
+- Go: 1.23.0 (if building from source)
+- Redis: 7.0.0
+- GPU Provider: nvidia / amd
+- GPU Driver: 535.129.03
 - canhazgpu version: 1.0.0
 
 ## Steps to Reproduce

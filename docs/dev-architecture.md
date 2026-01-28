@@ -26,22 +26,27 @@ canhazgpu is designed as a Go CLI application that uses Redis for distributed co
 
 ## Core Components
 
-### 1. Command Layer (`canhazgpu:lines 700-800`)
+### 1. Command Layer (`internal/cli/`)
 
-The CLI interface built with Click framework:
+The CLI interface built with Cobra framework:
 
-```python
-@click.group()
-def main():
-    """GPU reservation tool for shared development systems"""
-    pass
+```go
+// internal/cli/root.go
+var rootCmd = &cobra.Command{
+    Use:   "canhazgpu",
+    Short: "GPU reservation tool for shared development systems",
+}
 
-@main.command()
-@click.option('--gpus', default=1, help='Number of GPUs to reserve')
-@click.option('--', 'command', help='Command to run')
-def run(gpus, command):
-    """Reserve GPUs and run command"""
-    # Implementation
+// internal/cli/run.go
+var runCmd = &cobra.Command{
+    Use:   "run",
+    Short: "Reserve GPUs and run command",
+    RunE:  runRun,
+}
+
+func init() {
+    runCmd.Flags().IntVar(&gpuCount, "gpus", 1, "Number of GPUs to reserve")
+}
 ```
 
 **Key responsibilities:**
@@ -49,24 +54,33 @@ def run(gpus, command):
 - User interaction and error reporting
 - Orchestrating lower-level components
 
-### 2. State Management Layer (`canhazgpu:lines 200-400`)
+### 2. State Management Layer (`internal/redis_client/`)
 
 Redis-based distributed state management:
 
-```python
-def get_redis_client():
-    """Get Redis client with connection pooling"""
-    return redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+```go
+// internal/redis_client/client.go
+type Client struct {
+    rdb *redis.Client
+}
 
-class GPUState:
-    """GPU state representation"""
-    def __init__(self, gpu_id):
-        self.gpu_id = gpu_id
-        self.redis_key = f"canhazgpu:gpu:{gpu_id}"
-    
-    def is_available(self):
-        """Check if GPU is available for allocation"""
-        # Implementation
+func NewClient(config *types.Config) *Client {
+    rdb := redis.NewClient(&redis.Options{
+        Addr: fmt.Sprintf("%s:%d", config.RedisHost, config.RedisPort),
+        DB:   config.RedisDB,
+    })
+    return &Client{rdb: rdb}
+}
+
+// internal/types/types.go
+type GPUState struct {
+    User          string       `json:"user,omitempty"`
+    StartTime     FlexibleTime `json:"start_time,omitempty"`
+    LastHeartbeat FlexibleTime `json:"last_heartbeat,omitempty"`
+    Type          string       `json:"type,omitempty"`
+    ExpiryTime    FlexibleTime `json:"expiry_time,omitempty"`
+    LastReleased  FlexibleTime `json:"last_released,omitempty"`
+}
 ```
 
 **Key responsibilities:**
@@ -75,30 +89,31 @@ class GPUState:
 - Heartbeat management for run-type reservations
 - Expiry handling for manual reservations
 
-### 3. Validation Layer (`canhazgpu:lines 98-200`)
+### 3. Validation Layer (`internal/gpu/`)
 
-Real-time GPU usage validation via nvidia-smi:
+Real-time GPU usage validation via GPU provider abstraction:
 
-```python
-def detect_gpu_usage():
-    """Detect actual GPU usage via nvidia-smi"""
-    try:
-        # Query GPU memory usage
-        memory_result = subprocess.run([
-            'nvidia-smi', '--query-gpu=memory.used', 
-            '--format=csv,noheader,nounits'
-        ], capture_output=True, text=True, check=True)
-        
-        # Query GPU processes
-        process_result = subprocess.run([
-            'nvidia-smi', '--query-compute-apps=pid,process_name,gpu_uuid,used_memory',
-            '--format=csv,noheader'
-        ], capture_output=True, text=True, check=True)
-        
-        # Process and return usage data
-        return parse_gpu_usage(memory_result.stdout, process_result.stdout)
-    except subprocess.CalledProcessError:
-        return {}
+```go
+// internal/gpu/provider.go
+type GPUProvider interface {
+    Name() string
+    IsAvailable() bool
+    DetectGPUUsage(ctx context.Context) (map[int]*types.GPUUsage, error)
+    GetGPUCount(ctx context.Context) (int, error)
+}
+
+// internal/gpu/nvidia_provider.go
+func (p *NvidiaProvider) DetectGPUUsage(ctx context.Context) (map[int]*types.GPUUsage, error) {
+    // Query GPU processes via nvidia-smi
+    cmd := exec.CommandContext(ctx, "nvidia-smi",
+        "--query-compute-apps=pid,process_name,gpu_uuid,used_memory",
+        "--format=csv,noheader")
+    output, err := cmd.Output()
+    if err != nil {
+        return nil, fmt.Errorf("nvidia-smi failed: %w", err)
+    }
+    return parseNvidiaProcessOutput(string(output))
+}
 ```
 
 **Key responsibilities:**
@@ -107,44 +122,41 @@ def detect_gpu_usage():
 - Memory usage quantification
 - Unreserved usage detection
 
-### 4. Allocation Engine (`canhazgpu:lines 303-444`)
+### 4. Allocation Engine (`internal/redis_client/client.go`)
 
 MRU-per-user GPU allocation with LRU fallback and race condition protection:
 
-```python
-def atomic_reserve_gpus(requested_gpus, user, reservation_type, expiry_time=None):
-    """Atomically reserve GPUs using Redis Lua script"""
-    
-    # Lua script for atomic allocation
-    lua_script = '''
+```go
+// AtomicReserveGPUs reserves GPUs atomically using a Redis Lua script
+func (c *Client) AtomicReserveGPUs(ctx context.Context, request *types.AllocationRequest) ([]int, error) {
+    // Lua script for atomic allocation with MRU-per-user strategy
+    luaScript := `
         local gpu_count = tonumber(ARGV[1])
         local requested = tonumber(ARGV[2])
         local user = ARGV[3]
         local reservation_type = ARGV[4]
         local current_time = tonumber(ARGV[5])
-        local expiry_time = ARGV[6] ~= "None" and tonumber(ARGV[6]) or nil
-        
+
         -- Get available GPUs with MRU-per-user ranking
         local available_gpus = {}
         for i = 0, gpu_count - 1 do
-            -- Check GPU availability and MRU-per-user ranking
-            -- Query user's usage history for GPU preferences
+            -- Check GPU availability and user's usage history
             -- Implementation details...
         end
-        
-        -- Allocate requested GPUs
+
+        -- Allocate requested GPUs atomically
         local allocated = {}
         for i = 1, math.min(requested, #available_gpus) do
-            -- Atomic allocation logic
-            -- Implementation details...
+            -- Set GPU state with user and timestamp
         end
-        
+
         return allocated
-    '''
-    
-    # Execute Lua script atomically
-    return redis_client.eval(lua_script, 0, gpu_count, requested_gpus, user, 
-                            reservation_type, current_time, expiry_time)
+    `
+
+    result, err := c.rdb.Eval(ctx, luaScript, nil, gpuCount, request.GPUCount,
+        request.User, request.Type, time.Now().Unix()).Result()
+    // Process result...
+}
 ```
 
 **Key responsibilities:**
@@ -197,18 +209,19 @@ Formatted Output
 
 ## Key Design Decisions
 
-### 1. Single-File Architecture
+### 1. Modular Go Architecture
 
 **Rationale:**
-- Simplifies deployment and distribution
-- Reduces dependencies and complexity
-- Easy to audit and modify
-- Self-contained tool
+- Clear separation of concerns (CLI, GPU management, Redis, types)
+- Single binary deployment via `go build`
+- Strong typing and compile-time checks
+- Easy to test individual components
+- Self-contained tool with embedded web assets
 
 **Trade-offs:**
-- Larger file size (~800 lines)
-- Less modular than multi-file architecture
-- Harder to unit test individual components
+- Requires Go toolchain for development
+- More files to navigate than single-file approach
+- Slightly more complex build process
 
 ### 2. Redis for State Management
 
@@ -246,7 +259,7 @@ Formatted Output
 
 **Trade-offs:**
 - Complex logic embedded in Lua strings
-- Harder to debug than Python code
+- Harder to debug than Go code
 - Limited error handling within Lua
 
 ## State Schema
@@ -300,18 +313,24 @@ Multiple users requesting GPUs simultaneously could cause:
 - Partial allocations
 
 **Solution:**
-```python
-def acquire_allocation_lock():
-    """Acquire global allocation lock with exponential backoff"""
-    for attempt in range(5):
-        if redis_client.set("canhazgpu:allocation_lock", "locked", nx=True, ex=10):
-            return True
-        
-        # Exponential backoff with jitter
-        sleep_time = (2 ** attempt) + random.uniform(0, 1)
-        time.sleep(sleep_time)
-    
-    return False
+```go
+// AcquireAllocationLock acquires the global allocation lock with exponential backoff
+func (c *Client) AcquireAllocationLock(ctx context.Context) error {
+    for attempt := 0; attempt < 5; attempt++ {
+        ok, err := c.rdb.SetNX(ctx, "canhazgpu:allocation_lock", "locked", 10*time.Second).Result()
+        if err != nil {
+            return fmt.Errorf("failed to acquire lock: %w", err)
+        }
+        if ok {
+            return nil
+        }
+
+        // Exponential backoff with jitter
+        sleepTime := time.Duration(1<<attempt)*time.Second + time.Duration(rand.Float64()*1000)*time.Millisecond
+        time.Sleep(sleepTime)
+    }
+    return fmt.Errorf("failed to acquire allocation lock after 5 attempts")
+}
 ```
 
 ### 2. Heartbeat Race Conditions
@@ -363,7 +382,7 @@ GPU usage could change between validation and allocation.
 ### 3. Memory Usage
 
 **Redis memory:** ~1KB per GPU + ~10KB overhead
-**Python process:** ~20-50MB per invocation
+**Go binary:** ~15-30MB per invocation
 **System impact:** Minimal - short-lived processes
 
 ## Extension Points
@@ -376,7 +395,7 @@ Current MRU-per-user allocation could be enhanced with:
 - Performance-based allocation
 - User priority-based allocation
 
-**Implementation:** Modify `get_available_gpus_sorted_by_lru()` function
+**Implementation:** Modify the Lua script in `AtomicReserveGPUs()` in `internal/redis_client/client.go`
 
 ### 2. GPU Provider System
 
