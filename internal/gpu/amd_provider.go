@@ -12,6 +12,24 @@ import (
 // AMDProvider implements the GPUProvider interface for AMD GPUs using amd-smi
 type AMDProvider struct{}
 
+// unmarshalAMDSmiOutput handles both ROCm 7.x ({"gpu_data": [...]}) and
+// ROCm 6.x (bare array) JSON output formats from amd-smi.
+func unmarshalAMDSmiOutput(data []byte) ([]map[string]interface{}, error) {
+	// Try ROCm 7.x wrapped format first
+	var wrapper struct {
+		GPUData []map[string]interface{} `json:"gpu_data"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err == nil && wrapper.GPUData != nil {
+		return wrapper.GPUData, nil
+	}
+	// Fall back to ROCm 6.x bare array format
+	var result []map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // NewAMDProvider creates a new AMD GPU provider
 func NewAMDProvider() *AMDProvider {
 	return &AMDProvider{}
@@ -78,8 +96,8 @@ func (a *AMDProvider) GetGPUCount(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("amd-smi list failed: %v", err)
 	}
 
-	var listData []map[string]interface{}
-	if err := json.Unmarshal(output, &listData); err != nil {
+	listData, err := unmarshalAMDSmiOutput(output)
+	if err != nil {
 		return 0, fmt.Errorf("failed to parse amd-smi list output: %v", err)
 	}
 
@@ -102,8 +120,8 @@ func (a *AMDProvider) queryGPUMemory(ctx context.Context) (map[int]int, error) {
 		return nil, fmt.Errorf("amd-smi metric failed: %v", err)
 	}
 
-	var metricData []map[string]interface{}
-	if err := json.Unmarshal(output, &metricData); err != nil {
+	metricData, err := unmarshalAMDSmiOutput(output)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse amd-smi metric output: %v", err)
 	}
 
@@ -144,8 +162,8 @@ func (a *AMDProvider) queryGPUProcesses(ctx context.Context) (map[int][]types.GP
 		return nil, fmt.Errorf("amd-smi process query failed: %v", err)
 	}
 
-	var processData []map[string]interface{}
-	if err := json.Unmarshal(output, &processData); err != nil {
+	processData, err := unmarshalAMDSmiOutput(output)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse amd-smi process output: %v", err)
 	}
 
