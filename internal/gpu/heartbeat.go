@@ -10,13 +10,17 @@ import (
 	"github.com/russellb/canhazgpu/internal/types"
 )
 
+// consecutiveFailures tracks heartbeat failures to trigger reconnection
+const maxFailuresBeforeReconnect = 2
+
 type HeartbeatManager struct {
-	client        *redis_client.Client
-	allocatedGPUs []int
-	user          string
-	ctx           context.Context
-	cancel        context.CancelFunc
-	done          chan struct{}
+	client              *redis_client.Client
+	allocatedGPUs       []int
+	user                string
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	done                chan struct{}
+	consecutiveFailures int
 }
 
 func NewHeartbeatManager(client *redis_client.Client, allocatedGPUs []int, user string) *HeartbeatManager {
@@ -56,24 +60,68 @@ func (hm *HeartbeatManager) Wait() {
 	<-hm.done
 }
 
-// heartbeatLoop sends periodic heartbeats
+// heartbeatLoop sends periodic heartbeats with connection health checking
 func (hm *HeartbeatManager) heartbeatLoop() {
 	defer close(hm.done)
 
 	ticker := time.NewTicker(types.HeartbeatInterval)
 	defer ticker.Stop()
 
+	// Health check runs more frequently than heartbeats to detect connection
+	// problems early. If we only checked at heartbeat time (60s), a dead
+	// connection could go unnoticed for up to 60s before we even attempt
+	// a reconnect, eating into the 5-minute timeout budget.
+	healthTicker := time.NewTicker(types.HealthCheckInterval)
+	defer healthTicker.Stop()
+
 	// Initial heartbeat already sent in Start(), so just loop
 	for {
 		select {
 		case <-hm.ctx.Done():
 			return
+
+		case <-healthTicker.C:
+			hm.checkConnectionHealth()
+
 		case <-ticker.C:
 			if err := hm.sendHeartbeat(); err != nil {
-				fmt.Fprintf(os.Stderr, "ERROR: Failed to send heartbeat: %v\n", err)
+				hm.consecutiveFailures++
+				fmt.Fprintf(os.Stderr, "ERROR: Failed to send heartbeat (attempt %d): %v\n",
+					hm.consecutiveFailures, err)
+
+				// Try to recover by reconnecting if we've had multiple failures
+				if hm.consecutiveFailures >= maxFailuresBeforeReconnect {
+					hm.attemptReconnect()
+				}
+
 				fmt.Fprintf(os.Stderr, "GPU reservations may be at risk of expiring!\n")
+			} else {
+				if hm.consecutiveFailures > 0 {
+					fmt.Fprintf(os.Stderr, "Heartbeat recovered after %d failed attempts\n",
+						hm.consecutiveFailures)
+				}
+				hm.consecutiveFailures = 0
 			}
 		}
+	}
+}
+
+// checkConnectionHealth proactively verifies the Redis connection is alive.
+// If the connection is dead, it attempts to reconnect before the next heartbeat.
+func (hm *HeartbeatManager) checkConnectionHealth() {
+	if err := hm.client.HealthCheck(hm.ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: Redis health check failed: %v\n", err)
+		hm.attemptReconnect()
+	}
+}
+
+// attemptReconnect tries to re-establish the Redis connection.
+func (hm *HeartbeatManager) attemptReconnect() {
+	fmt.Fprintf(os.Stderr, "Attempting Redis reconnection...\n")
+	if err := hm.client.Reconnect(); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: Redis reconnection failed: %v\n", err)
+	} else {
+		fmt.Fprintf(os.Stderr, "Redis reconnection successful\n")
 	}
 }
 

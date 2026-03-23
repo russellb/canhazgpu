@@ -12,16 +12,37 @@ import (
 )
 
 type Client struct {
-	rdb *redis.Client
+	rdb    *redis.Client
+	config *types.Config
 }
 
 func NewClient(config *types.Config) *Client {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: fmt.Sprintf("%s:%d", config.RedisHost, config.RedisPort),
 		DB:   config.RedisDB,
+
+		// Connection health settings to detect and recover from stale connections.
+		// This is critical for long-lived processes like the supervisor, where a
+		// silently dead TCP connection would cause heartbeat failures and eventual
+		// reservation loss.
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+
+		// Limit pool size and set idle timeout so stale connections are cycled out.
+		PoolSize:     3,
+		MinIdleConns: 1,
+		IdleTimeout:  90 * time.Second,
+
+		// MaxRetries causes go-redis to automatically retry failed commands on
+		// transient connection errors (connection reset, timeout, etc.) before
+		// returning an error to the caller.
+		MaxRetries:      3,
+		MinRetryBackoff: 100 * time.Millisecond,
+		MaxRetryBackoff: 2 * time.Second,
 	})
 
-	return &Client{rdb: rdb}
+	return &Client{rdb: rdb, config: config}
 }
 
 func (c *Client) Close() error {
@@ -29,6 +50,44 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) Ping(ctx context.Context) error {
+	return c.rdb.Ping(ctx).Err()
+}
+
+// HealthCheck verifies the Redis connection is alive with a short timeout.
+// Returns nil if healthy, an error otherwise.
+func (c *Client) HealthCheck(ctx context.Context) error {
+	checkCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	return c.rdb.Ping(checkCtx).Err()
+}
+
+// Reconnect closes the current connection and creates a new one.
+// This is used to recover from stale/dead TCP connections in long-lived
+// processes like the supervisor.
+func (c *Client) Reconnect() error {
+	// Close existing connection (ignore errors from already-broken connections)
+	_ = c.rdb.Close()
+
+	c.rdb = redis.NewClient(&redis.Options{
+		Addr: fmt.Sprintf("%s:%d", c.config.RedisHost, c.config.RedisPort),
+		DB:   c.config.RedisDB,
+
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+
+		PoolSize:     3,
+		MinIdleConns: 1,
+		IdleTimeout:  90 * time.Second,
+
+		MaxRetries:      3,
+		MinRetryBackoff: 100 * time.Millisecond,
+		MaxRetryBackoff: 2 * time.Second,
+	})
+
+	// Verify the new connection works
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	return c.rdb.Ping(ctx).Err()
 }
 
