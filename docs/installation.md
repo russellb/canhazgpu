@@ -73,7 +73,29 @@ If not installed, install ROCm drivers for your system:
 
 ## Install canhazgpu
 
-### Option 1: Install from GitHub (Recommended)
+### Option 1: Homebrew (Recommended)
+
+The easiest way to install on macOS or Linux:
+
+```bash
+brew tap russellb/canhazgpu
+brew install canhazgpu
+```
+
+This installs:
+
+- The `canhazgpu` binary
+- The `chg` short alias (symlink)
+- Bash completion for both `canhazgpu` and `chg`
+
+To upgrade to a new version:
+
+```bash
+brew update
+brew upgrade canhazgpu
+```
+
+### Option 2: Install from GitHub with Go
 ```bash
 # Install directly from GitHub using Go
 go install github.com/russellb/canhazgpu@latest
@@ -81,19 +103,6 @@ go install github.com/russellb/canhazgpu@latest
 # The binary will be installed to $GOPATH/bin or $HOME/go/bin
 # Make sure this directory is in your PATH
 export PATH="$HOME/go/bin:$PATH"
-```
-
-### Option 2: Build from Source
-```bash
-# Clone the repository
-git clone https://github.com/russellb/canhazgpu.git
-cd canhazgpu
-
-# Build and install using Makefile
-make install
-
-# Optional: Install documentation dependencies for building docs
-make docs-deps
 ```
 
 ### Option 3: Pre-built Binary
@@ -113,10 +122,17 @@ sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
 sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
 ```
 
-### Option 4: Local Installation
+### Option 4: Build from Source
 ```bash
-# Keep in local directory and add to PATH
-export PATH="$PWD:$PATH"
+# Clone the repository
+git clone https://github.com/russellb/canhazgpu.git
+cd canhazgpu
+
+# Build and install using Makefile
+make install
+
+# Optional: Install documentation dependencies for building docs
+make docs-deps
 ```
 
 ## Bash Completion

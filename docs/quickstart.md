@@ -294,7 +294,7 @@ canhazgpu status --json | jq 'length as $total | [.[] | select(.status != "AVAIL
 
 ## Next Steps
 
+- **[Installation](installation.md)** - Install canhazgpu via Homebrew, Go, or from source
 - **[Configuration](configuration.md)** - Set up defaults and customize behavior
 - **[Commands Overview](commands.md)** - Learn all available commands in detail
 - **[Usage Patterns](usage-run.md)** - Advanced usage patterns and examples
-- **[Installation](installation.md)** - Install dependencies and configure

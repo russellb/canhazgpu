@@ -12,7 +12,7 @@ You peacefully share a host but want a helper to avoid accidental conflicts.
 
 - You have a single host with GPUs (NVIDIA or AMD) shared by multiple users
 - You all log in and run commands manually for development and/or testing
-- You can still talk to each other about playing nice and sharing your (GPU) toys
+- You can still talk to each other about playing nice and sharing your GPUs
 
 ### Who this is NOT for
 
@@ -126,34 +126,26 @@ For detailed usage, configuration, and administration:
 ## Installation
 
 ```bash
-# Option 1: Install directly from GitHub (recommended)
+# Option 1: Homebrew (recommended for macOS/Linux)
+brew tap russellb/canhazgpu
+brew install canhazgpu
+# Installs both 'canhazgpu' and 'chg' (short alias), plus bash completion
+
+# Option 2: Install directly from GitHub
 go install github.com/russellb/canhazgpu@latest
 
-# Option 2: Build from source
+# Option 3: Build from source
 git clone https://github.com/russellb/canhazgpu.git
 cd canhazgpu
 make install
+```
 
-# Option 3: Download pre-built binary (when available)
-wget https://github.com/russellb/canhazgpu/releases/latest/download/canhazgpu
-chmod +x canhazgpu
-sudo cp canhazgpu /usr/local/bin/
+Then initialize the GPU pool:
 
-# Install bash completion (optional but recommended)
-wget https://raw.githubusercontent.com/russellb/canhazgpu/main/autocomplete_canhazgpu.sh
-sudo cp autocomplete_canhazgpu.sh /etc/bash_completion.d/
-
-# Optional: Create short alias symlink (after installing to /usr/local/bin)
-sudo ln -s /usr/local/bin/canhazgpu /usr/local/bin/chg
-
-# Initialize GPU pool (auto-detects GPU provider)
+```bash
 canhazgpu admin --gpus $(nvidia-smi -L | wc -l)  # For NVIDIA
 # OR
 canhazgpu admin --gpus $(amd-smi list --json | jq 'length')  # For AMD
-
-# Initialize with specific provider (optional)
-canhazgpu admin --gpus 8 --provider nvidia
-canhazgpu admin --gpus 8 --provider amd
 ```
 
 ## How It Works
