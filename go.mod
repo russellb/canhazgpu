@@ -1,11 +1,9 @@
 module github.com/russellb/canhazgpu
 
-go 1.23.0
-
-toolchain go1.23.10
+go 1.25.0
 
 require (
-	github.com/fatih/color v1.18.0
+	github.com/fatih/color v1.19.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/google/uuid v1.6.0
 	github.com/jedib0t/go-pretty/v6 v6.7.8
@@ -23,7 +21,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/onsi/gomega v1.36.2 // indirect
@@ -38,7 +36,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
