@@ -223,11 +223,11 @@ const (
 	RedisKeyQueue          = RedisKeyPrefix + "queue"
 	RedisKeyQueueEntry     = RedisKeyPrefix + "queue:entry:"
 
-	HeartbeatInterval    = 60 * time.Second
-	HeartbeatTimeout     = 5 * time.Minute
-	HealthCheckInterval  = 15 * time.Second
-	LockTimeout          = 10 * time.Second
-	MaxLockRetries       = 5
+	HeartbeatInterval   = 60 * time.Second
+	HeartbeatTimeout    = 5 * time.Minute
+	HealthCheckInterval = 15 * time.Second
+	LockTimeout         = 10 * time.Second
+	MaxLockRetries      = 5
 
 	QueueHeartbeatInterval = 30 * time.Second
 	QueueHeartbeatTimeout  = 2 * time.Minute
