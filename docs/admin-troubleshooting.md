@@ -343,6 +343,7 @@ GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS             
 ps aux | grep alice | grep python
 
 # If process died, wait for auto-cleanup (15 min timeout)
+# Or release immediately with: canhazgpu release --gpu-ids <id>
 # If process is stuck, user should kill it
 
 # Manual cleanup (admin only, if urgent)

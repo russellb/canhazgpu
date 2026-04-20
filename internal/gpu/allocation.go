@@ -569,6 +569,20 @@ func (ae *AllocationEngine) tryAllocateForQueueEntry(ctx context.Context, queueE
 		return ae.finalizeAllocation(ctx, entry, request)
 	}
 
+	// Refresh heartbeats for already-allocated GPUs to prevent them from
+	// being considered stale while waiting for the remaining GPUs.
+	now := time.Now()
+	for _, gpuID := range entry.AllocatedGPUs {
+		state, err := ae.client.GetGPUState(ctx, gpuID)
+		if err != nil {
+			continue
+		}
+		if state.User == entry.User && state.Type == types.ReservationTypeRun {
+			state.LastHeartbeat = types.FlexibleTime{Time: now}
+			_ = ae.client.SetGPUState(ctx, gpuID, state)
+		}
+	}
+
 	// Get available GPUs
 	usage, err := ae.detectGPUUsage(ctx)
 	if err != nil {
@@ -649,7 +663,7 @@ func (ae *AllocationEngine) tryAllocateForQueueEntry(ctx context.Context, queueE
 	}
 
 	// Allocate the available GPUs (greedy partial allocation)
-	now := time.Now()
+	now = time.Now()
 	for i := 0; i < needed; i++ {
 		gpuID := availableGPUs[i]
 
@@ -722,8 +736,33 @@ func (ae *AllocationEngine) finalizeAllocation(ctx context.Context, entry *types
 func (ae *AllocationEngine) cleanupQueueEntry(ctx context.Context, entry *types.QueueEntry) {
 	now := time.Now()
 
+	// Re-fetch the queue entry from Redis to get the latest allocated GPUs,
+	// since the local copy may be stale (e.g., waitForGPUs reassigns its
+	// local pointer but the caller retains the original).
+	latestEntry, err := ae.client.GetQueueEntry(ctx, entry.ID)
+	if err == nil && latestEntry != nil {
+		entry = latestEntry
+	}
+
 	// Release partial allocations
 	for _, gpuID := range entry.AllocatedGPUs {
+		// Record usage history before releasing
+		state, stateErr := ae.client.GetGPUState(ctx, gpuID)
+		if stateErr == nil && state.User == entry.User {
+			duration := now.Sub(state.StartTime.ToTime()).Seconds()
+			usageRecord := &types.UsageRecord{
+				User:            state.User,
+				GPUID:           gpuID,
+				StartTime:       state.StartTime,
+				EndTime:         types.FlexibleTime{Time: now},
+				Duration:        duration,
+				ReservationType: state.Type,
+			}
+			if err := ae.client.RecordUsageHistory(ctx, usageRecord); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to record usage history: %v\n", err)
+			}
+		}
+
 		availableState := &types.GPUState{
 			LastReleased: types.FlexibleTime{Time: now},
 		}
