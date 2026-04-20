@@ -54,7 +54,7 @@ func TestCommands_Structure(t *testing.T) {
 			name:          "release command",
 			cmd:           releaseCmd,
 			use:           "release",
-			shortContains: "Release GPU reservations",
+			shortContains: "Release manually reserved GPUs",
 			requiredFlags: []string{},
 			optionalFlags: []string{"gpu-ids"},
 		},

@@ -333,17 +333,17 @@ GPU STATUS    USER     DURATION    TYPE    MODEL            DETAILS             
 ```
 
 **Analysis:**
-- Heartbeat should update every ~15 seconds
-- Heartbeats >2 minutes old indicate problems
-- GPU will auto-release after 2 minutes without heartbeat
+- Heartbeat should update every ~60 seconds
+- Heartbeats >5 minutes old indicate problems
+- GPU will auto-release after 15 minutes without heartbeat
 
 **Solutions:**
 ```bash
 # Check if process is still running
 ps aux | grep alice | grep python
 
-# If process died, wait for auto-cleanup (2 min timeout)
-# Or release immediately with: canhazgpu release
+# If process died, wait for auto-cleanup (15 min timeout)
+# Or release immediately with: canhazgpu release --gpu-ids <id>
 # If process is stuck, user should kill it
 
 # Manual cleanup (admin only, if urgent)

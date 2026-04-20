@@ -117,8 +117,8 @@ func (ae *AllocationEngine) ReleaseGPUs(ctx context.Context, user string) ([]int
 			continue
 		}
 
-		// Release both manual and run-type reservations by this user
-		if state.User == user && (state.Type == types.ReservationTypeManual || state.Type == types.ReservationTypeRun) {
+		// Only release manual reservations by this user
+		if state.User == user && state.Type == types.ReservationTypeManual {
 			// Record usage history
 			duration := now.Sub(state.StartTime.ToTime()).Seconds()
 			usageRecord := &types.UsageRecord{

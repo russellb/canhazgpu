@@ -12,19 +12,19 @@ import (
 
 var releaseCmd = &cobra.Command{
 	Use:   "release",
-	Short: "Release GPU reservations held by the current user",
-	Long: `Release GPU reservations held by the current user.
+	Short: "Release manually reserved GPUs held by the current user",
+	Long: `Release manually reserved GPUs held by the current user.
 
-By default, releases all GPU reservations (both manual and run-type). You can
-optionally specify which GPU(s) to release using the --gpu-ids flag.
+By default, releases all manually reserved GPUs. You can optionally specify
+which GPU(s) to release using the --gpu-ids flag.
 
-This is useful for:
-- Releasing manual reservations made with the 'reserve' command
-- Cleaning up run-type reservations after a crashed process, without waiting
-  for the heartbeat timeout
+This command can release:
+- Manual reservations made with the 'reserve' command
+- Run-type reservations made with the 'run' command (useful for cleaning up
+  after known failures faster than waiting for heartbeat timeout)
 
 Examples:
-  canhazgpu release                # Release all reserved GPUs
+  canhazgpu release                # Release all manually reserved GPUs
   canhazgpu release --gpu-ids 1,3  # Release specific GPUs`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		gpuIDs := viper.GetIntSlice("release.gpu-ids")
@@ -64,7 +64,7 @@ func runRelease(ctx context.Context, gpuIDs []int) error {
 		// Release specific GPUs
 		releasedGPUs, err = engine.ReleaseSpecificGPUs(ctx, user, gpuIDs)
 	} else {
-		// Release all reserved GPUs (both manual and run-type)
+		// Release all manually reserved GPUs
 		releasedGPUs, err = engine.ReleaseGPUs(ctx, user)
 	}
 
@@ -76,7 +76,7 @@ func runRelease(ctx context.Context, gpuIDs []int) error {
 		if len(gpuIDs) > 0 {
 			fmt.Printf("No reservations found for current user on GPU(s): %v\n", gpuIDs)
 		} else {
-			fmt.Println("No reserved GPUs found for current user")
+			fmt.Println("No manually reserved GPUs found for current user")
 		}
 	} else {
 		fmt.Printf("Released %d GPU(s): %v\n", len(releasedGPUs), releasedGPUs)
