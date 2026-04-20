@@ -143,7 +143,7 @@ The `run` command properly cleans up GPUs even when the executed command fails:
 - Successful commands: GPUs cleaned up via defer mechanism
 - Failed commands: GPUs explicitly cleaned up before process exit
 - Signal termination: GPUs cleaned up via signal handler
-- Process crash: GPUs auto-released after heartbeat timeout (15 min)
+- Process crash: GPUs auto-released after heartbeat timeout (2 min)
 
 ### Test Timeouts
 ```

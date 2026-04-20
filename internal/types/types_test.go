@@ -279,8 +279,8 @@ func TestConstants(t *testing.T) {
 	assert.Equal(t, "canhazgpu:allocation_lock", RedisKeyAllocationLock)
 
 	// Verify timing constants are reasonable
-	assert.Equal(t, 60*time.Second, HeartbeatInterval)
-	assert.Equal(t, 5*time.Minute, HeartbeatTimeout)
+	assert.Equal(t, 15*time.Second, HeartbeatInterval)
+	assert.Equal(t, 2*time.Minute, HeartbeatTimeout)
 	assert.Equal(t, 10*time.Second, LockTimeout)
 	assert.Equal(t, 5, MaxLockRetries)
 }

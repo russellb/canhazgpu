@@ -23,8 +23,8 @@ The tool is a Go application structured as a CLI with internal packages that imp
 - **Redis Integration**: Uses Redis (localhost:6379) for persistent state management with keys under `canhazgpu:` prefix
 - **GPU Provider System**: Unified abstraction supporting both NVIDIA (nvidia-smi) and AMD (amd-smi) GPUs
 - **GPU Allocation Logic**: Tracks GPU state with JSON objects containing user, timestamps, heartbeat data, and reservation types
-- **Heartbeat System**: Background goroutine sends periodic heartbeats (60s interval) to maintain run-type reservations
-- **Auto-cleanup**: GPUs are automatically released when heartbeat expires (15 min timeout), manual reservations expire, or processes terminate
+- **Heartbeat System**: Background goroutine sends periodic heartbeats (15s interval) to maintain run-type reservations
+- **Auto-cleanup**: GPUs are automatically released when heartbeat expires (2 min timeout), manual reservations expire, or processes terminate
 - **Unreserved Usage Detection**: Provider-specific integration detects GPUs in use without proper reservations
 - **User Accountability**: Process ownership detection identifies which users are running unreserved processes
 - **MRU-per-User Allocation**: Most Recently Used per user strategy provides GPU affinity with LRU fallback for fair distribution
