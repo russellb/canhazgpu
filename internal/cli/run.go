@@ -292,8 +292,13 @@ func runRun(ctx context.Context, gpuCount int, gpuIDs []int, timeoutStr string, 
 		return fmt.Errorf("command not found: %s", command[0])
 	}
 
-	// Set up environment with CUDA_VISIBLE_DEVICES
-	env := os.Environ()
+	// Set up environment with CUDA_VISIBLE_DEVICES, replacing any existing value
+	var env []string
+	for _, e := range os.Environ() {
+		if !strings.HasPrefix(e, "CUDA_VISIBLE_DEVICES=") {
+			env = append(env, e)
+		}
+	}
 	env = append(env, fmt.Sprintf("CUDA_VISIBLE_DEVICES=%s", gpuListStr))
 
 	// Exec the user's command - this replaces the current process
