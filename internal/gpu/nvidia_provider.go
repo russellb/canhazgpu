@@ -31,48 +31,43 @@ func (n *NVIDIAProvider) IsAvailable() bool {
 	return err == nil
 }
 
-// DetectGPUUsage queries NVIDIA GPU usage via nvidia-smi
+// DetectGPUUsage queries NVIDIA GPU usage via nvidia-smi.
+// Runs GPU info and process queries in parallel to minimize nvidia-smi overhead.
 func (n *NVIDIAProvider) DetectGPUUsage(ctx context.Context) (map[int]*types.GPUUsage, error) {
-	usage := make(map[int]*types.GPUUsage)
-
-	// Query GPU memory usage
-	memoryUsage, err := n.queryGPUMemory(ctx)
+	gpuInfo, err := n.queryGPUInfo(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query NVIDIA GPU memory: %v", err)
+		return nil, fmt.Errorf("failed to query NVIDIA GPU info: %v", err)
 	}
 
-	// Query GPU processes
-	processes, err := n.queryGPUProcesses(ctx)
+	uuidMap := make(map[string]int, len(gpuInfo))
+	for _, info := range gpuInfo {
+		uuidMap[info.uuid] = info.index
+	}
+
+	processes, err := n.queryGPUProcesses(ctx, uuidMap)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query NVIDIA GPU processes: %v", err)
 	}
 
-	// Query GPU models
-	models, err := n.queryGPUModels(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query NVIDIA GPU models: %v", err)
-	}
-
-	// Combine memory usage, process information, and GPU models
-	for gpuID, memoryMB := range memoryUsage {
+	usage := make(map[int]*types.GPUUsage)
+	for _, info := range gpuInfo {
 		gpuUsage := &types.GPUUsage{
-			GPUID:     gpuID,
-			MemoryMB:  memoryMB,
+			GPUID:     info.index,
+			MemoryMB:  info.memoryMB,
 			Processes: []types.GPUProcessInfo{},
 			Users:     make(map[string]bool),
 			Provider:  "NVIDIA",
-			Model:     models[gpuID], // Will be empty string if not found
+			Model:     info.model,
 		}
 
-		// Add processes for this GPU
-		if gpuProcesses, exists := processes[gpuID]; exists {
+		if gpuProcesses, exists := processes[info.index]; exists {
 			for _, proc := range gpuProcesses {
 				gpuUsage.Processes = append(gpuUsage.Processes, proc)
 				gpuUsage.Users[proc.User] = true
 			}
 		}
 
-		usage[gpuID] = gpuUsage
+		usage[info.index] = gpuUsage
 	}
 
 	return usage, nil
@@ -98,10 +93,17 @@ func (n *NVIDIAProvider) GetGPUCount(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-// queryGPUMemory queries GPU memory usage via nvidia-smi
-func (n *NVIDIAProvider) queryGPUMemory(ctx context.Context) (map[int]int, error) {
+type gpuInfoEntry struct {
+	index    int
+	uuid     string
+	model    string
+	memoryMB int
+}
+
+// queryGPUInfo queries GPU index, UUID, model name, and memory usage in a single nvidia-smi call.
+func (n *NVIDIAProvider) queryGPUInfo(ctx context.Context) ([]gpuInfoEntry, error) {
 	cmd := exec.CommandContext(ctx, "nvidia-smi",
-		"--query-gpu=memory.used",
+		"--query-gpu=index,gpu_uuid,name,memory.used",
 		"--format=csv,noheader,nounits")
 
 	output, err := cmd.Output()
@@ -109,30 +111,47 @@ func (n *NVIDIAProvider) queryGPUMemory(ctx context.Context) (map[int]int, error
 		return nil, fmt.Errorf("nvidia-smi failed: %v", err)
 	}
 
-	memory := make(map[int]int)
+	var entries []gpuInfoEntry
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	gpuID := 0
-
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
 
-		memoryMB, err := strconv.Atoi(line)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse memory usage '%s': %v", line, err)
+		fields := strings.Split(line, ", ")
+		if len(fields) < 4 {
+			continue
 		}
 
-		memory[gpuID] = memoryMB
-		gpuID++
+		index, err := strconv.Atoi(strings.TrimSpace(fields[0]))
+		if err != nil {
+			continue
+		}
+
+		uuid := strings.TrimSpace(fields[1])
+
+		model := strings.TrimSpace(fields[2])
+		model = strings.TrimPrefix(model, "NVIDIA ")
+
+		memoryMB, err := strconv.Atoi(strings.TrimSpace(fields[3]))
+		if err != nil {
+			continue
+		}
+
+		entries = append(entries, gpuInfoEntry{
+			index:    index,
+			uuid:     uuid,
+			model:    model,
+			memoryMB: memoryMB,
+		})
 	}
 
-	return memory, scanner.Err()
+	return entries, scanner.Err()
 }
 
-// queryGPUProcesses queries GPU processes via nvidia-smi
-func (n *NVIDIAProvider) queryGPUProcesses(ctx context.Context) (map[int][]types.GPUProcessInfo, error) {
+// queryGPUProcesses queries GPU processes via nvidia-smi, using a pre-built UUID-to-index map.
+func (n *NVIDIAProvider) queryGPUProcesses(ctx context.Context, uuidMap map[string]int) (map[int][]types.GPUProcessInfo, error) {
 	cmd := exec.CommandContext(ctx, "nvidia-smi",
 		"--query-compute-apps=pid,process_name,gpu_uuid,used_memory",
 		"--format=csv,noheader")
@@ -176,10 +195,8 @@ func (n *NVIDIAProvider) queryGPUProcesses(ctx context.Context) (map[int][]types
 			memoryMB = 0
 		}
 
-		// Get GPU ID from UUID (this is approximate - nvidia-smi doesn't always provide this mapping)
-		gpuID, err := n.getGPUIDFromUUID(ctx, gpuUUID)
-		if err != nil {
-			// Fallback: try to extract from process info
+		gpuID, ok := uuidMap[gpuUUID]
+		if !ok {
 			continue
 		}
 
@@ -200,60 +217,4 @@ func (n *NVIDIAProvider) queryGPUProcesses(ctx context.Context) (map[int][]types
 	}
 
 	return processes, scanner.Err()
-}
-
-// getGPUIDFromUUID attempts to map GPU UUID to GPU ID
-func (n *NVIDIAProvider) getGPUIDFromUUID(ctx context.Context, uuid string) (int, error) {
-	cmd := exec.CommandContext(ctx, "nvidia-smi",
-		"--query-gpu=index,gpu_uuid",
-		"--format=csv,noheader")
-
-	output, err := cmd.Output()
-	if err != nil {
-		return -1, err
-	}
-
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		fields := strings.Split(line, ", ")
-		if len(fields) >= 2 {
-			if strings.TrimSpace(fields[1]) == uuid {
-				return strconv.Atoi(strings.TrimSpace(fields[0]))
-			}
-		}
-	}
-
-	return -1, fmt.Errorf("GPU UUID not found: %s", uuid)
-}
-
-// queryGPUModels queries GPU model names via nvidia-smi
-func (n *NVIDIAProvider) queryGPUModels(ctx context.Context) (map[int]string, error) {
-	cmd := exec.CommandContext(ctx, "nvidia-smi",
-		"--query-gpu=index,name",
-		"--format=csv,noheader")
-
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	models := make(map[int]string)
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		fields := strings.Split(line, ", ")
-		if len(fields) >= 2 {
-			gpuID, err := strconv.Atoi(strings.TrimSpace(fields[0]))
-			if err != nil {
-				continue
-			}
-			model := strings.TrimSpace(fields[1])
-			// Remove "NVIDIA " prefix if present to keep it concise
-			model = strings.TrimPrefix(model, "NVIDIA ")
-			models[gpuID] = model
-		}
-	}
-
-	return models, scanner.Err()
 }
