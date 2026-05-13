@@ -2,6 +2,7 @@ package gpu
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ func TestHeartbeatManager_Structure(t *testing.T) {
 	assert.NotNil(t, manager.ctx)
 	assert.NotNil(t, manager.cancel)
 	assert.NotNil(t, manager.done)
+	assert.NotNil(t, manager.reservationLost)
 }
 
 func TestHeartbeatManager_StartStop(t *testing.T) {
@@ -351,7 +353,7 @@ func TestHeartbeatManager_ReservationLoss(t *testing.T) {
 
 	if err != nil {
 		t.Logf("✅ Heartbeat correctly detected reservation loss: %v", err)
-		assert.Contains(t, err.Error(), "reservation lost")
+		assert.True(t, errors.Is(err, ErrReservationLost))
 	} else {
 		t.Error("❌ Heartbeat should have detected reservation loss but didn't return error")
 	}

@@ -2,8 +2,10 @@ package gpu
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/russellb/canhazgpu/internal/redis_client"
@@ -13,26 +15,33 @@ import (
 // consecutiveFailures tracks heartbeat failures to trigger reconnection
 const maxFailuresBeforeReconnect = 2
 
+var ErrReservationLost = errors.New("GPU reservation lost")
+
 type HeartbeatManager struct {
-	client              *redis_client.Client
-	allocatedGPUs       []int
-	user                string
-	ctx                 context.Context
-	cancel              context.CancelFunc
-	done                chan struct{}
-	consecutiveFailures int
+	client                *redis_client.Client
+	allocatedGPUs         []int
+	user                  string
+	ctx                   context.Context
+	cancel                context.CancelFunc
+	done                  chan struct{}
+	reservationLost       chan struct{}
+	reservationLostOnce   sync.Once
+	consecutiveFailures   int
+	lastSuccessfulHeartbeat time.Time
 }
 
 func NewHeartbeatManager(client *redis_client.Client, allocatedGPUs []int, user string) *HeartbeatManager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &HeartbeatManager{
-		client:        client,
-		allocatedGPUs: allocatedGPUs,
-		user:          user,
-		ctx:           ctx,
-		cancel:        cancel,
-		done:          make(chan struct{}),
+		client:                  client,
+		allocatedGPUs:           allocatedGPUs,
+		user:                    user,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		done:                    make(chan struct{}),
+		reservationLost:         make(chan struct{}),
+		lastSuccessfulHeartbeat: time.Now(),
 	}
 }
 
@@ -42,6 +51,8 @@ func (hm *HeartbeatManager) Start() error {
 	if err := hm.sendHeartbeat(); err != nil {
 		return fmt.Errorf("failed to send initial heartbeat: %w", err)
 	}
+
+	hm.lastSuccessfulHeartbeat = time.Now()
 
 	// Now start background tasks
 	go hm.heartbeatLoop()
@@ -58,6 +69,18 @@ func (hm *HeartbeatManager) Stop() {
 // Wait blocks until the heartbeat manager is stopped
 func (hm *HeartbeatManager) Wait() {
 	<-hm.done
+}
+
+// ReservationLost returns a channel that is closed when the reservation is
+// irrecoverably lost (taken by another user or cleaned up due to stale heartbeat).
+func (hm *HeartbeatManager) ReservationLost() <-chan struct{} {
+	return hm.reservationLost
+}
+
+func (hm *HeartbeatManager) signalReservationLost() {
+	hm.reservationLostOnce.Do(func() {
+		close(hm.reservationLost)
+	})
 }
 
 // heartbeatLoop sends periodic heartbeats with connection health checking
@@ -86,12 +109,26 @@ func (hm *HeartbeatManager) heartbeatLoop() {
 		case <-ticker.C:
 			if err := hm.sendHeartbeat(); err != nil {
 				hm.consecutiveFailures++
+
+				if errors.Is(err, ErrReservationLost) {
+					fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
+					hm.signalReservationLost()
+					return
+				}
+
 				fmt.Fprintf(os.Stderr, "ERROR: Failed to send heartbeat (attempt %d): %v\n",
 					hm.consecutiveFailures, err)
 
 				// Try to recover by reconnecting if we've had multiple failures
 				if hm.consecutiveFailures >= maxFailuresBeforeReconnect {
 					hm.attemptReconnect()
+				}
+
+				if time.Since(hm.lastSuccessfulHeartbeat) >= types.HeartbeatTimeout {
+					fmt.Fprintf(os.Stderr, "ERROR: No successful heartbeat for %s, reservation is lost\n",
+						types.HeartbeatTimeout)
+					hm.signalReservationLost()
+					return
 				}
 
 				fmt.Fprintf(os.Stderr, "GPU reservations may be at risk of expiring!\n")
@@ -101,6 +138,7 @@ func (hm *HeartbeatManager) heartbeatLoop() {
 						hm.consecutiveFailures)
 				}
 				hm.consecutiveFailures = 0
+				hm.lastSuccessfulHeartbeat = time.Now()
 			}
 		}
 	}
@@ -141,13 +179,9 @@ func (hm *HeartbeatManager) sendHeartbeat() error {
 			if err := hm.client.SetGPUState(hm.ctx, gpuID, state); err != nil {
 				return fmt.Errorf("failed to update heartbeat for GPU %d: %v", gpuID, err)
 			}
-		} else if state.User != "" {
-			// GPU is reserved by someone else - this is expected, skip silently
-			continue
 		} else {
-			// GPU should be reserved by us but isn't - this is a problem!
-			return fmt.Errorf("GPU %d reservation lost: expected user=%s, type=%s but found user=%s, type=%s",
-				gpuID, hm.user, types.ReservationTypeRun, state.User, state.Type)
+			return fmt.Errorf("%w: GPU %d expected user=%s type=%s, found user=%q type=%q",
+				ErrReservationLost, gpuID, hm.user, types.ReservationTypeRun, state.User, state.Type)
 		}
 	}
 
