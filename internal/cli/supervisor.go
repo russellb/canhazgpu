@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"syscall"
@@ -81,6 +82,17 @@ func parseGPUList(s string) ([]int, error) {
 
 // runSupervisor runs the supervisor loop that monitors a process and maintains GPU heartbeats
 func runSupervisor(ctx context.Context, gpuIDs []int, user string, pid int, timeout time.Duration, hasTimeout bool) error {
+	// Ignore SIGHUP so the supervisor survives SSH disconnects and terminal
+	// closures. The monitored process (e.g., vllm serve) may also ignore
+	// SIGHUP; if the supervisor died here, nobody would send heartbeats and
+	// the reservation would silently expire while the process keeps running.
+	signal.Ignore(syscall.SIGHUP)
+
+	// Forward SIGINT/SIGTERM to the monitored process so that if the
+	// supervisor is killed, it takes the process down with it.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
 	config := getConfig()
 	client := redis_client.NewClient(config)
 	defer func() {
@@ -120,34 +132,15 @@ func runSupervisor(ctx context.Context, gpuIDs []int, user string, pid int, time
 			// Context cancelled, exit gracefully
 			return nil
 
+		case sig := <-sigChan:
+			fmt.Fprintf(os.Stderr, "supervisor: received %v, terminating process %d\n", sig, pid)
+			gracefulKill(pid)
+			return nil
+
 		case <-timeoutChan:
-			// Timeout reached - attempt graceful shutdown
 			fmt.Fprintf(os.Stderr, "supervisor: timeout reached after %s, sending SIGINT to process %d\n",
 				utils.FormatDuration(timeout), pid)
-
-			// Send SIGINT for graceful shutdown
-			if err := syscall.Kill(pid, syscall.SIGINT); err != nil {
-				// Process may have already exited
-				if !isProcessRunning(pid) {
-					return nil
-				}
-				fmt.Fprintf(os.Stderr, "supervisor: failed to send SIGINT: %v\n", err)
-			}
-
-			// Wait grace period
-			gracePeriod := 30 * time.Second
-			fmt.Fprintf(os.Stderr, "supervisor: waiting %s for graceful shutdown...\n", gracePeriod)
-			time.Sleep(gracePeriod)
-
-			// Check if process is still running
-			if isProcessRunning(pid) {
-				fmt.Fprintf(os.Stderr, "supervisor: grace period expired, sending SIGKILL to process %d\n", pid)
-				if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
-					fmt.Fprintf(os.Stderr, "supervisor: failed to send SIGKILL: %v\n", err)
-				}
-			}
-
-			// Process should be dead now, exit
+			gracefulKill(pid)
 			return nil
 
 		case <-ticker.C:
@@ -157,6 +150,27 @@ func runSupervisor(ctx context.Context, gpuIDs []int, user string, pid int, time
 				// The deferred heartbeat.Stop() will release GPUs
 				return nil
 			}
+		}
+	}
+}
+
+// gracefulKill sends SIGINT, waits a grace period, then SIGKILL if still running.
+func gracefulKill(pid int) {
+	if err := syscall.Kill(pid, syscall.SIGINT); err != nil {
+		if !isProcessRunning(pid) {
+			return
+		}
+		fmt.Fprintf(os.Stderr, "supervisor: failed to send SIGINT: %v\n", err)
+	}
+
+	gracePeriod := 30 * time.Second
+	fmt.Fprintf(os.Stderr, "supervisor: waiting %s for graceful shutdown...\n", gracePeriod)
+	time.Sleep(gracePeriod)
+
+	if isProcessRunning(pid) {
+		fmt.Fprintf(os.Stderr, "supervisor: grace period expired, sending SIGKILL to process %d\n", pid)
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+			fmt.Fprintf(os.Stderr, "supervisor: failed to send SIGKILL: %v\n", err)
 		}
 	}
 }
